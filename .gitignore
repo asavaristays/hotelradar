@@ -1,0 +1,44 @@
+# Node dependencies
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
+coverage/
+frontend/dist/
+dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Temporary and cache
+.tmp/
+tmp/
+.cache/
+
+# PM2 runtime
+pids/
+*.pid
+*.seed
+
+# Test outputs
+junit.xml
+
+# Misc
+*.sqlite

@@ -1,0 +1,33 @@
+{
+  "name": "radar-light",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "node src/scripts/runMigrations.js",
+    "db:migrate:legacy": "psql \"$DATABASE_URL\" -f db/migrations/001_init.sql && psql \"$DATABASE_URL\" -f db/migrations/002_extend_city_support_jodhpur.sql && psql \"$DATABASE_URL\" -f db/migrations/003_v3_foundation.sql && psql \"$DATABASE_URL\" -f db/migrations/004_super_admin_user_management.sql && psql \"$DATABASE_URL\" -f db/migrations/005_relax_city_constraints.sql && psql \"$DATABASE_URL\" -f db/migrations/006_uttarakhand_operating_cities.sql && psql \"$DATABASE_URL\" -f db/migrations/007_fix_camp_hornbill_city.sql && psql \"$DATABASE_URL\" -f db/migrations/008_fasttrack_calibration_foundation.sql && psql \"$DATABASE_URL\" -f db/migrations/009_calibration_governance.sql && psql \"$DATABASE_URL\" -f db/migrations/010_data_health_tracking.sql && psql \"$DATABASE_URL\" -f db/migrations/011_recalc_queue.sql",
+    "db:seed": "psql -v ON_ERROR_STOP=1 \"$DATABASE_URL\" -f db/seeds/seed_pilot.sql",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:contract": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand tests/contracts/dashboardContract.freeze.test.js",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --coverage",
+    "calibration:nightly": "node src/scripts/runNightlyCalibration.js",
+    "worker:recalc": "node src/scripts/runRecalcWorker.js",
+    "deploy:prod": "./deploy.sh",
+    "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1",
+    "winston": "^3.14.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.2.2"
+  }
+}

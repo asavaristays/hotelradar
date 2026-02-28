@@ -1,0 +1,121 @@
+import { average, round } from '../utils/math.js';
+
+const OTA_CHANNELS = [
+  { key: 'booking', label: 'Booking.com', patterns: [/booking/i] },
+  { key: 'agoda', label: 'Agoda', patterns: [/agoda/i] },
+  { key: 'makemytrip', label: 'MakeMyTrip', patterns: [/makemytrip/i, /\bmmt\b/i] },
+  { key: 'goibibo', label: 'Goibibo', patterns: [/goibibo/i] },
+  { key: 'expedia', label: 'Expedia', patterns: [/expedia/i] },
+];
+
+const OTA_ESTIMATE_FACTORS = {
+  booking: 1.04,
+  agoda: 0.98,
+  makemytrip: 1.01,
+  goibibo: 0.99,
+  expedia: 1.02,
+};
+
+function detectChannel(rawName = '', rawUrl = '') {
+  const value = `${String(rawName || '')} ${String(rawUrl || '')}`.toLowerCase();
+  for (const channel of OTA_CHANNELS) {
+    if (channel.patterns.some((pattern) => pattern.test(value))) {
+      return channel;
+    }
+  }
+  return null;
+}
+
+function statusFromGap(gapPct, parityThresholdPct) {
+  const absGap = Math.abs(Number(gapPct || 0));
+  if (absGap <= parityThresholdPct) return 'In Parity';
+  if (gapPct > parityThresholdPct) return 'Overpriced vs OTA';
+  return 'Underpriced vs OTA';
+}
+
+function buildFallbackRows({ marketAvgPrice, hotelPrice, parityThresholdPct }) {
+  const anchorPrice = Number(marketAvgPrice || hotelPrice || 0);
+  if (anchorPrice <= 0) return [];
+
+  return OTA_CHANNELS.slice(0, 3).map((channel) => {
+    const otaPrice = Math.round(anchorPrice * (OTA_ESTIMATE_FACTORS[channel.key] || 1));
+    const gapPct = otaPrice > 0 ? round(((hotelPrice - otaPrice) / otaPrice) * 100, 2) : 0;
+    return {
+      channel: channel.label,
+      otaPrice,
+      gapPct,
+      status: statusFromGap(gapPct, parityThresholdPct),
+      estimated: true,
+      source: 'estimated_market',
+    };
+  });
+}
+
+export function computeOtaParity({
+  hotelPrice,
+  competitorRates = [],
+  parityThresholdPct = 2,
+  alertThresholdPct = 5,
+  lastScrapedAt = null,
+  marketAvgPrice = null,
+}) {
+  const safeHotelPrice = Number(hotelPrice || 0);
+  const byChannel = new Map();
+
+  for (const row of competitorRates) {
+    const channel = detectChannel(row?.competitor_name, row?.website_url || row?.url);
+    if (!channel) continue;
+
+    const price = Number(row?.price_today || 0);
+    if (!Number.isFinite(price) || price <= 0) continue;
+
+    if (!byChannel.has(channel.key)) {
+      byChannel.set(channel.key, {
+        channel: channel.label,
+        prices: [],
+      });
+    }
+    byChannel.get(channel.key).prices.push(price);
+  }
+
+  let rows = [...byChannel.values()].map((entry) => {
+    const otaPrice = round(average(entry.prices), 0);
+    const gapPct = otaPrice > 0 ? round(((safeHotelPrice - otaPrice) / otaPrice) * 100, 2) : 0;
+    return {
+      channel: entry.channel,
+      otaPrice,
+      gapPct,
+      status: statusFromGap(gapPct, parityThresholdPct),
+      estimated: false,
+      source: 'scraped',
+    };
+  });
+
+  if (!rows.length) {
+    rows = buildFallbackRows({
+      marketAvgPrice,
+      hotelPrice: safeHotelPrice,
+      parityThresholdPct,
+    });
+  }
+
+  const sortedRows = rows.sort((left, right) => left.channel.localeCompare(right.channel));
+  const maxAbsGapPct = sortedRows.length
+    ? round(Math.max(...sortedRows.map((row) => Math.abs(Number(row.gapPct || 0)))), 2)
+    : 0;
+
+  return {
+    hotelPrice: safeHotelPrice,
+    parityThresholdPct,
+    alertThresholdPct,
+    lastScrapedAt: lastScrapedAt ? new Date(lastScrapedAt).toISOString() : null,
+    summary: {
+      inParity: sortedRows.filter((row) => row.status === 'In Parity').length,
+      underpriced: sortedRows.filter((row) => row.status === 'Underpriced vs OTA').length,
+      overpriced: sortedRows.filter((row) => row.status === 'Overpriced vs OTA').length,
+      maxAbsGapPct,
+      alertTriggered: maxAbsGapPct > alertThresholdPct,
+    },
+    rows: sortedRows,
+  };
+}

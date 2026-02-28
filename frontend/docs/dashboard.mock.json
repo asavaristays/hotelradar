@@ -1,0 +1,67 @@
+{
+  "hotelId": "33333333-3333-4333-8333-333333333333",
+  "city": "Goa",
+  "seasonProfile": "Coastal Leisure",
+  "demandScore": 64.94,
+  "demandLevel": "Moderate",
+  "confidence": {
+    "level": "High",
+    "score": 86,
+    "factors": [
+      "Strong competitor consistency",
+      "Holiday signal confirmed",
+      "Low volatility"
+    ]
+  },
+  "marketStability": {
+    "status": "Stable",
+    "volatilityScore": 28.4
+  },
+  "compression": {
+    "compressionLevel": "Moderate",
+    "scarcityScore": 62.1
+  },
+  "suggestedPricing": {
+    "base": 8150,
+    "bands": {
+      "safe": { "min": 7900, "max": 8400 },
+      "aggressive": { "min": 8400, "max": 8800 },
+      "premium": { "min": 9850, "max": 10900 }
+    },
+    "riskLevel": "Medium",
+    "marketHeat": 4,
+    "strategy": "Moderate demand with under-market pricing; increase in controlled steps."
+  },
+  "marketPosition": {
+    "hotelPrice": 6689,
+    "marketAvg": 10362,
+    "positionPct": -35.45
+  },
+  "signalBreakdown": {
+    "competitorMomentum": 22,
+    "holidayImpact": 15,
+    "airfareImpact": -3,
+    "seasonImpact": 8
+  },
+  "forwardCurve": [
+    { "date": "2026-02-27", "score": 62 },
+    { "date": "2026-02-28", "score": 70 },
+    { "date": "2026-03-01", "score": 74 }
+  ],
+  "competitiveGrid": [
+    { "name": "The Acacia Morjim Goa", "price": 6689, "movement48h": "0%", "positionPct": -35.45 },
+    { "name": "Morjim Beach Resort", "price": 10400, "movement48h": "+8.3%", "positionPct": 0.36 }
+  ],
+  "alerts": [
+    "HIGH: Competitor pricing moved 8.08% in 48h.",
+    "CRITICAL: Demand surge window within 3 days."
+  ],
+  "performanceSummary": {
+    "directionAccuracy": 40,
+    "alertPrecision": 80,
+    "positionImprovementPct": 8,
+    "rollingAccuracy30d": 61,
+    "stabilityDeviation": 12
+  },
+  "lastUpdated": "2026-02-26T04:30:25.399Z"
+}

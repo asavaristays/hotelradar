@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[pre-commit] Running lint (if present)"
+npm run lint --if-present
+
+echo "[pre-commit] Running tests"
+npm test

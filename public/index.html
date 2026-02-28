@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Radar Light Dashboard</title>
+    <style>
+      :root {
+        --bg: #f4f4ee;
+        --panel: #ffffff;
+        --text: #1f2933;
+        --accent: #0f766e;
+        --muted: #52606d;
+        --border: #cbd2d9;
+        --error: #b42318;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top right, #d8efe8, var(--bg) 45%);
+        color: var(--text);
+      }
+
+      .shell {
+        max-width: 960px;
+        margin: 32px auto;
+        padding: 16px;
+      }
+
+      .card {
+        background: var(--panel);
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.07);
+        margin-bottom: 16px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      select,
+      button {
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        min-height: 42px;
+      }
+
+      select {
+        min-width: 280px;
+        background: #fff;
+      }
+
+      button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        min-width: 140px;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .error {
+        color: var(--error);
+        margin-top: 12px;
+      }
+
+      .alerts {
+        padding-left: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
