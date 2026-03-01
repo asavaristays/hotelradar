@@ -35,6 +35,7 @@ export async function getHotelById(hotelId) {
       h.room_count,
       h.base_price_min,
       h.base_price_max,
+      h.comp_set_json,
       h.subscription_status,
       h.last_calculated_at,
       sp.name AS season_profile_name,

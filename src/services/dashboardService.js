@@ -331,6 +331,7 @@ async function fetchCompetitorRatesWithFallback(hotelInput, deps) {
       hotelName: typeof hotelInput === 'string' ? '' : hotelInput?.hotel_name,
       basePriceMin: typeof hotelInput === 'string' ? null : hotelInput?.base_price_min,
       basePriceMax: typeof hotelInput === 'string' ? null : hotelInput?.base_price_max,
+      compSet: typeof hotelInput === 'string' ? [] : hotelInput?.comp_set_json,
     });
     if (Array.isArray(scraped) && scraped.length) return scraped;
   } catch (error) {

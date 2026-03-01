@@ -39,6 +39,13 @@ const cityBaseByName = {
   Mukteshwar: 9100,
 };
 
+function normalizeCompSet(raw = []) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+}
+
 function fallbackCityFromHotel(hotelName = '') {
   const name = String(hotelName || '').toLowerCase();
   if (name.includes('goa')) return 'Goa';
@@ -67,14 +74,17 @@ function generateFallbackRates(hotelId, context = {}) {
     Jodhpur: ['Blue City Heritage Inn', 'Clocktower Royal Stay', 'Mehrangarh View Hotel'],
     Pushkar: ['Pushkar Lakefront Residency', 'Desert Courtyard Pushkar', 'Savitri Hills Retreat'],
     Jawai: ['Leopard Trail Camp', 'Granite Hills Safari Lodge', 'Jawai Wilderness Estate'],
-    Jaipur: ['Pink City Palace Stay', 'MI Road Business Suites', 'Amer Fort View Hotel'],
+    Jaipur: ['Alsisar Haveli Jaipur', 'Narain Niwas Palace', 'Shahpura House Jaipur'],
     Nainital: ['Lakeview Nainital Retreat', 'Mall Road Grand', 'Pines & Peaks Resort'],
     Corbett: ['Jim Corbett River Lodge', 'Ramnagar Forest Retreat', 'Tiger Trail Corbett'],
     Mukeshwar: ['Mukeshwar Hills Resort', 'Pine Crest Mukeshwar', 'Valley View Mukeshwar'],
     Mukteshwar: ['Mukteshwar Hills Resort', 'Pine Crest Mukteshwar', 'Valley View Mukteshwar'],
   };
 
-  const names = namesByCity[city] || ['Competitor One', 'Competitor Two', 'Competitor Three'];
+  const compSetNames = normalizeCompSet(context.compSet);
+  const names = compSetNames.length
+    ? compSetNames.slice(0, 3)
+    : namesByCity[city] || ['Competitor One', 'Competitor Two', 'Competitor Three'];
   const offsets = [220, 80, -90];
   const movementFactors = [1.08, 1.06, 1.05];
 
