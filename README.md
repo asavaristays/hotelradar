@@ -104,6 +104,7 @@ npm run ingestion:ota
 Production notes:
 
 - Set `ALLOW_MOCK_COMPETITOR_FALLBACK=false` to prevent synthetic competitor rates in live environments.
+- Set `ALLOW_ESTIMATED_OTA_PARITY=false` to avoid market-estimated OTA rows when channel-scraped data is unavailable.
 - Set `OTA_SNAPSHOT_FILE=/opt/radar_light/shared/ota_snapshots/latest.json` (or keep default path).
 - Scheduler script: `scripts/run_rate_cycle.sh` (ingest first, then recalculate active hotels).
 

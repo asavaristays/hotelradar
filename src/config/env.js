@@ -93,6 +93,10 @@ const env = {
     process.env.ALLOW_MOCK_COMPETITOR_FALLBACK,
     !isProduction,
   ),
+  allowEstimatedOtaParity: parseBoolean(
+    process.env.ALLOW_ESTIMATED_OTA_PARITY,
+    !isProduction,
+  ),
   otaSnapshotFile: readOptionalString('OTA_SNAPSHOT_FILE', ''),
 
   migrationBaselineExisting: parseBoolean(process.env.MIGRATION_BASELINE_EXISTING, true),

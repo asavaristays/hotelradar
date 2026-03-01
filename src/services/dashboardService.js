@@ -503,6 +503,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     alertThresholdPct: Number(calibration?.global?.thresholds?.otaParityGap || 5),
     lastScrapedAt,
     marketAvgPrice: marketPosition.marketAvg,
+    allowEstimateFallback: env.allowEstimatedOtaParity,
   });
   const dataHealth = await computeDataHealthSnapshot(
     {
@@ -613,6 +614,7 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
     alertThresholdPct: Number(calibration?.global?.thresholds?.otaParityGap || 5),
     lastScrapedAt: null,
     marketAvgPrice: marketPosition.marketAvg,
+    allowEstimateFallback: env.allowEstimatedOtaParity,
   });
   const pricing = computePricingRecommendation({
     demandScore: aggregated.demandScore,
@@ -817,5 +819,6 @@ export async function getOtaParity(hotelId, deps = defaultDeps) {
     alertThresholdPct: Number(calibration?.global?.thresholds?.otaParityGap || 5),
     lastScrapedAt,
     marketAvgPrice: Number.isFinite(marketAvg) ? marketAvg : Number(hotelPriceRaw || 0),
+    allowEstimateFallback: env.allowEstimatedOtaParity,
   });
 }

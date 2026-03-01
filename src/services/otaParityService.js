@@ -58,6 +58,7 @@ export function computeOtaParity({
   alertThresholdPct = 5,
   lastScrapedAt = null,
   marketAvgPrice = null,
+  allowEstimateFallback = true,
 }) {
   const safeHotelPrice = Number(hotelPrice || 0);
   const byChannel = new Map();
@@ -91,7 +92,7 @@ export function computeOtaParity({
     };
   });
 
-  if (!rows.length) {
+  if (!rows.length && allowEstimateFallback) {
     rows = buildFallbackRows({
       marketAvgPrice,
       hotelPrice: safeHotelPrice,
