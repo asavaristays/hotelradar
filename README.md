@@ -94,6 +94,45 @@ cd /Users/manishpurohit/Documents/radar_light
 npm run worker:recalc
 ```
 
+OTA ingestion (snapshot-driven, deterministic):
+
+```bash
+cd /Users/manishpurohit/Documents/radar_light
+npm run ingestion:ota
+```
+
+Production notes:
+
+- Set `ALLOW_MOCK_COMPETITOR_FALLBACK=false` to prevent synthetic competitor rates in live environments.
+- Set `OTA_SNAPSHOT_FILE=/opt/radar_light/shared/ota_snapshots/latest.json` (or keep default path).
+- Scheduler script: `scripts/run_rate_cycle.sh` (ingest first, then recalculate active hotels).
+
+Snapshot JSON format (`rows` also accepted as wrapper key):
+
+```json
+[
+  {
+    "hotel_name": "Royal Heritage Haveli",
+    "competitor_name": "Alsisar Haveli Jaipur",
+    "checkin_date": "2026-04-16",
+    "room_category": "Deluxe",
+    "list_of_rates": [
+      { "rate": 7508, "tax_included": false, "rate_type": "BAR", "source": "google-hotels" },
+      { "rate": 7680, "tax_included": true, "tax_percent": 12, "rate_type": "BAR", "source": "booking" }
+    ],
+    "cancellation_type": "free_cancellation",
+    "source": "ota-snapshot"
+  },
+  {
+    "hotel_name": "Royal Heritage Haveli",
+    "is_hotel_rate": true,
+    "checkin_date": "2026-04-16",
+    "hotel_rate": 6999,
+    "source": "pms"
+  }
+]
+```
+
 Frontend:
 
 ```bash

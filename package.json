@@ -13,6 +13,7 @@
     "test:contract": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand tests/contracts/dashboardContract.freeze.test.js",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --coverage",
     "calibration:nightly": "node src/scripts/runNightlyCalibration.js",
+    "ingestion:ota": "node src/scripts/runOtaIngestion.js",
     "worker:recalc": "node src/scripts/runRecalcWorker.js",
     "deploy:prod": "./deploy.sh",
     "hooks:install": "git config core.hooksPath .githooks"
