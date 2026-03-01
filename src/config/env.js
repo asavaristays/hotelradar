@@ -89,6 +89,10 @@ const env = {
   recalcQueueMaxAttempts: parseNumber(process.env.RECALC_QUEUE_MAX_ATTEMPTS, 3),
   recalcQueueRetryBaseSeconds: parseNumber(process.env.RECALC_QUEUE_RETRY_BASE_SECONDS, 20),
   recalcQueueRetryMaxSeconds: parseNumber(process.env.RECALC_QUEUE_RETRY_MAX_SECONDS, 300),
+  allowMockCompetitorFallback: parseBoolean(
+    process.env.ALLOW_MOCK_COMPETITOR_FALLBACK,
+    !isProduction,
+  ),
 
   migrationBaselineExisting: parseBoolean(process.env.MIGRATION_BASELINE_EXISTING, true),
   schemaCheckStrict: parseBoolean(process.env.SCHEMA_CHECK_STRICT, runtimeDefaults.schemaCheckStrict),

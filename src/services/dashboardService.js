@@ -1,4 +1,5 @@
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { DEFAULT_CALIBRATION, getCalibration } from '../config/calibration.js';
 import { listActiveAlerts } from '../repositories/alertRepository.js';
 import {
@@ -323,6 +324,14 @@ async function fetchCompetitorRatesWithFallback(hotelInput, deps) {
   const savedRates = await deps.getCompetitorRatesForHotel(hotelId);
   if (savedRates.length) {
     return savedRates;
+  }
+
+  if (!env.allowMockCompetitorFallback) {
+    logger.warn('mock_competitor_fallback_disabled', {
+      hotelId,
+      nodeEnv: env.nodeEnv,
+    });
+    return [];
   }
 
   try {
