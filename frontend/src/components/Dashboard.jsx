@@ -11,7 +11,7 @@ import SignalReadinessPanel from './SignalReadinessPanel.jsx';
 import SignalBreakdownChart from './SignalBreakdownChart.jsx';
 import StabilityCard from './StabilityCard.jsx';
 import SuggestedPricingCard from './SuggestedPricingCard.jsx';
-import { formatPercent } from './dashboardUtils.js';
+import { formatCurrency, formatPercent } from './dashboardUtils.js';
 
 function LoadingSkeleton() {
   return (
@@ -145,6 +145,13 @@ function ChangeSummaryCard({ changeSummary }) {
 }
 
 function MobileSummaryStrip({ dashboard }) {
+  const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
+  const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
+  const deltaAmount = suggestedPrice - currentPrice;
+  const deltaPct = currentPrice > 0 ? (deltaAmount / currentPrice) * 100 : 0;
+  const confidenceScore = Number(dashboard?.confidence?.score || 0);
+  const stayDate = dashboard?.marketContext?.checkinDate || 'N/A';
+
   return (
     <section className="panel mobileSummaryStrip" aria-label="Mobile summary">
       <div>
@@ -152,16 +159,28 @@ function MobileSummaryStrip({ dashboard }) {
         <strong>{Number(dashboard.demandScore || 0).toFixed(1)} ({dashboard.demandLevel})</strong>
       </div>
       <div>
+        <span className="metaLabel">Current</span>
+        <strong>₹{formatCurrency(currentPrice)}</strong>
+      </div>
+      <div>
         <span className="metaLabel">Suggested</span>
-        <strong>₹{Number(dashboard.suggestedPricing?.base || 0).toLocaleString('en-IN')}</strong>
+        <strong>₹{formatCurrency(suggestedPrice)}</strong>
       </div>
       <div>
-        <span className="metaLabel">Risk</span>
-        <strong>{dashboard.suggestedPricing?.riskLevel || 'Low'}</strong>
+        <span className="metaLabel">Delta</span>
+        <strong>{deltaAmount >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(deltaAmount))}</strong>
       </div>
       <div>
-        <span className="metaLabel">Updated</span>
-        <strong>{formatTimestamp(dashboard.lastUpdated)}</strong>
+        <span className="metaLabel">Heat</span>
+        <strong>{Number(dashboard.suggestedPricing?.marketHeat || 1)}/5</strong>
+      </div>
+      <div>
+        <span className="metaLabel">Confidence</span>
+        <strong>{dashboard.confidence?.level || 'Unknown'} ({confidenceScore.toFixed(0)})</strong>
+      </div>
+      <div>
+        <span className="metaLabel">Stay Date</span>
+        <strong>{stayDate}</strong>
       </div>
     </section>
   );
@@ -212,33 +231,57 @@ function PerformanceCard({ summary }) {
 
 function ExecutiveStrip({ dashboard }) {
   const score = Number(dashboard?.demandScore || 0).toFixed(1);
-  const suggested = Number(dashboard?.suggestedPricing?.base || 0).toLocaleString('en-IN');
-  const risk = dashboard?.suggestedPricing?.riskLevel || 'Low';
+  const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
+  const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
+  const deltaAmount = suggestedPrice - currentPrice;
+  const deltaPct = currentPrice > 0 ? (deltaAmount / currentPrice) * 100 : 0;
   const heat = Number(dashboard?.suggestedPricing?.marketHeat || 1);
-  const position = formatPercent(Number(dashboard?.marketPosition?.positionPct || 0), 1);
+  const confidenceScore = Number(dashboard?.confidence?.score || 0);
+  const confidenceLabel = dashboard?.confidence?.level || 'Unknown';
+  const stayDate = dashboard?.marketContext?.checkinDate || 'N/A';
+  const observedAt = formatTimestamp(dashboard?.marketContext?.observedAt || dashboard?.lastScrapedAt);
+  const deltaDirection = deltaAmount > 0 ? 'Increase' : deltaAmount < 0 ? 'Reduce' : 'Hold';
 
   return (
-    <section className="panel executiveStrip" aria-label="Executive decision strip">
-      <article>
-        <span>Demand</span>
-        <strong>{score}</strong>
-      </article>
-      <article>
-        <span>Suggested</span>
-        <strong>₹{suggested}</strong>
-      </article>
-      <article>
-        <span>Risk</span>
-        <strong>{risk}</strong>
-      </article>
-      <article>
-        <span>Heat</span>
-        <strong>{heat}/5</strong>
-      </article>
-      <article>
-        <span>Position</span>
-        <strong>{position}</strong>
-      </article>
+    <section className="panel executiveStripPanel" aria-label="Executive decision strip">
+      <div className="executiveStrip">
+        <article>
+          <span>Demand Score</span>
+          <strong>{score}</strong>
+          <small>{dashboard?.demandLevel || 'Unknown'}</small>
+        </article>
+        <article>
+          <span>Current Price</span>
+          <strong>₹{formatCurrency(currentPrice)}</strong>
+          <small>Current hotel rate</small>
+        </article>
+        <article>
+          <span>Suggested Price</span>
+          <strong>₹{formatCurrency(suggestedPrice)}</strong>
+          <small>Radar recommendation</small>
+        </article>
+        <article>
+          <span>Delta</span>
+          <strong>{deltaAmount >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(deltaAmount))}</strong>
+          <small>
+            {deltaDirection} {formatPercent(deltaPct, 1)} vs current
+          </small>
+        </article>
+        <article>
+          <span>Heat</span>
+          <strong>{heat}/5</strong>
+          <small>Market heat</small>
+        </article>
+        <article>
+          <span>Confidence</span>
+          <strong>{confidenceLabel} ({confidenceScore.toFixed(0)})</strong>
+          <small>Recommendation confidence</small>
+        </article>
+      </div>
+      <div className="executiveStripMeta">
+        <span>Stay date: <strong>{stayDate}</strong></span>
+        <span>Observed at: <strong>{observedAt}</strong></span>
+      </div>
     </section>
   );
 }

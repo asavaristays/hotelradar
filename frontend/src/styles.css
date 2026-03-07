@@ -359,6 +359,10 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.mobileSummaryStrip .metaLabel {
+  font-size: 0.76rem;
+}
+
 .metaStack {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1666,11 +1670,16 @@ button {
   letter-spacing: 0.01em;
 }
 
+.executiveStripPanel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe5f0;
+}
+
 .executiveStrip {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  border: 1px solid #dbe5f0;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .executiveStrip article {
@@ -1690,6 +1699,27 @@ button {
 .executiveStrip strong {
   font-size: 20px;
   line-height: 1.1;
+}
+
+.executiveStrip small {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.executiveStripMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid #e7eef7;
+  padding-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.executiveStripMeta strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .demandCard {
@@ -1877,6 +1907,10 @@ button {
 @media (max-width: 768px) {
   .executiveStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .executiveStripMeta {
+    display: grid;
   }
 
   .signalSnapshotList {
