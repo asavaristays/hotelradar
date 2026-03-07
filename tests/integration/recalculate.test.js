@@ -47,9 +47,15 @@ describe('recalculateDashboard integration', () => {
         signals: payload.signals,
       }),
       listActiveAlerts: async () => [
-        { severity: 'high', message: 'Competitor moved 8%.' },
-        { severity: 'high', message: 'Competitor moved 8%.' },
-        { severity: 'medium', message: 'OTA parity drifted 5%.' },
+        { severity: 'high', message: 'Competitor moved 8%.', created_at: '2026-03-06T09:00:00.000Z' },
+        { severity: 'high', message: 'Competitor moved 8%.', created_at: '2026-03-06T09:05:00.000Z' },
+        { severity: 'medium', message: 'OTA parity drifted 5%.', created_at: '2026-03-06T09:10:00.000Z' },
+        {
+          severity: 'critical',
+          alert_type: 'surge_window',
+          message: 'Demand surge window detected within 3 days.',
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
       ],
       evaluateAlerts,
       getMockCompetitorRates: async () => [],
@@ -83,6 +89,9 @@ describe('recalculateDashboard integration', () => {
     expect(Array.isArray(dashboard.alerts)).toBe(true);
     expect(dashboard.alerts).toContain('HIGH: Competitor moved 8%. (x2)');
     expect(dashboard.alerts).toContain('MEDIUM: OTA parity drifted 5%.');
+    expect(
+      dashboard.alerts.some((line) => String(line).includes('Demand surge window detected within 3 days.')),
+    ).toBe(false);
     expect(Array.isArray(dashboard.alertGroups)).toBe(true);
     expect(dashboard.alertGroups).toEqual(
       expect.arrayContaining([

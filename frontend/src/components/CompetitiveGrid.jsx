@@ -22,6 +22,19 @@ function movementClass(movement) {
   return 'neutralMove';
 }
 
+function formatStayDate(value) {
+  if (!value) return 'N/A';
+  const raw = String(value).trim();
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 export default function CompetitiveGrid({ rows = [], ownHotelName = '', marketContext = null }) {
   const [sortBy, setSortBy] = useState('price');
   const [direction, setDirection] = useState('desc');
@@ -58,7 +71,7 @@ export default function CompetitiveGrid({ rows = [], ownHotelName = '', marketCo
         <div className="gridMetaBlock">
           <h2>Competitive Grid</h2>
           <p className="metaLabel">
-            Stay date: {marketContext?.checkinDate || 'N/A'} | Competitor rows:{' '}
+            Stay date: {formatStayDate(marketContext?.checkinDate)} | Competitor rows:{' '}
             {Number(marketContext?.competitorRows || 0)}
           </p>
         </div>

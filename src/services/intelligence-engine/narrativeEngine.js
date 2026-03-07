@@ -31,6 +31,13 @@ export function buildNarrative(input) {
   const positionPct = Number(input.marketPosition?.positionPct || 0);
   const suggestedBase = Number(input.suggestedPricing?.base || 0);
   const signals = input.signalBreakdown || {};
+  const signalLabels = {
+    competitorMomentum: 'Competitor Momentum',
+    holidayImpact: 'Holiday Impact',
+    eventImpact: 'Event Impact',
+    airfareImpact: 'Airfare Impact',
+    seasonImpact: 'Season Impact',
+  };
 
   const strongestSignal = Object.entries({
     competitorMomentum: Number(signals.competitorMomentum || 0),
@@ -39,9 +46,10 @@ export function buildNarrative(input) {
     airfareImpact: Number(signals.airfareImpact || 0),
     seasonImpact: Number(signals.seasonImpact || 0),
   }).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] || 'competitorMomentum';
+  const strongestSignalLabel = signalLabels[strongestSignal] || 'Demand Signals';
 
   const summary = `Demand is ${demandLevel} (${round(demandScore, 2)}) with ${compressionLevel.toLowerCase()} compression and ${stabilityStatus.toLowerCase()} market stability.`;
-  const marketStory = `Primary driver is ${strongestSignal}; season profile '${seasonProfile}' is active for the current window.`;
+  const marketStory = `Primary driver is ${strongestSignalLabel}; season profile '${seasonProfile}' is active for the current window.`;
   const pricingRationale = `Hotel is ${round(positionPct, 2)}% versus market average. Suggested base price is ₹${Math.round(suggestedBase)} with risk marked ${riskLevel}.`;
   const actionGuidance =
     positionPct > 15

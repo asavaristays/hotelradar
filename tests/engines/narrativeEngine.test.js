@@ -28,5 +28,28 @@ describe('narrativeEngine', () => {
     expect(result).toHaveProperty('actionGuidance');
     expect(result).toEqual(secondRun);
   });
-});
 
+  test('uses human-readable strongest signal label in market story', () => {
+    const input = {
+      demandScore: 71.4,
+      demandLevel: 'High',
+      signalBreakdown: {
+        competitorMomentum: 3,
+        holidayImpact: 2,
+        eventImpact: 9.5,
+        airfareImpact: 1,
+        seasonImpact: 1.2,
+      },
+      compression: { compressionLevel: 'High', scarcityScore: 72 },
+      riskLevel: 'Medium',
+      stabilityStatus: 'Stable',
+      seasonProfile: 'Urban Business',
+      marketPosition: { positionPct: -6.2 },
+      suggestedPricing: { base: 18200 },
+    };
+
+    const result = buildNarrative(input);
+    expect(result.marketStory).toContain('Event Impact');
+    expect(result.marketStory).not.toContain('eventImpact');
+  });
+});

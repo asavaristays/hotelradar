@@ -13,6 +13,19 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
+function formatStayDate(value) {
+  if (!value) return 'N/A';
+  const raw = String(value).trim();
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 function formatGap(gapPct, estimated = false) {
   const numeric = Number(gapPct || 0);
   if (!estimated) return formatPercent(numeric, 2);
@@ -53,7 +66,7 @@ export default function OtaParityPanel({ otaParity, marketContext }) {
       <header className="panelHeader">
         <h2>OTA Parity</h2>
         <p className="metaLabel">
-          Stay date: {marketContext?.checkinDate || 'N/A'} | Last scraped: {formatTimestamp(otaParity?.lastScrapedAt)}
+          Stay date: {formatStayDate(marketContext?.checkinDate)} | Last scraped: {formatTimestamp(otaParity?.lastScrapedAt)}
         </p>
       </header>
 

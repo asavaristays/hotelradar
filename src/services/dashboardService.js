@@ -373,10 +373,19 @@ function normalizeAlertSeverity(raw = '') {
 
 function summarizeAlerts(alerts = []) {
   const grouped = new Map();
+  const staleWindowMs = 7 * 24 * 60 * 60 * 1000;
 
   for (const alert of alerts) {
     const message = String(alert?.message || '').trim();
     if (!message) continue;
+
+    const alertType = String(alert?.alert_type || '').trim().toLowerCase();
+    if (alertType === 'surge_window') {
+      const createdAtMs = new Date(alert?.created_at || 0).getTime();
+      if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs > staleWindowMs) {
+        continue;
+      }
+    }
 
     const severity = normalizeAlertSeverity(alert?.severity);
     const key = `${severity}:${message.toLowerCase()}`;

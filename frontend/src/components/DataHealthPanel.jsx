@@ -16,6 +16,19 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
+function formatStayDate(value) {
+  if (!value) return 'N/A';
+  const raw = String(value).trim();
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 export default function DataHealthPanel({ dataHealth, viewerRole, marketContext = null }) {
   if (!dataHealth) {
     return (
@@ -41,7 +54,7 @@ export default function DataHealthPanel({ dataHealth, viewerRole, marketContext 
       <header className="panelHeader">
         <h2>Data Health</h2>
         <p className="metaLabel">
-          Stay date: {marketContext?.checkinDate || 'N/A'} | Last checked: {formatTimestamp(dataHealth.lastCheckedAt)}
+          Stay date: {formatStayDate(marketContext?.checkinDate)} | Last checked: {formatTimestamp(dataHealth.lastCheckedAt)}
         </p>
       </header>
 

@@ -110,4 +110,44 @@ describe('holidayEngine', () => {
     expect(result.eventBoost).toBeGreaterThan(0);
     expect(result.corporateShare).toBeGreaterThan(0);
   });
+
+  test('deduplicates repeated event lines and keeps multiple upcoming named events', () => {
+    const today = new Date('2026-03-07T00:00:00Z');
+    const result = computeHolidayScore({
+      date: today,
+      city: 'Mumbai',
+      holidays: [],
+      events: [
+        {
+          event_name: 'IPL Match - Wankhede',
+          start_date: '2026-03-12',
+          end_date: '2026-03-12',
+          category: 'ipl_match',
+          scale: 'large',
+          confidence: 'confirmed',
+        },
+        {
+          event_name: 'IPL Match - Wankhede',
+          start_date: '2026-03-12',
+          end_date: '2026-03-12',
+          category: 'ipl_match',
+          scale: 'large',
+          confidence: 'confirmed',
+        },
+        {
+          event_name: 'BKC Corporate Summit',
+          start_date: '2026-03-19',
+          end_date: '2026-03-20',
+          category: 'conference',
+          scale: 'large',
+          confidence: 'tentative',
+        },
+      ],
+    });
+
+    const reason = String(result.reason || '');
+    const iplMentions = reason.match(/IPL Match - Wankhede/g) || [];
+    expect(iplMentions.length).toBe(1);
+    expect(reason).toContain('BKC Corporate Summit');
+  });
 });

@@ -1,6 +1,20 @@
 import { pool } from '../db/pool.js';
 
+async function deactivateStaleSurgeWindowAlerts(hotelId, staleDays = 7) {
+  await pool.query(
+    `UPDATE alerts
+     SET active = FALSE
+     WHERE hotel_id = $1
+       AND active = TRUE
+       AND alert_type = 'surge_window'
+       AND created_at < NOW() - make_interval(days => $2::int)`,
+    [hotelId, staleDays],
+  );
+}
+
 export async function listActiveAlerts(hotelId, limit = 20) {
+  await deactivateStaleSurgeWindowAlerts(hotelId, 7);
+
   const { rows } = await pool.query(
     `SELECT id, alert_type, severity, message, metadata, created_at
      FROM alerts

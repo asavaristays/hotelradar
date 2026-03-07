@@ -166,7 +166,9 @@ export function computeHolidayCompression(input) {
   let holidayBoost = 0;
   let eventBoost = 0;
   const eventCategoryBoost = {};
-  const reasons = [];
+  const holidayReasons = [];
+  const seasonalReasons = [];
+  const eventReasonMap = new Map();
 
   for (const holiday of holidays) {
     const daysAhead = daysBetween(today, holiday.holiday_date);
@@ -176,7 +178,7 @@ export function computeHolidayCompression(input) {
     holidayBoost += weighted;
 
     if (daysAhead <= 3) {
-      reasons.push(`${holiday.holiday_name} within ${daysAhead} day(s) adds compression.`);
+      holidayReasons.push(`${holiday.holiday_name} within ${daysAhead} day(s) adds compression.`);
     }
   }
 
@@ -192,7 +194,7 @@ export function computeHolidayCompression(input) {
   for (const event of eventProfiles) {
     if (event.months.includes(month)) {
       eventBoost += event.score;
-      reasons.push(`${event.name} contributes seasonal compression.`);
+      seasonalReasons.push(`${event.name} contributes seasonal compression.`);
       break;
     }
   }
@@ -208,13 +210,38 @@ export function computeHolidayCompression(input) {
     eventBoost += weighted;
     eventCategoryBoost[category] = Number(eventCategoryBoost[category] || 0) + weighted;
 
+    const eventName = String(event.event_name || 'City event').trim();
     if (daysAhead >= 0 && daysAhead <= 3) {
-      reasons.push(`${event.event_name || 'City event'} starts in ${daysAhead} day(s).`);
+      const line = `${eventName} starts in ${daysAhead} day(s).`;
+      const key = `${eventName.toLowerCase()}|${event.start_date || ''}|start`;
+      if (!eventReasonMap.has(key)) eventReasonMap.set(key, { line, daysAhead });
     } else if (daysAhead > 3 && daysAhead <= 14) {
-      reasons.push(`${event.event_name || 'City event'} is approaching in ${daysAhead} day(s).`);
+      const line = `${eventName} is approaching in ${daysAhead} day(s).`;
+      const key = `${eventName.toLowerCase()}|${event.start_date || ''}|approach`;
+      if (!eventReasonMap.has(key)) eventReasonMap.set(key, { line, daysAhead });
     } else if (daysAhead < 0 && daysToEnd >= 0) {
-      reasons.push(`${event.event_name || 'City event'} is currently live.`);
+      const line = `${eventName} is currently live.`;
+      const key = `${eventName.toLowerCase()}|${event.start_date || ''}|live`;
+      if (!eventReasonMap.has(key)) eventReasonMap.set(key, { line, daysAhead: -1 });
     }
+  }
+
+  const eventReasons = Array.from(eventReasonMap.values())
+    .sort((left, right) => Number(left.daysAhead || 0) - Number(right.daysAhead || 0))
+    .map((entry) => entry.line);
+
+  const selectedReasons = [];
+  for (const line of eventReasons) {
+    if (selectedReasons.length >= 2) break;
+    if (!selectedReasons.includes(line)) selectedReasons.push(line);
+  }
+  for (const line of holidayReasons) {
+    if (selectedReasons.length >= 2) break;
+    if (!selectedReasons.includes(line)) selectedReasons.push(line);
+  }
+  for (const line of seasonalReasons) {
+    if (selectedReasons.length >= 2) break;
+    if (!selectedReasons.includes(line)) selectedReasons.push(line);
   }
 
   const compression = holidayBoost + eventBoost;
@@ -246,8 +273,8 @@ export function computeHolidayCompression(input) {
   return {
     score: round(score),
     surgeWindow,
-    reason: reasons.length
-      ? reasons.slice(0, 2).join(' ')
+    reason: selectedReasons.length
+      ? selectedReasons.join(' ')
       : 'No major holiday or event compression in next 14 days. Dates may vary.',
     confidence: holidays.length || hasDynamicEvents ? 88 : 70,
     neutral: holidays.length === 0 && !hasDynamicEvents,
