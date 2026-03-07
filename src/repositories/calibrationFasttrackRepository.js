@@ -64,7 +64,10 @@ export async function getCityCalibrationDataset(city, days = 14) {
        ds.demand_score::float8 AS demand_score,
        ds.level AS demand_level,
        COALESCE(ds.recommendation->>'action', 'maintain') AS recommended_action,
-       (ds.recommendation->>'base')::float8 AS suggested_base,
+       NULLIF(
+         regexp_replace(COALESCE(ds.recommendation->>'base', ''), '[^0-9.+-]', '', 'g'),
+         ''
+       )::float8 AS suggested_base,
        ds.signals
      FROM hotel_daily_outcomes o
      JOIN hotels h ON h.id = o.hotel_id

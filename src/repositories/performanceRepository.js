@@ -81,7 +81,10 @@ export async function getValidatedPerformance(hotelId, days = 60) {
          o.outcome_date,
          o.actual_adr::float8 AS actual_adr,
          COALESCE(ds.recommendation->>'action', 'maintain') AS recommended_action,
-         (ds.recommendation->>'base')::float8 AS suggested_base
+         NULLIF(
+           regexp_replace(COALESCE(ds.recommendation->>'base', ''), '[^0-9.+-]', '', 'g'),
+           ''
+         )::float8 AS suggested_base
        FROM hotel_daily_outcomes o
        LEFT JOIN LATERAL (
          SELECT d.recommendation
