@@ -26,6 +26,23 @@ run_with_timeout() {
 LOG_FILE="${RADAR_RATE_CYCLE_LOG:-/opt/radar_light/logs/rate_cycle.jsonl}"
 mkdir -p "$(dirname "$LOG_FILE")"
 
+cycle_status="ok"
+
+log_cycle_end() {
+  local status="$1"
+  local end_ts
+  end_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "{\"ts\":\"${end_ts}\",\"event\":\"rate_cycle_end\",\"status\":\"${status}\"}" >> "$LOG_FILE"
+}
+
+handle_interrupt() {
+  cycle_status="interrupted"
+  exit 130
+}
+
+trap handle_interrupt INT TERM
+trap '[[ "$cycle_status" == "ok" && $? -ne 0 ]] && cycle_status="error"; log_cycle_end "$cycle_status"' EXIT
+
 start_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "{\"ts\":\"${start_ts}\",\"event\":\"rate_cycle_start\"}" >> "$LOG_FILE"
 
@@ -40,6 +57,3 @@ for hotel_id in $HOTELS; do
     -H "Content-Type: application/json" \
     -d '{"trigger":"cron","source":"rate-cycle"}' >/dev/null || true
 done
-
-end_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "{\"ts\":\"${end_ts}\",\"event\":\"rate_cycle_end\"}" >> "$LOG_FILE"
