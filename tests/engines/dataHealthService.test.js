@@ -169,4 +169,51 @@ describe('dataHealthService', () => {
     expect(output.signalQuality.summary.toLowerCase()).toContain('event feed');
     expect(output.signalQuality.summary.toLowerCase()).toContain('live ota rows');
   });
+
+  test('honors minForecastAccuracy=0 override (does not fallback to default 60)', async () => {
+    const deps = inMemoryDeps();
+    const nowIso = new Date().toISOString();
+    const output = await computeDataHealthSnapshot(
+      {
+        hotelId: 'h4',
+        city: 'Goa',
+        viewerRole: 'admin',
+        calibration: {
+          global: {
+            dataHealth: {
+              minForecastAccuracy: 0,
+            },
+          },
+        },
+        competitorRates: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }],
+        airfareSeries: Array.from({ length: 10 }, (_, i) => ({ id: i })),
+        events: [
+          {
+            city: 'Goa',
+            event_name: 'Wedding Window',
+            scraped_at: nowIso,
+          },
+        ],
+        lastScrapedAt: nowIso,
+        lastEventSync: nowIso,
+        otaParity: {
+          sourceStatus: 'scraped',
+          rows: [
+            { channel: 'Booking.com', otaPrice: 10100, estimated: false, status: 'In Parity' },
+            { channel: 'Agoda', otaPrice: 10200, estimated: false, status: 'In Parity' },
+          ],
+          parityThresholdPct: 2,
+          alertThresholdPct: 5,
+          summary: { maxAbsGapPct: 0.8 },
+        },
+        confidence: { score: 90 },
+        marketStability: { volatilityScore: 25 },
+        performanceSummary: { sampleSize: 9, rollingAccuracy30d: 0, stabilityDeviation: 10 },
+      },
+      deps,
+    );
+
+    expect(output.diagnostics.thresholds.minForecastAccuracy).toBe(0);
+    expect(output.signalQuality.mode).toBe('actionable');
+  });
 });

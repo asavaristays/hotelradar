@@ -24,22 +24,37 @@ function isFocusCity(city = '') {
   return FOCUS_CITY_KEYS.has(normalizeCity(city));
 }
 
+function numericOrDefault(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function normalizeRules(calibration = {}) {
   const cfg = calibration?.global?.dataHealth || {};
   return {
-    staleScrapeHours: Number(cfg.staleScrapeHours || DEFAULT_RULES.staleScrapeHours),
-    staleEventHours: Number(cfg.staleEventHours || DEFAULT_RULES.staleEventHours),
-    minCompetitorRows: Number(cfg.minCompetitorRows || DEFAULT_RULES.minCompetitorRows),
-    minOtaLiveRowsForAction: Number(
-      cfg.minOtaLiveRowsForAction || DEFAULT_RULES.minOtaLiveRowsForAction,
+    staleScrapeHours: numericOrDefault(cfg.staleScrapeHours, DEFAULT_RULES.staleScrapeHours),
+    staleEventHours: numericOrDefault(cfg.staleEventHours, DEFAULT_RULES.staleEventHours),
+    minCompetitorRows: numericOrDefault(cfg.minCompetitorRows, DEFAULT_RULES.minCompetitorRows),
+    minOtaLiveRowsForAction: numericOrDefault(
+      cfg.minOtaLiveRowsForAction,
+      DEFAULT_RULES.minOtaLiveRowsForAction,
     ),
-    minEventRowsFocusCity: Number(cfg.minEventRowsFocusCity || DEFAULT_RULES.minEventRowsFocusCity),
-    minAirfarePoints: Number(cfg.minAirfarePoints || DEFAULT_RULES.minAirfarePoints),
-    minConfidenceScore: Number(cfg.minConfidenceScore || DEFAULT_RULES.minConfidenceScore),
-    minSampleForAccuracy: Number(cfg.minSampleForAccuracy || DEFAULT_RULES.minSampleForAccuracy),
-    minForecastAccuracy: Number(cfg.minForecastAccuracy || DEFAULT_RULES.minForecastAccuracy),
-    maxVolatilityError: Number(cfg.maxVolatilityError || DEFAULT_RULES.maxVolatilityError),
-    resolvedWindowDays: Number(cfg.resolvedWindowDays || DEFAULT_RULES.resolvedWindowDays),
+    minEventRowsFocusCity: numericOrDefault(
+      cfg.minEventRowsFocusCity,
+      DEFAULT_RULES.minEventRowsFocusCity,
+    ),
+    minAirfarePoints: numericOrDefault(cfg.minAirfarePoints, DEFAULT_RULES.minAirfarePoints),
+    minConfidenceScore: numericOrDefault(cfg.minConfidenceScore, DEFAULT_RULES.minConfidenceScore),
+    minSampleForAccuracy: numericOrDefault(
+      cfg.minSampleForAccuracy,
+      DEFAULT_RULES.minSampleForAccuracy,
+    ),
+    minForecastAccuracy: numericOrDefault(
+      cfg.minForecastAccuracy,
+      DEFAULT_RULES.minForecastAccuracy,
+    ),
+    maxVolatilityError: numericOrDefault(cfg.maxVolatilityError, DEFAULT_RULES.maxVolatilityError),
+    resolvedWindowDays: numericOrDefault(cfg.resolvedWindowDays, DEFAULT_RULES.resolvedWindowDays),
   };
 }
 
