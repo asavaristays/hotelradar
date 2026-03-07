@@ -35,6 +35,7 @@ export function buildNarrative(input) {
   const strongestSignal = Object.entries({
     competitorMomentum: Number(signals.competitorMomentum || 0),
     holidayImpact: Number(signals.holidayImpact || 0),
+    eventImpact: Number(signals.eventImpact || 0),
     airfareImpact: Number(signals.airfareImpact || 0),
     seasonImpact: Number(signals.seasonImpact || 0),
   }).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] || 'competitorMomentum';
@@ -56,4 +57,3 @@ export function buildNarrative(input) {
     actionGuidance,
   };
 }
-

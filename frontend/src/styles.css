@@ -598,6 +598,10 @@ button:disabled {
   background: #14b8a6;
 }
 
+.signal-event {
+  background: #8b5cf6;
+}
+
 .signal-airfare {
   background: #f97316;
 }

@@ -102,11 +102,30 @@ cd /Users/manishpurohit/Documents/radar_light
 npm run ingestion:ota
 ```
 
+Event ingestion (city events, Goa/Mumbai):
+
+```bash
+cd /Users/manishpurohit/Documents/radar_light
+npm run ingestion:events
+```
+
+Event collection (pull public event pages into snapshot file before ingestion):
+
+```bash
+cd /Users/manishpurohit/Documents/radar_light
+npm run ingestion:events:collect
+```
+
 Production notes:
 
 - Set `ALLOW_MOCK_COMPETITOR_FALLBACK=false` to prevent synthetic competitor rates in live environments.
 - Set `ALLOW_ESTIMATED_OTA_PARITY=false` to avoid market-estimated OTA rows when channel-scraped data is unavailable.
 - Set `OTA_SNAPSHOT_FILE=/opt/radar_light/shared/ota_snapshots/latest.json` (or keep default path).
+- Set `EVENT_SNAPSHOT_FILE=/opt/radar_light/shared/event_snapshots/latest.json` (or keep default path).
+- Set `EVENT_SOURCE_URLS=` to override default sources using `City|source|url` entries (comma-separated).
+- Optional LinkedIn planning hints file: `EVENT_LINKEDIN_HINTS_FILE=/opt/radar_light/shared/event_snapshots/linkedin_hints.json`.
+- LinkedIn public URLs can also be added through `EVENT_SOURCE_URLS` with source label `linkedin-public` (parsed via safe HTML fallback when JSON-LD is unavailable).
+- Set `ENABLE_WEDDING_SIGNAL_GENERATOR=true` for Goa weekend wedding-window signals.
 - Set `FOCUS_CITIES=Goa,Mumbai` to keep product scope limited to these operating cities.
 - Scheduler script: `scripts/run_rate_cycle.sh` (ingest first, then recalculate active hotels).
 
@@ -132,6 +151,46 @@ Snapshot JSON format (`rows` also accepted as wrapper key):
     "checkin_date": "2026-04-16",
     "hotel_rate": 6999,
     "source": "pms"
+  }
+]
+```
+
+Event snapshot JSON format (`rows` also accepted as wrapper key):
+
+```json
+[
+  {
+    "name": "Sunburn Festival 2026",
+    "city": "Goa",
+    "venue": "Vagator Beach",
+    "start_date": "2026-12-27",
+    "end_date": "2026-12-29",
+    "category": "music_festival",
+    "scale": "large",
+    "estimated_attendance": 50000,
+    "radius_impact_km": 25,
+    "source": "insider.in",
+    "confidence": "confirmed",
+    "event_url": "https://insider.in/sample-event",
+    "impact_score": 18
+  }
+]
+```
+
+LinkedIn hints snapshot JSON format (optional, supports corporate planning signals without requiring a direct LinkedIn API):
+
+```json
+[
+  {
+    "name": "BKC Fintech Leadership Summit",
+    "city": "Mumbai",
+    "venue": "BKC Convention Hub",
+    "start_date": "2026-04-18",
+    "end_date": "2026-04-19",
+    "category": "conference",
+    "scale": "large",
+    "confidence": "tentative",
+    "event_url": "https://www.linkedin.com/events/sample"
   }
 ]
 ```

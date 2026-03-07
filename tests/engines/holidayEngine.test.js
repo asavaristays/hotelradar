@@ -19,4 +19,71 @@ describe('holidayEngine', () => {
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.neutral).toBe(true);
   });
+
+  test('adds event-driven compression for upcoming large events', () => {
+    const today = new Date('2026-03-07T00:00:00Z');
+    const withEvent = computeHolidayScore({
+      date: today,
+      city: 'Mumbai',
+      holidays: [],
+      events: [
+        {
+          event_name: 'IPL Match - Wankhede',
+          start_date: '2026-03-10',
+          end_date: '2026-03-10',
+          category: 'ipl_match',
+          scale: 'large',
+          confidence: 'confirmed',
+          impact_score: 14,
+        },
+      ],
+    });
+    const withoutEvent = computeHolidayScore({
+      date: today,
+      city: 'Mumbai',
+      holidays: [],
+      events: [],
+    });
+
+    expect(withEvent.score).toBeGreaterThan(withoutEvent.score);
+    expect(withEvent.eventBoost).toBeGreaterThan(0);
+    expect(withEvent.eventShare).toBeGreaterThan(0);
+    expect(withEvent.reason.toLowerCase()).toContain('ipl');
+  });
+
+  test('applies stronger Goa wedding multiplier than generic event weight', () => {
+    const today = new Date('2026-11-10T00:00:00Z');
+    const withWedding = computeHolidayScore({
+      date: today,
+      city: 'Goa',
+      holidays: [],
+      events: [
+        {
+          event_name: 'Destination Wedding Showcase',
+          start_date: '2026-11-13',
+          end_date: '2026-11-13',
+          category: 'wedding_season',
+          scale: 'medium',
+          confidence: 'tentative',
+        },
+      ],
+    });
+    const generic = computeHolidayScore({
+      date: today,
+      city: 'Goa',
+      holidays: [],
+      events: [
+        {
+          event_name: 'General Community Meet',
+          start_date: '2026-11-13',
+          end_date: '2026-11-13',
+          category: 'general',
+          scale: 'medium',
+          confidence: 'tentative',
+        },
+      ],
+    });
+
+    expect(withWedding.eventBoost).toBeGreaterThan(generic.eventBoost);
+  });
 });

@@ -186,24 +186,27 @@ function MobileSummaryStrip({ dashboard }) {
   );
 }
 
-function PerformanceCard({ summary }) {
+function PerformanceCard({ summary, signalQuality }) {
   const sampleSize = Number(summary?.sampleSize || 0);
   const alertPrecision = Number(summary?.alertPrecision || 0);
-  const calibrationReady = sampleSize >= 7;
+  const calibrationMode = signalQuality?.mode === 'calibrating' || sampleSize < 7;
   const precisionTone = alertPrecision >= 75 ? 'good' : alertPrecision >= 55 ? 'watch' : 'risk';
+  const calibrationSummary =
+    signalQuality?.mode === 'calibrating' && signalQuality?.summary
+      ? signalQuality.summary
+      : 'Model calibration in progress. Performance KPIs stabilize after at least 7 validated snapshots.';
 
   return (
     <section className="panel performancePanel" aria-label="Performance summary">
       <header className="panelHeader">
         <h2>Performance Summary</h2>
-        <span className={`metricBadge metric-${calibrationReady ? precisionTone : 'pending'}`}>
-          {calibrationReady ? `Alert Precision ${alertPrecision.toFixed(1)}%` : 'Calibrating'}
+        <span className={`metricBadge metric-${calibrationMode ? 'pending' : precisionTone}`}>
+          {calibrationMode ? 'Calibrating' : `Alert Precision ${alertPrecision.toFixed(1)}%`}
         </span>
       </header>
-      {!calibrationReady ? (
+      {calibrationMode ? (
         <p className="metaLabel">
-          Model calibration in progress. Performance KPIs stabilize after at least 7 validated snapshots.
-          Current sample size: <strong>{sampleSize}</strong>.
+          {calibrationSummary} Current sample size: <strong>{sampleSize}</strong>.
         </p>
       ) : (
         <div className="snapshotList">
@@ -441,7 +444,7 @@ export default function Dashboard({ dashboard, loading, error }) {
       </div>
 
       <div className="row rowWide">
-        <PerformanceCard summary={dashboard.performanceSummary} />
+        <PerformanceCard summary={dashboard.performanceSummary} signalQuality={dashboard.signalQuality} />
       </div>
 
       <div className="row rowWide">

@@ -98,6 +98,13 @@ const env = {
     !isProduction,
   ),
   otaSnapshotFile: readOptionalString('OTA_SNAPSHOT_FILE', ''),
+  eventSnapshotFile: readOptionalString('EVENT_SNAPSHOT_FILE', ''),
+  eventSourceUrls: readOptionalString('EVENT_SOURCE_URLS', ''),
+  eventLinkedinHintsFile: readOptionalString('EVENT_LINKEDIN_HINTS_FILE', ''),
+  enableWeddingSignalGenerator: parseBoolean(
+    process.env.ENABLE_WEDDING_SIGNAL_GENERATOR,
+    true,
+  ),
   focusCities: parseCsv(process.env.FOCUS_CITIES, ['Goa', 'Mumbai']),
 
   migrationBaselineExisting: parseBoolean(process.env.MIGRATION_BASELINE_EXISTING, true),

@@ -85,4 +85,20 @@ describe('pricingEngine', () => {
     expect(result.base).toBeLessThan(30000);
     expect(['Medium', 'High']).toContain(result.riskLevel);
   });
+
+  test('bands stay ordered without overlap when competitor signal is unavailable', () => {
+    const result = computePricingRecommendation({
+      demandScore: 58,
+      demandLevel: 'Moderate',
+      hotelPrice: 10500,
+      marketAvgPrice: 0,
+      competitorMomentum: { score: 50, avgChangePct: 0, direction: 'stable' },
+      holidayScore: 52,
+      airfareScore: 48,
+      city: 'Goa',
+    });
+
+    expect(result.bands.safe.max).toBeLessThanOrEqual(result.bands.aggressive.min);
+    expect(result.bands.aggressive.max).toBeLessThanOrEqual(result.bands.premium.min);
+  });
 });

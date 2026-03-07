@@ -18,6 +18,8 @@ start_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "{\"ts\":\"${start_ts}\",\"event\":\"rate_cycle_start\"}" >> "$LOG_FILE"
 
 cd "$ROOT_DIR"
+node src/scripts/runEventCollector.js || true
+node src/scripts/runEventIngestion.js || true
 node src/scripts/runOtaIngestion.js || true
 
 HOTELS=$(psql "$DATABASE_URL" -t -A -c "SELECT id FROM hotels WHERE COALESCE(subscription_status, 'active')='active'")
@@ -29,4 +31,3 @@ done
 
 end_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "{\"ts\":\"${end_ts}\",\"event\":\"rate_cycle_end\"}" >> "$LOG_FILE"
-

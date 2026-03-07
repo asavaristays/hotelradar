@@ -3,6 +3,7 @@ import { formatPercent } from './dashboardUtils.js';
 const SIGNAL_META = [
   { key: 'competitorMomentum', label: 'Competitor Momentum', className: 'signal-competitor' },
   { key: 'holidayImpact', label: 'Holiday Impact', className: 'signal-holiday' },
+  { key: 'eventImpact', label: 'Event Impact', className: 'signal-event' },
   { key: 'airfareImpact', label: 'Airfare Impact', className: 'signal-airfare' },
   { key: 'seasonImpact', label: 'Season Impact', className: 'signal-season' },
 ];
@@ -40,4 +41,3 @@ export default function SignalBreakdownChart({ signalBreakdown }) {
     </section>
   );
 }
-

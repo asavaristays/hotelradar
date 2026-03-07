@@ -19,6 +19,7 @@ describe('recalculateDashboard integration', () => {
         city: 'Goa',
         hotel_name: 'Hotel Taj Goa',
         alert_sensitivity: 'balanced',
+        room_count: 48,
       }),
       getCompetitorRatesForHotel: async () => [
         { id: 'c1', competitor_name: 'A', price_today: 12000, price_48h_ago: 11000, price_7d_ago: 10800 },
@@ -75,6 +76,7 @@ describe('recalculateDashboard integration', () => {
     expect(dashboard).toHaveProperty('otaParity');
     expect(dashboard).toHaveProperty('dataHealth');
     expect(dashboard).toHaveProperty('performanceSummary');
+    expect(dashboard).toHaveProperty('revenueImpact');
     expect(dashboard.suggestedPricing).toHaveProperty('base');
     expect(dashboard.marketPosition).toHaveProperty('marketAvg');
     expect(Array.isArray(dashboard.explanation)).toBe(true);
@@ -93,6 +95,11 @@ describe('recalculateDashboard integration', () => {
     expect(Array.isArray(dashboard.otaParity.rows)).toBe(true);
     expect(dashboard.confidence).toHaveProperty('forecastAccuracy60d');
     expect(dashboard.confidence).toHaveProperty('volatilityError');
+    expect(dashboard.signalBreakdown).toHaveProperty('eventImpact');
+    expect(dashboard.revenueImpact.maintain).toBeGreaterThan(0);
+    expect(dashboard.revenueImpact.plus2).toBeGreaterThan(0);
+    expect(dashboard.revenueImpact.minus2).toBeGreaterThan(0);
+    expect(['maintain', 'plus2', 'minus2']).toContain(dashboard.revenueImpact.recommended);
     expect(evaluateAlerts).toHaveBeenCalledTimes(1);
   });
 
@@ -103,6 +110,7 @@ describe('recalculateDashboard integration', () => {
         city: 'Goa',
         hotel_name: 'Hotel Taj Goa',
         alert_sensitivity: 'balanced',
+        room_count: 20,
       }),
       getCompetitorRatesForHotel: async () => [],
       getMockCompetitorRates: async () => [],
@@ -131,6 +139,7 @@ describe('recalculateDashboard integration', () => {
     const dashboard = await recalculateDashboard('11111111-1111-4111-8111-111111111111', {}, deps);
     expect(dashboard.suggestedPricing.base).toBeGreaterThan(0);
     expect(dashboard.suggestedPricing.bands.safe.min).toBeGreaterThan(0);
+    expect(dashboard.revenueImpact.maintain).toBeGreaterThan(0);
     expect(dashboard.explanation.join(' ')).toContain('neutral');
   });
 });

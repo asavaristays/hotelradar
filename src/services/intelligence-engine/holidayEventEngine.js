@@ -44,6 +44,41 @@ const citySeasonalEvents = {
   ],
 };
 
+const eventCategoryWeights = {
+  music_festival: 18,
+  ipl_match: 14,
+  exhibition: 8,
+  conference: 7,
+  public_holiday: 12,
+  cultural_festival: 10,
+  wedding_season: 6,
+  general: 5,
+};
+
+const eventScaleFactors = {
+  small: 0.7,
+  medium: 1,
+  large: 1.25,
+};
+
+const eventConfidenceFactors = {
+  confirmed: 1,
+  tentative: 0.75,
+  rumor: 0.45,
+};
+
+const cityCategoryMultipliers = {
+  goa: {
+    wedding_season: 1.45,
+    music_festival: 1.2,
+  },
+  mumbai: {
+    conference: 1.35,
+    exhibition: 1.25,
+    ipl_match: 1.15,
+  },
+};
+
 function holidayWeight(holidayType) {
   if (holidayType === 'long_weekend') return 16;
   if (holidayType === 'public') return 14;
@@ -58,17 +93,75 @@ function proximityFactor(daysAhead) {
   return 0.4;
 }
 
+function normalizeCategory(raw = '') {
+  const value = String(raw || '').trim().toLowerCase();
+  return value ? value.replace(/\s+/g, '_') : 'general';
+}
+
+function normalizeScale(raw = '') {
+  const value = String(raw || '').trim().toLowerCase();
+  if (value === 'small' || value === 'medium' || value === 'large') return value;
+  return 'medium';
+}
+
+function normalizeConfidence(raw = '') {
+  const value = String(raw || '').trim().toLowerCase();
+  if (value === 'confirmed' || value === 'tentative' || value === 'rumor') return value;
+  return 'confirmed';
+}
+
+function eventLeadFactor(daysAhead, daysToEnd) {
+  if (daysToEnd < 0 || daysAhead > 30) return 0;
+  if (daysAhead < 0 && daysToEnd >= 0) return 1.15; // currently ongoing
+  if (daysAhead <= 3) return 1;
+  if (daysAhead <= 7) return 0.85;
+  if (daysAhead <= 14) return 0.7;
+  return 0.5;
+}
+
+function eventBaseWeight(event = {}, city = '') {
+  const category = normalizeCategory(event.category);
+  const scale = normalizeScale(event.scale);
+  const confidence = normalizeConfidence(event.confidence);
+  const explicitImpact = Number(event.impact_score);
+  const cityKey = String(city || '').trim().toLowerCase();
+
+  const categoryWeight = eventCategoryWeights[category] || eventCategoryWeights.general;
+  const scaleFactor = eventScaleFactors[scale] || 1;
+  const confidenceFactor = eventConfidenceFactors[confidence] || 1;
+  const baseline = Number.isFinite(explicitImpact) ? explicitImpact : categoryWeight;
+  const cityFactor = cityCategoryMultipliers[cityKey]?.[category] || 1;
+
+  return baseline * scaleFactor * confidenceFactor * cityFactor;
+}
+
 /**
  * Build holiday/event compression score over next 14 days.
- * @param {{city:string,date?:Date,holidays:Array<{holiday_date:string,holiday_name:string,holiday_type:string}>}} input
- * @returns {{score:number,surgeWindow:boolean,reason:string,confidence:number,neutral:boolean}}
+ * @param {{
+ *   city:string,
+ *   date?:Date,
+ *   holidays:Array<{holiday_date:string,holiday_name:string,holiday_type:string}>,
+ *   events?:Array<{event_name:string,start_date:string,end_date:string,category?:string,scale?:string,impact_score?:number,confidence?:string}>
+ * }} input
+ * @returns {{
+ *   score:number,
+ *   surgeWindow:boolean,
+ *   reason:string,
+ *   confidence:number,
+ *   neutral:boolean,
+ *   holidayBoost:number,
+ *   eventBoost:number,
+ *   eventShare:number
+ * }}
  */
 export function computeHolidayCompression(input) {
   const city = input.city;
   const today = toDateOnly(input.date || new Date());
   const holidays = input.holidays || [];
+  const events = input.events || [];
 
-  let compression = 0;
+  let holidayBoost = 0;
+  let eventBoost = 0;
   const reasons = [];
 
   for (const holiday of holidays) {
@@ -76,7 +169,7 @@ export function computeHolidayCompression(input) {
     if (daysAhead < 0 || daysAhead > 14) continue;
 
     const weighted = holidayWeight(holiday.holiday_type) * proximityFactor(daysAhead);
-    compression += weighted;
+    holidayBoost += weighted;
 
     if (daysAhead <= 3) {
       reasons.push(`${holiday.holiday_name} within ${daysAhead} day(s) adds compression.`);
@@ -85,7 +178,7 @@ export function computeHolidayCompression(input) {
 
   for (let i = 0; i <= 6; i += 1) {
     if (isWeekend(addDays(today, i))) {
-      compression += 3;
+      holidayBoost += 3;
       break;
     }
   }
@@ -94,17 +187,44 @@ export function computeHolidayCompression(input) {
   const eventProfiles = citySeasonalEvents[city] || [];
   for (const event of eventProfiles) {
     if (event.months.includes(month)) {
-      compression += event.score;
+      eventBoost += event.score;
       reasons.push(`${event.name} contributes seasonal compression.`);
       break;
     }
   }
 
+  for (const event of events) {
+    const daysAhead = daysBetween(today, event.start_date);
+    const daysToEnd = daysBetween(today, event.end_date || event.start_date);
+    const leadFactor = eventLeadFactor(daysAhead, daysToEnd);
+    if (leadFactor <= 0) continue;
+
+    const weighted = eventBaseWeight(event, city) * leadFactor;
+    eventBoost += weighted;
+
+    if (daysAhead >= 0 && daysAhead <= 3) {
+      reasons.push(`${event.event_name || 'City event'} starts in ${daysAhead} day(s).`);
+    } else if (daysAhead > 3 && daysAhead <= 14) {
+      reasons.push(`${event.event_name || 'City event'} is approaching in ${daysAhead} day(s).`);
+    } else if (daysAhead < 0 && daysToEnd >= 0) {
+      reasons.push(`${event.event_name || 'City event'} is currently live.`);
+    }
+  }
+
+  const compression = holidayBoost + eventBoost;
+
   const score = clamp(38 + compression, 0, 100);
   const surgeWindow = holidays.some((holiday) => {
     const daysAhead = daysBetween(today, holiday.holiday_date);
     return daysAhead >= 0 && daysAhead <= 3 && ['public', 'long_weekend'].includes(holiday.holiday_type);
+  }) || events.some((event) => {
+    const daysAhead = daysBetween(today, event.start_date);
+    const scale = normalizeScale(event.scale);
+    return daysAhead >= 0 && daysAhead <= 3 && scale === 'large';
   });
+  const totalBoost = Math.max(0.0001, holidayBoost + eventBoost);
+  const eventShare = clamp(eventBoost / totalBoost, 0, 1);
+  const hasDynamicEvents = events.length > 0;
 
   return {
     score: round(score),
@@ -112,7 +232,10 @@ export function computeHolidayCompression(input) {
     reason: reasons.length
       ? reasons.slice(0, 2).join(' ')
       : 'No major holiday or event compression in next 14 days. Dates may vary.',
-    confidence: holidays.length ? 88 : 70,
-    neutral: holidays.length === 0,
+    confidence: holidays.length || hasDynamicEvents ? 88 : 70,
+    neutral: holidays.length === 0 && !hasDynamicEvents,
+    holidayBoost: round(holidayBoost, 2),
+    eventBoost: round(eventBoost, 2),
+    eventShare: round(eventShare, 4),
   };
 }

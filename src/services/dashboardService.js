@@ -21,6 +21,7 @@ import {
   getLatestMarketCheckinDate,
   getLatestCompetitorScrapeAt,
   getLatestHotelPrice,
+  getUpcomingEvents,
   getUpcomingHolidays,
 } from '../repositories/marketRepository.js';
 import { getHotelById, touchHotelCalculatedAt } from '../repositories/hotelRepository.js';
@@ -43,6 +44,7 @@ import { computeMarketPosition } from './marketPositionService.js';
 import { computeOtaParity } from './otaParityService.js';
 import { computeDataHealthSnapshot } from './dataHealthService.js';
 import { splitRateRows } from './rateSourceService.js';
+import { simulateRevenueImpact } from './revenueImpactSimulator.js';
 import { average, clamp, round } from '../utils/math.js';
 import { getMockCompetitorRates } from '../../mock/mockScraper.js';
 
@@ -52,6 +54,7 @@ const defaultDeps = {
   getCompetitorRatesForHotel,
   getLatestHotelPrice,
   getAirfareSeries,
+  getUpcomingEvents,
   getUpcomingHolidays,
   getCityWeights,
   getLatestMarketCheckinDate,
@@ -118,6 +121,57 @@ function normalizeSuggestedPricing(raw) {
     },
     riskLevel: pricing.riskLevel || 'Low',
     marketHeat: Number(pricing.marketHeat || 1),
+  };
+}
+
+function pickCurveScore(forwardCurve = [], index = 0, fallback = 50) {
+  if (!Array.isArray(forwardCurve) || !forwardCurve.length) return fallback;
+  const safeIndex = Math.max(0, Math.min(Number(index || 0), forwardCurve.length - 1));
+  const value = Number(forwardCurve[safeIndex]?.score);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function actionToRecommendedScenario(action = '') {
+  if (action === 'increase') return 'plus2';
+  if (action === 'reduce') return 'minus2';
+  return 'maintain';
+}
+
+function buildRevenueImpact({
+  hotel,
+  marketPosition,
+  suggestedPricing,
+  forwardCurve,
+  demandScore,
+  action,
+}) {
+  const fallbackDemand = clamp(Number(demandScore || 50), 0, 100);
+  const currentADR = Number(marketPosition?.hotelPrice || suggestedPricing?.base || 0);
+  const competitorMedian = Number(marketPosition?.marketAvg || currentADR || 0);
+  const roomCount = Number(hotel?.room_count || 0);
+  const roomNights = Math.max(1, Math.round((roomCount > 0 ? roomCount : 100) * 7));
+
+  const simulation = simulateRevenueImpact({
+    currentADR: Math.max(0, currentADR),
+    competitorMedian: Math.max(0, competitorMedian),
+    demandSignals: {
+      day7: pickCurveScore(forwardCurve, 6, fallbackDemand),
+      day14: pickCurveScore(forwardCurve, 13, fallbackDemand),
+      day30: pickCurveScore(forwardCurve, 29, fallbackDemand),
+    },
+    roomNights,
+  });
+
+  const findRevenue = (scenarioName) =>
+    Number(
+      simulation?.revenueScenarios?.find((entry) => entry?.scenario === scenarioName)?.projectedRevenue || 0,
+    );
+
+  return {
+    maintain: round(findRevenue('Maintain price'), 0),
+    plus2: round(findRevenue('+2% price'), 0),
+    minus2: round(findRevenue('-2% price'), 0),
+    recommended: actionToRecommendedScenario(action),
   };
 }
 
@@ -294,7 +348,7 @@ function buildChangeSummary(currentRecord, previousRecord) {
   };
 }
 
-function buildSignals({ hotel, record, competitorRates, airfareSeries, holidays }) {
+function buildSignals({ hotel, record, competitorRates, airfareSeries, holidays, events }) {
   const monthlyWeights = hotel.monthly_weights_json || null;
   const seasonProfileMonthly = monthlyWeights
     ? [
@@ -315,7 +369,7 @@ function buildSignals({ hotel, record, competitorRates, airfareSeries, holidays 
 
   return {
     competitor: record.signals?.competitor || computeCompetitorScore(competitorRates),
-    holiday: record.signals?.holiday || computeHolidayScore({ city: hotel.city, holidays }),
+    holiday: record.signals?.holiday || computeHolidayScore({ city: hotel.city, holidays, events }),
     airfare: record.signals?.airfare || computeAirfareScore({ city: hotel.city, series: airfareSeries }),
     season:
       record.signals?.season ||
@@ -352,6 +406,16 @@ function toDashboardContract({
       ? [record.explanation]
       : [];
   const normalizedPerf = normalizePerformanceSummary(performanceSummary);
+  const normalizedSuggestedPricing = normalizeSuggestedPricing(record.recommendation);
+  const normalizedMarketPosition = normalizeMarketPosition(record.market_position);
+  const revenueImpact = buildRevenueImpact({
+    hotel,
+    marketPosition: normalizedMarketPosition,
+    suggestedPricing: normalizedSuggestedPricing,
+    forwardCurve,
+    demandScore: Number(record.demand_score || 0),
+    action: record?.recommendation?.action || 'maintain',
+  });
   const alertSummary = summarizeAlerts(alerts);
   const confidenceWithForecast = {
     ...confidence,
@@ -368,8 +432,9 @@ function toDashboardContract({
     confidence: confidenceWithForecast,
     marketStability,
     compression,
-    suggestedPricing: normalizeSuggestedPricing(record.recommendation),
-    marketPosition: normalizeMarketPosition(record.market_position),
+    suggestedPricing: normalizedSuggestedPricing,
+    marketPosition: normalizedMarketPosition,
+    revenueImpact,
     signalBreakdown,
     forwardCurve,
     narrative,
@@ -510,11 +575,12 @@ async function buildDerivedIntelligence({
   competitorRates,
   airfareSeries,
   holidays,
+  events,
   weights,
   marketPosition,
   calibration,
 }) {
-  const signals = buildSignals({ hotel, record, competitorRates, airfareSeries, holidays });
+  const signals = buildSignals({ hotel, record, competitorRates, airfareSeries, holidays, events });
   const compression = computeCompression({
     competitorRates,
     marketPosition,
@@ -555,6 +621,8 @@ async function buildDerivedIntelligence({
       competitorAvgChange: Number(signals.competitor.avgChangePct || 0),
       seasonScore: Number(signals.season.score || 50),
       holidays,
+      events,
+      city: hotel.city,
     }),
     compression,
     narrative,
@@ -567,9 +635,10 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
   const marketScope = preloaded.marketScope || (await loadMarketScope(hotel, deps));
   const competitorRates = preloaded.competitorRates || marketScope.hotelCompetitorRates;
   const otaParityRates = preloaded.otaParityRates || marketScope.otaParityRates;
-  const [airfareSeries, holidays, cityWeights, alerts, competitiveGrid, calibration, previousRecord, canaryOverride] = await Promise.all([
+  const [airfareSeries, holidays, events, cityWeights, alerts, competitiveGrid, calibration, previousRecord, canaryOverride] = await Promise.all([
     preloaded.airfareSeries || deps.getAirfareSeries(hotel.city),
     preloaded.holidays || deps.getUpcomingHolidays(hotel.city),
+    preloaded.events || (deps.getUpcomingEvents ? deps.getUpcomingEvents(hotel.city) : Promise.resolve([])),
     preloaded.cityWeights || deps.getCityWeights(hotel.city),
     deps.listActiveAlerts(hotel.id, 20),
     getCompetitiveGrid(hotel.id, deps, marketScope),
@@ -594,6 +663,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     competitorRates,
     airfareSeries,
     holidays,
+    events,
     weights,
     marketPosition,
     calibration,
@@ -670,10 +740,11 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
   const competitorRates = marketScope.hotelCompetitorRates;
   const otaParityRates = marketScope.otaParityRates;
 
-  const [hotelPriceRaw, airfareSeries, holidays, cityWeights, previousDemand, calibration, canaryOverride] = await Promise.all([
+  const [hotelPriceRaw, airfareSeries, holidays, events, cityWeights, previousDemand, calibration, canaryOverride] = await Promise.all([
     Promise.resolve(marketScope.hotelPriceRaw),
     deps.getAirfareSeries(hotel.city),
     deps.getUpcomingHolidays(hotel.city),
+    deps.getUpcomingEvents ? deps.getUpcomingEvents(hotel.city) : Promise.resolve([]),
     deps.getCityWeights(hotel.city),
     deps.getLatestDemandScore(hotel.id),
     deps.getCalibration ? deps.getCalibration() : getCalibration(),
@@ -688,7 +759,7 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
 
   const signals = {
     competitor: computeCompetitorScore(competitorRates),
-    holiday: computeHolidayScore({ city: hotel.city, holidays }),
+    holiday: computeHolidayScore({ city: hotel.city, holidays, events }),
     airfare: computeAirfareScore({ city: hotel.city, series: airfareSeries }),
     season: computeSeasonScore({
       city: hotel.city,
@@ -827,6 +898,7 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
       otaParityRates,
       airfareSeries,
       holidays,
+      events,
       cityWeights: weights,
       calibration,
       previousRecord: previousDemand,

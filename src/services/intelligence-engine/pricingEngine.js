@@ -11,6 +11,22 @@ function normalizeBand(minValue, maxValue) {
   return min <= max ? { min, max } : { min: max, max: min };
 }
 
+function ensureOrderedBands(rawBands) {
+  const safe = normalizeBand(rawBands.safe.min, rawBands.safe.max);
+  const aggressiveSeed = normalizeBand(rawBands.aggressive.min, rawBands.aggressive.max);
+  const premiumSeed = normalizeBand(rawBands.premium.min, rawBands.premium.max);
+
+  const aggressiveMin = Math.max(aggressiveSeed.min, safe.max);
+  const aggressiveMax = Math.max(aggressiveSeed.max, aggressiveMin + 50);
+  const aggressive = normalizeBand(aggressiveMin, aggressiveMax);
+
+  const premiumMin = Math.max(premiumSeed.min, aggressive.max);
+  const premiumMax = Math.max(premiumSeed.max, premiumMin + 50);
+  const premium = normalizeBand(premiumMin, premiumMax);
+
+  return { safe, aggressive, premium };
+}
+
 function heatFromScore(score) {
   if (score <= 20) return 1;
   if (score <= 40) return 2;
@@ -112,17 +128,19 @@ export function computePricingRecommendation(input) {
   );
 
   const noCompetitorSignal = marketAvgPriceInput <= 0;
-  const bands = noCompetitorSignal
-    ? {
-        safe: normalizeBand(base * 0.98, base * 1.02),
-        aggressive: normalizeBand(base * 1.02, base * 1.05),
-        premium: normalizeBand(base * 0.99, base * 1.03),
-      }
-    : {
-        safe: normalizeBand(base * 0.97, base * 1.03),
-        aggressive: normalizeBand(base * 1.03, base * 1.08),
-        premium: normalizeBand(marketAvgPrice * 0.95, marketAvgPrice * 1.05),
-      };
+  const bands = ensureOrderedBands(
+    noCompetitorSignal
+      ? {
+          safe: normalizeBand(base * 0.98, base * 1.02),
+          aggressive: normalizeBand(base * 1.02, base * 1.05),
+          premium: normalizeBand(base * 1.05, base * 1.09),
+        }
+      : {
+          safe: normalizeBand(base * 0.97, base * 1.03),
+          aggressive: normalizeBand(base * 1.03, base * 1.08),
+          premium: normalizeBand(marketAvgPrice * 0.95, marketAvgPrice * 1.05),
+        },
+  );
 
   return {
     base,

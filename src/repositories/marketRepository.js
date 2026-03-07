@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { focusCityKeys } from '../config/productScope.js';
 
 export async function getCompetitorRatesForHotel(hotelId, options = {}) {
   const checkinDate = options?.checkinDate || null;
@@ -167,4 +168,39 @@ export async function getLatestCompetitorScrapeAt(hotelId, options = {}) {
   );
 
   return rows[0]?.last_scraped_at || null;
+}
+
+export async function getUpcomingEvents(city, options = {}) {
+  const horizonDays = Number.isFinite(Number(options?.horizonDays))
+    ? Number(options.horizonDays)
+    : 30;
+  const { rows } = await pool.query(
+    `SELECT
+       id,
+       city,
+       event_name,
+       venue,
+       start_date,
+       end_date,
+       category,
+       scale,
+       estimated_attendance,
+       radius_impact_km,
+       source,
+       confidence,
+       venue_lat,
+       venue_lng,
+       event_url,
+       impact_score,
+       scraped_at
+     FROM city_events
+     WHERE lower(city) = lower($1)
+       AND lower(city) = ANY($2::text[])
+       AND end_date >= CURRENT_DATE
+       AND start_date <= CURRENT_DATE + make_interval(days => $3)
+     ORDER BY start_date ASC, event_name ASC`,
+    [city, focusCityKeys, horizonDays],
+  );
+
+  return rows;
 }

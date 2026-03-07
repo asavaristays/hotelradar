@@ -19,6 +19,7 @@ function assertDashboardContract(payload) {
     'marketStability',
     'compression',
     'suggestedPricing',
+    'revenueImpact',
     'marketPosition',
     'signalBreakdown',
     'forwardCurve',
@@ -82,10 +83,20 @@ function assertDashboardContract(payload) {
     }),
   );
 
+  expect(payload.revenueImpact).toEqual(
+    expect.objectContaining({
+      maintain: expect.any(Number),
+      plus2: expect.any(Number),
+      minus2: expect.any(Number),
+      recommended: expect.any(String),
+    }),
+  );
+
   expect(payload.signalBreakdown).toEqual(
     expect.objectContaining({
       competitorMomentum: expect.any(Number),
       holidayImpact: expect.any(Number),
+      eventImpact: expect.any(Number),
       airfareImpact: expect.any(Number),
       seasonImpact: expect.any(Number),
     }),

@@ -17,12 +17,13 @@ export default function OtaParityPanel({ otaParity, marketContext }) {
   const rows = Array.isArray(otaParity?.rows) ? otaParity.rows : [];
   const summary = otaParity?.summary || {};
   const sourceStatus = otaParity?.sourceStatus || 'missing';
+  const liveRows = rows.filter((row) => !row.estimated).length;
   const statusCopy =
     sourceStatus === 'scraped'
-      ? 'Live OTA channel pricing captured for the current stay date.'
+      ? `Live OTA channel pricing captured for the current stay date (${liveRows} row${liveRows === 1 ? '' : 's'}).`
       : sourceStatus === 'estimated'
-        ? 'Showing estimated OTA parity fallback until live channel pricing is captured.'
-        : 'No live OTA pricing feed configured for the current stay date.';
+        ? 'Estimated OTA fallback is active. Prices are market-derived proxies until live OTA channel rows are captured for this stay date.'
+        : 'No OTA channel pricing has been captured for the current stay date yet.';
 
   return (
     <section className="panel otaParityPanel" aria-label="OTA parity">
