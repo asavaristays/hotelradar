@@ -229,6 +229,10 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   }
 
   async function handleDownloadPdf() {
+    if (dashboard?.productLock?.enabled) {
+      setError('PDF export is locked until signal quality is actionable for this market.');
+      return;
+    }
     try {
       setExportingPdf(true);
       const selectedName =
@@ -291,6 +295,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         : 'Hotel Workspace';
   const recalcStatus = recalcJob?.status || '';
   const recalcInProgress = recalcStatus === 'queued' || recalcStatus === 'processing';
+  const productLockEnabled = Boolean(dashboard?.productLock?.enabled);
 
   return (
     <main className="premiumShell">
@@ -362,9 +367,9 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
               type="button"
               className="secondaryButton"
               onClick={handleDownloadPdf}
-              disabled={!dashboard || exportingPdf}
+              disabled={!dashboard || exportingPdf || productLockEnabled}
             >
-              {exportingPdf ? 'Preparing PDF...' : 'Download PDF'}
+              {productLockEnabled ? 'Export Locked' : exportingPdf ? 'Preparing PDF...' : 'Download PDF'}
             </button>
             <button type="button" className="secondaryButton" onClick={onLogout}>
               Logout

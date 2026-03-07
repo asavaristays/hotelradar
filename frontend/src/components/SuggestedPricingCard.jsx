@@ -39,7 +39,9 @@ export default function SuggestedPricingCard({
   marketPosition,
   demandLevel,
   revenueImpact,
+  productLock = null,
 }) {
+  const lockEnabled = Boolean(productLock?.enabled);
   const base = Number(suggestedPricing?.base || 0);
   const hotelPrice = Number(marketPosition?.hotelPrice || 0);
   const bands = suggestedPricing?.bands || {
@@ -68,6 +70,25 @@ export default function SuggestedPricingCard({
   const showProjection = revenue.available && !allZeroProjection;
   const projectionFallbackReason = revenue.reason || 'Insufficient data for revenue projection.';
   const showBasis = showProjection && Number(revenue?.basis?.roomNights || 0) > 0;
+
+  if (lockEnabled) {
+    return (
+      <section className="panel pricingCard pricingCardLocked" aria-label="Suggested pricing card">
+        <header className="panelHeader">
+          <h2>Suggested Price</h2>
+          <span className="metricBadge metric-risk">LOCKED</span>
+        </header>
+        <p className="priceValue">Locked</p>
+        <p className="strategyLine">
+          {productLock?.reason || 'Pricing output is locked until signal quality is actionable.'}
+        </p>
+        <p className="metaLabel">{productLock?.unlockCriteria}</p>
+        <p className="metaLabel">
+          Current hotel price reference: <strong>₹{formatCurrency(hotelPrice)}</strong>
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className={`panel pricingCard ${trendClass}`} aria-label="Suggested pricing card">

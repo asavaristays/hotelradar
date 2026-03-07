@@ -106,23 +106,29 @@ function InsightsCard({ dashboard, viewerRole }) {
 
 function actionTone(action) {
   if (action === 'increase') return 'high';
+  if (action === 'locked') return 'high';
   if (action === 'reduce') return 'low';
   return 'medium';
 }
 
-function TodayActionCard({ actionSummary }) {
-  const action = actionSummary?.action || 'maintain';
-  const title = actionSummary?.title || 'Hold With Control';
-  const message = actionSummary?.message || 'Monitor demand and keep pricing stable.';
+function TodayActionCard({ actionSummary, productLock = null }) {
+  const lockEnabled = Boolean(productLock?.enabled);
+  const action = lockEnabled ? 'locked' : actionSummary?.action || 'maintain';
+  const title = lockEnabled ? 'Product Lock Active' : actionSummary?.title || 'Hold With Control';
+  const message = lockEnabled
+    ? productLock?.reason || 'Pricing actions are locked until signal quality is actionable.'
+    : actionSummary?.message || 'Monitor demand and keep pricing stable.';
+  const badge = lockEnabled ? 'LOCKED' : action.toUpperCase();
 
   return (
     <section className="panel actionPanel" aria-label="Today action">
       <header className="panelHeader">
         <h2>Today&apos;s Action</h2>
-        <span className={`riskBadge risk-${actionTone(action)}`}>{action.toUpperCase()}</span>
+        <span className={`riskBadge risk-${actionTone(action)}`}>{badge}</span>
       </header>
       <p className="actionTitle">{title}</p>
       <p className="metaLabel">{message}</p>
+      {lockEnabled ? <p className="metaLabel">{productLock?.unlockCriteria}</p> : null}
     </section>
   );
 }
@@ -152,7 +158,7 @@ function ChangeSummaryCard({ changeSummary }) {
   );
 }
 
-function MobileSummaryStrip({ dashboard, signalQuality = null }) {
+function MobileSummaryStrip({ dashboard, signalQuality = null, productLock = null }) {
   const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
   const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
   const deltaAmount = suggestedPrice - currentPrice;
@@ -163,6 +169,7 @@ function MobileSummaryStrip({ dashboard, signalQuality = null }) {
   const mode = String(signalQuality?.mode || '').toLowerCase();
   const calibrationMode = mode === 'calibrating' || sampleSize < 7;
   const verifyMode = mode === 'verify';
+  const lockEnabled = Boolean(productLock?.enabled);
   const confidenceDisplay = verifyMode
     ? 'Verify'
     : calibrationMode
@@ -181,11 +188,13 @@ function MobileSummaryStrip({ dashboard, signalQuality = null }) {
       </div>
       <div>
         <span className="metaLabel">Suggested</span>
-        <strong>₹{formatCurrency(suggestedPrice)}</strong>
+        <strong>{lockEnabled ? 'Locked' : `₹${formatCurrency(suggestedPrice)}`}</strong>
       </div>
       <div>
         <span className="metaLabel">Delta</span>
-        <strong>{deltaAmount >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(deltaAmount))}</strong>
+        <strong>
+          {lockEnabled ? 'Locked' : `${deltaAmount >= 0 ? '+' : '-'}₹${formatCurrency(Math.abs(deltaAmount))}`}
+        </strong>
       </div>
       <div>
         <span className="metaLabel">Heat</span>
@@ -249,7 +258,7 @@ function PerformanceCard({ summary, signalQuality }) {
   );
 }
 
-function ExecutiveStrip({ dashboard, signalQuality = null }) {
+function ExecutiveStrip({ dashboard, signalQuality = null, productLock = null }) {
   const score = Number(dashboard?.demandScore || 0).toFixed(1);
   const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
   const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
@@ -265,6 +274,7 @@ function ExecutiveStrip({ dashboard, signalQuality = null }) {
   const mode = String(signalQuality?.mode || '').toLowerCase();
   const calibrationMode = mode === 'calibrating' || sampleSize < 7;
   const verifyMode = mode === 'verify';
+  const lockEnabled = Boolean(productLock?.enabled);
   const confidenceValue = verifyMode
     ? 'Verify'
     : calibrationMode
@@ -291,14 +301,14 @@ function ExecutiveStrip({ dashboard, signalQuality = null }) {
         </article>
         <article>
           <span>Suggested Price</span>
-          <strong>₹{formatCurrency(suggestedPrice)}</strong>
-          <small>Radar recommendation</small>
+          <strong>{lockEnabled ? 'Locked' : `₹${formatCurrency(suggestedPrice)}`}</strong>
+          <small>{lockEnabled ? 'Awaiting trusted signal readiness' : 'Radar recommendation'}</small>
         </article>
         <article>
           <span>Delta</span>
-          <strong>{deltaAmount >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(deltaAmount))}</strong>
+          <strong>{lockEnabled ? 'Locked' : `${deltaAmount >= 0 ? '+' : '-'}₹${formatCurrency(Math.abs(deltaAmount))}`}</strong>
           <small>
-            {deltaDirection} {formatPercent(deltaPct, 1)} vs current
+            {lockEnabled ? 'Unlock required for pricing action' : `${deltaDirection} ${formatPercent(deltaPct, 1)} vs current`}
           </small>
         </article>
         <article>
@@ -391,8 +401,19 @@ export default function Dashboard({ dashboard, loading, error }) {
 
   return (
     <section id="hotel-dashboard-panel" className="dashboardLayout" aria-label="HotelRADAR dashboard">
-      <MobileSummaryStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} />
-      <ExecutiveStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} />
+      <MobileSummaryStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} productLock={dashboard.productLock} />
+      <ExecutiveStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} productLock={dashboard.productLock} />
+
+      {dashboard.productLock?.enabled ? (
+        <section className="panel productLockBanner" aria-label="Product lock status">
+          <header className="panelHeader">
+            <h2>Product Lock Active</h2>
+            <span className="metricBadge metric-risk">LOCKED</span>
+          </header>
+          <p className="metaLabel">{dashboard.productLock.reason}</p>
+          <p className="metaLabel">{dashboard.productLock.unlockCriteria}</p>
+        </section>
+      ) : null}
 
       <div className="row rowTop decisionRow">
         <DemandScoreCard
@@ -406,6 +427,7 @@ export default function Dashboard({ dashboard, loading, error }) {
           marketPosition={dashboard.marketPosition}
           demandLevel={dashboard.demandLevel}
           revenueImpact={dashboard.revenueImpact}
+          productLock={dashboard.productLock}
         />
         <ConfidenceCard
           confidence={dashboard.confidence}
@@ -419,7 +441,11 @@ export default function Dashboard({ dashboard, loading, error }) {
       <div className="row rowWide marketRow">
         <MarketPositionBar
           marketPosition={dashboard.marketPosition}
-          suggestedBase={dashboard.suggestedPricing?.base}
+          suggestedBase={
+            dashboard.productLock?.enabled
+              ? dashboard.marketPosition?.hotelPrice
+              : dashboard.suggestedPricing?.base
+          }
         />
       </div>
 
@@ -457,7 +483,7 @@ export default function Dashboard({ dashboard, loading, error }) {
       </div>
 
       <div className="row rowMid">
-        <TodayActionCard actionSummary={dashboard.actionSummary} />
+        <TodayActionCard actionSummary={dashboard.actionSummary} productLock={dashboard.productLock} />
         <ChangeSummaryCard changeSummary={dashboard.changeSummary} />
       </div>
 

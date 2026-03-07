@@ -420,6 +420,31 @@ function formatAlertSummary(alert) {
   return `${alert.severity}: ${alert.message}${suffix}`;
 }
 
+const PRODUCT_LOCK_FOCUS_CITY_KEYS = new Set(['goa', 'mumbai']);
+
+function normalizeCityKey(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildProductLock(city, signalQuality = null) {
+  const cityKey = normalizeCityKey(city);
+  const mode = String(signalQuality?.mode || '').toLowerCase();
+  const inFocusScope = PRODUCT_LOCK_FOCUS_CITY_KEYS.has(cityKey);
+  const enabled = inFocusScope && mode !== 'actionable';
+
+  return {
+    enabled,
+    scope: inFocusScope ? 'goa_mumbai' : 'default',
+    mode: mode || 'unknown',
+    reason: enabled
+      ? signalQuality?.summary || 'Signal quality is below trusted threshold. Pricing output is locked.'
+      : 'Signal quality is actionable.',
+    unlockCriteria: inFocusScope
+      ? 'Unlock requires actionable signal quality with fresh competitor, OTA, and event inputs.'
+      : 'No scope lock applied for this market.',
+  };
+}
+
 function buildActionSummary(record, marketPosition, signalQuality = null) {
   const level = record.level || 'Moderate';
   const recommendation = record.recommendation || {};
@@ -568,6 +593,8 @@ function toDashboardContract({
   const normalizedPerf = normalizePerformanceSummary(performanceSummary);
   const normalizedSuggestedPricing = normalizeSuggestedPricing(record.recommendation);
   const normalizedMarketPosition = normalizeMarketPosition(record.market_position);
+  const signalQuality = dataHealth?.signalQuality || null;
+  const productLock = buildProductLock(hotel?.city, signalQuality);
   const revenueImpact = buildRevenueImpact({
     hotel,
     marketPosition: normalizedMarketPosition,
@@ -598,12 +625,13 @@ function toDashboardContract({
     signalBreakdown,
     forwardCurve,
     narrative,
-    actionSummary: buildActionSummary(record, record.market_position, dataHealth?.signalQuality),
+    actionSummary: buildActionSummary(record, record.market_position, signalQuality),
     changeSummary: buildChangeSummary(record, previousRecord),
     competitiveGrid,
     otaParity: otaParity || null,
     dataHealth: dataHealth || null,
-    signalQuality: dataHealth?.signalQuality || null,
+    signalQuality,
+    productLock,
     marketContext: normalizeMarketContext(marketContext),
     explanation,
     alerts: alertSummary.map(formatAlertSummary),

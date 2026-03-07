@@ -1806,6 +1806,11 @@ button {
   font-weight: 600;
 }
 
+.productLockBanner {
+  border: 1px solid #fecaca;
+  background: #fff5f5;
+}
+
 .demandCard {
   position: relative;
   overflow: hidden;
@@ -1867,6 +1872,10 @@ button {
 
 .pricingCard.trend-flat::before {
   background: #0f766e;
+}
+
+.pricingCardLocked::before {
+  background: #dc2626;
 }
 
 .bandCard {

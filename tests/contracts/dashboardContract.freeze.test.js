@@ -28,6 +28,7 @@ function assertDashboardContract(payload) {
     'competitiveGrid',
     'otaParity',
     'dataHealth',
+    'productLock',
     'performanceSummary',
     'lastUpdated',
   ];
@@ -150,6 +151,16 @@ function assertDashboardContract(payload) {
         resolved: expect.any(Number),
       }),
       knownIssues: expect.any(Array),
+    }),
+  );
+
+  expect(payload.productLock).toEqual(
+    expect.objectContaining({
+      enabled: expect.any(Boolean),
+      scope: expect.any(String),
+      mode: expect.any(String),
+      reason: expect.any(String),
+      unlockCriteria: expect.any(String),
     }),
   );
 }
