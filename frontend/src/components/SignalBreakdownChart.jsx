@@ -104,8 +104,13 @@ export default function SignalBreakdownChart({
 
       <div className="signalRows">
         {entries.map((entry) => {
-          const rawWidth = (Math.abs(entry.value) / referenceMax) * 100;
-          const width = clamp(rawWidth, 0, 100);
+          const baseWidth = (Math.abs(entry.baseValue) / referenceMax) * 100;
+          const previewPulse = preview
+            ? curveDelta * (SIGNAL_SENSITIVITY[entry.key] ?? 0.35) * 45
+            : 0;
+          // Keep width anchored to the base contribution, then apply a hover pulse so
+          // low-magnitude rows (for example "Other Event Signal") visibly react too.
+          const width = clamp(baseWidth + previewPulse, 0, 100);
           const delta = entry.value - entry.baseValue;
           return (
             <div key={entry.key} className="signalRow">
