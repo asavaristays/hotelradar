@@ -415,7 +415,7 @@ export default function Dashboard({ dashboard, loading, error }) {
           <SignalBreakdownChart
             signalBreakdown={dashboard.signalBreakdown}
             preview={curvePreview}
-            baseScore={Number(dashboard?.forwardCurve?.[0]?.score || dashboard?.demandScore || 50)}
+            baseScore={Number(dashboard?.demandScore || 50)}
           />
         </details>
         <StabilityCard

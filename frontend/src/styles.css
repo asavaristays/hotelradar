@@ -570,12 +570,41 @@ button:disabled {
   gap: 10px;
 }
 
+.signalPanelPreview {
+  border-color: #93c5fd;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+}
+
+.signalPreviewMeta {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
 .signalRowHeader {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 4px;
   font-size: 0.85rem;
+}
+
+.signalValueWrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.signalDelta {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.signalDelta.up {
+  color: #166534;
+}
+
+.signalDelta.down {
+  color: #b91c1c;
 }
 
 .signalTrack {

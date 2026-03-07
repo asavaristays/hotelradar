@@ -18,7 +18,7 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
   const previewScore = Number(preview?.score || 0);
   const safeBaseScore = Number(baseScore || 50);
   const curveDelta = safeBaseScore > 0 ? (previewScore - safeBaseScore) / 50 : 0;
-  const previewMultiplier = preview ? clamp(1 + curveDelta, 0.65, 1.45) : 1;
+  const previewMultiplier = preview ? clamp(1 + curveDelta, 0.55, 1.55) : 1;
 
   const weddingImpact = Number(signalBreakdown?.weddingImpact || 0);
   const corporateEventImpact = Number(signalBreakdown?.corporateEventImpact || 0);
@@ -54,6 +54,7 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
   ];
   const entries = rawEntries.map((entry) => ({
     ...entry,
+    baseValue: Number(entry.value || 0),
     value: Number(entry.value || 0) * previewMultiplier,
   }));
 
@@ -64,20 +65,33 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
     : '';
 
   return (
-    <section className="panel signalPanel" aria-label="Signal breakdown chart">
+    <section className={`panel signalPanel ${previewHint ? 'signalPanelPreview' : ''}`} aria-label="Signal breakdown chart">
       <header className="panelHeader">
         <h2>Signal Breakdown</h2>
-        {previewHint ? <p className="metaLabel">{previewHint}</p> : null}
+        {previewHint ? (
+          <p className="metaLabel signalPreviewMeta">
+            {previewHint} | Multiplier {previewMultiplier.toFixed(2)}x
+          </p>
+        ) : null}
       </header>
 
       <div className="signalRows">
         {entries.map((entry) => {
           const width = (Math.abs(entry.value) / total) * 100;
+          const delta = entry.value - entry.baseValue;
           return (
             <div key={entry.key} className="signalRow">
               <div className="signalRowHeader">
                 <span>{entry.label}</span>
-                <strong>{formatPercent(entry.value, 2)}</strong>
+                <div className="signalValueWrap">
+                  <strong>{formatPercent(entry.value, 2)}</strong>
+                  {previewHint ? (
+                    <small className={`signalDelta ${delta >= 0 ? 'up' : 'down'}`}>
+                      {delta >= 0 ? '+' : ''}
+                      {delta.toFixed(2)}
+                    </small>
+                  ) : null}
+                </div>
               </div>
               <div className="signalTrack" title={`${entry.label}: ${formatPercent(entry.value, 2)}`}>
                 <div
