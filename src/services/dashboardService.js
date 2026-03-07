@@ -104,25 +104,59 @@ function formatMovement(change) {
 }
 
 function normalizeMarketPosition(raw) {
+  const hotelPrice = toFiniteNumber(raw?.hotelPrice ?? raw?.hotel_price, 0);
+  const marketAvg = toFiniteNumber(raw?.marketAvg ?? raw?.marketAvgPrice ?? raw?.market_avg, 0);
+  const positionPctRaw = toFiniteNumber(raw?.positionPct ?? raw?.position_pct, Number.NaN);
+  const positionPct =
+    Number.isFinite(positionPctRaw) || marketAvg <= 0
+      ? positionPctRaw
+      : ((hotelPrice - marketAvg) / marketAvg) * 100;
+
   return {
-    hotelPrice: Number(raw?.hotelPrice || 0),
-    marketAvg: Number(raw?.marketAvg ?? raw?.marketAvgPrice ?? 0),
-    positionPct: Number(raw?.positionPct || 0),
+    hotelPrice: hotelPrice > 0 ? round(hotelPrice, 0) : 0,
+    marketAvg: marketAvg > 0 ? round(marketAvg, 0) : 0,
+    positionPct: Number.isFinite(positionPct) ? round(positionPct, 2) : 0,
   };
 }
 
 function normalizeSuggestedPricing(raw) {
   const pricing = raw || {};
+
+  const base = toFiniteNumber(pricing.base ?? pricing.basePrice, 0);
+  const normalizeBand = (band = {}) => ({
+    min: toFiniteNumber(band.min, 0),
+    max: toFiniteNumber(band.max, 0),
+  });
+
   return {
-    base: Number(pricing.base ?? pricing.basePrice ?? 0),
-    bands: pricing.bands || {
-      safe: { min: 0, max: 0 },
-      aggressive: { min: 0, max: 0 },
-      premium: { min: 0, max: 0 },
-    },
+    base,
+    bands: pricing.bands
+      ? {
+          safe: normalizeBand(pricing.bands.safe),
+          aggressive: normalizeBand(pricing.bands.aggressive),
+          premium: normalizeBand(pricing.bands.premium),
+        }
+      : {
+          safe: { min: 0, max: 0 },
+          aggressive: { min: 0, max: 0 },
+          premium: { min: 0, max: 0 },
+        },
     riskLevel: pricing.riskLevel || 'Low',
-    marketHeat: Number(pricing.marketHeat || 1),
+    marketHeat: toFiniteNumber(pricing.marketHeat, 1),
   };
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  if (value == null) return fallback;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^0-9.+-]/g, '');
+    if (!cleaned) return fallback;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function pickCurveScore(forwardCurve = [], index = 0, fallback = 50) {
@@ -147,9 +181,33 @@ function buildRevenueImpact({
   action,
 }) {
   const fallbackDemand = clamp(Number(demandScore || 50), 0, 100);
-  const currentADR = Number(marketPosition?.hotelPrice || suggestedPricing?.base || 0);
-  const competitorMedian = Number(marketPosition?.marketAvg || currentADR || 0);
-  const roomCount = Number(hotel?.room_count || 0);
+  const marketHotelPrice = toFiniteNumber(marketPosition?.hotelPrice, 0);
+  const suggestedBase = toFiniteNumber(suggestedPricing?.base ?? suggestedPricing?.basePrice, 0);
+  const marketAvg = toFiniteNumber(marketPosition?.marketAvg ?? marketPosition?.marketAvgPrice, 0);
+  let currentADR = marketHotelPrice > 0 ? marketHotelPrice : suggestedBase;
+  let estimated = false;
+  let reason = null;
+
+  if (currentADR <= 0 && marketAvg > 0) {
+    currentADR = marketAvg;
+    estimated = true;
+    reason = 'Using market average fallback because hotel price snapshot is unavailable for this stay date.';
+  }
+
+  if (currentADR <= 0) {
+    return {
+      maintain: 0,
+      plus2: 0,
+      minus2: 0,
+      recommended: actionToRecommendedScenario(action),
+      available: false,
+      estimated: true,
+      reason: 'Insufficient ADR data for revenue projection.',
+    };
+  }
+
+  const competitorMedian = marketAvg > 0 ? marketAvg : currentADR;
+  const roomCount = toFiniteNumber(hotel?.room_count, 0);
   const roomNights = Math.max(1, Math.round((roomCount > 0 ? roomCount : 100) * 7));
 
   const simulation = simulateRevenueImpact({
@@ -173,6 +231,9 @@ function buildRevenueImpact({
     plus2: round(findRevenue('+2% price'), 0),
     minus2: round(findRevenue('-2% price'), 0),
     recommended: actionToRecommendedScenario(action),
+    available: true,
+    estimated,
+    reason,
   };
 }
 
@@ -993,6 +1054,24 @@ export async function getDashboard(hotelId, context = {}, deps = defaultDeps) {
     return recalculateDashboard(
       hotelId,
       { ...context, triggered_by: 'dashboard', source: 'v3-contract-sync' },
+      deps,
+    );
+  }
+
+  const latestSuggestedBase = toFiniteNumber(
+    latest.recommendation?.base ?? latest.recommendation?.basePrice,
+    0,
+  );
+  const latestHotelPrice = toFiniteNumber(
+    latest.market_position?.hotelPrice ?? latest.market_position?.hotel_price,
+    0,
+  );
+  const latestAgeMs = latest?.created_at ? Date.now() - new Date(latest.created_at).getTime() : 0;
+  const recordIsOldEnough = Number.isFinite(latestAgeMs) && latestAgeMs > 30 * 60 * 1000;
+  if (recordIsOldEnough && latestSuggestedBase <= 0 && latestHotelPrice <= 0) {
+    return recalculateDashboard(
+      hotelId,
+      { ...context, triggered_by: 'dashboard', source: 'revenue-impact-sync' },
       deps,
     );
   }

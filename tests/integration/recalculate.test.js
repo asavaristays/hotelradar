@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { recalculateDashboard } from '../../src/services/dashboardService.js';
+import { getDashboard, recalculateDashboard } from '../../src/services/dashboardService.js';
 
 function buildAirfareSeries() {
   const out = [];
@@ -141,5 +141,89 @@ describe('recalculateDashboard integration', () => {
     expect(dashboard.suggestedPricing.bands.safe.min).toBeGreaterThan(0);
     expect(dashboard.revenueImpact.maintain).toBeGreaterThan(0);
     expect(dashboard.explanation.join(' ')).toContain('neutral');
+  });
+
+  test('normalizes legacy formatted prices and prevents zero revenue projections', async () => {
+    const deps = {
+      getHotelById: async () => ({
+        id: '11111111-1111-4111-8111-111111111111',
+        city: 'Goa',
+        hotel_name: 'Hotel Taj Goa',
+        alert_sensitivity: 'balanced',
+        room_count: 48,
+      }),
+      getLatestDemandScore: async () => ({
+        id: 123,
+        demand_score: 62.64,
+        level: 'Moderate',
+        recommendation: {
+          base: '₹8,150',
+          bands: {
+            safe: { min: '₹7,900', max: '₹8,400' },
+            aggressive: { min: '₹8,400', max: '₹8,800' },
+            premium: { min: '₹9,850', max: '₹10,900' },
+          },
+          riskLevel: 'Low',
+          marketHeat: '4',
+          action: 'maintain',
+        },
+        confidence: 88,
+        explanation: ['Legacy snapshot normalization test'],
+        market_position: {
+          hotelPrice: '₹6,689',
+          marketAvg: '₹10,362',
+          positionPct: '-35.45',
+        },
+        signals: {
+          competitor: { score: 58, confidence: 88, avgChangePct: 3.6, direction: 'up', reason: 'up' },
+          holiday: { score: 53, confidence: 80, reason: 'holiday', eventShare: 0.3, eventCategoryShare: {} },
+          airfare: { score: 51, confidence: 70, reason: 'airfare' },
+          season: { score: 66, confidence: 92, reason: 'season' },
+        },
+        created_at: '2026-03-01T00:00:00.000Z',
+      }),
+      getLatestMarketCheckinDate: async () => ({
+        checkin_date: '2026-03-16',
+        observed_at: '2026-03-01T00:00:00.000Z',
+        hotel_rows: 1,
+      }),
+      getCompetitorRatesForHotel: async () => [
+        { id: 'c1', competitor_name: 'A', price_today: 12000, price_48h_ago: 11800 },
+        { id: 'c2', competitor_name: 'B', price_today: 11850, price_48h_ago: 11700 },
+      ],
+      getLatestHotelPrice: async () => '₹6,689',
+      getLatestCompetitorScrapeAt: async () => '2026-03-01T00:00:00.000Z',
+      getAirfareSeries: async () => buildAirfareSeries(),
+      getUpcomingHolidays: async () => [],
+      getUpcomingEvents: async () => [],
+      getCityWeights: async () => ({
+        competitor_weight: 0.45,
+        holiday_weight: 0.25,
+        airfare_weight: 0.2,
+        season_weight: 0.1,
+      }),
+      listActiveAlerts: async () => [],
+      getCalibration: async () => null,
+      getPreviousDemandScore: async () => null,
+      getCanaryOverride: async () => null,
+      getPerformance: async () => ({
+        direction_accuracy: 70,
+        alert_precision: 75,
+        position_improvement_pct: 5,
+        rolling_accuracy_30d: 68,
+        stability_deviation: 12,
+        sample_size: 9,
+      }),
+      getValidatedPerformance: async () => null,
+    };
+
+    const dashboard = await getDashboard('11111111-1111-4111-8111-111111111111', {}, deps);
+    expect(dashboard.suggestedPricing.base).toBeGreaterThan(0);
+    expect(dashboard.marketPosition.hotelPrice).toBeGreaterThan(0);
+    expect(dashboard.marketPosition.marketAvg).toBeGreaterThan(0);
+    expect(dashboard.revenueImpact.available).toBe(true);
+    expect(dashboard.revenueImpact.maintain).toBeGreaterThan(0);
+    expect(dashboard.revenueImpact.plus2).toBeGreaterThan(0);
+    expect(dashboard.revenueImpact.minus2).toBeGreaterThan(0);
   });
 });

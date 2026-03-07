@@ -59,6 +59,9 @@ export default function SuggestedPricingCard({
     plus2: Number(revenueImpact?.plus2 || 0),
     minus2: Number(revenueImpact?.minus2 || 0),
     recommended: revenueImpact?.recommended || 'maintain',
+    available: revenueImpact?.available !== false,
+    estimated: Boolean(revenueImpact?.estimated),
+    reason: revenueImpact?.reason || '',
   };
 
   return (
@@ -84,17 +87,23 @@ export default function SuggestedPricingCard({
       {/* Revenue impact block: 7-day deterministic projection for key pricing scenarios. */}
       <div className="bandCard" aria-label="Revenue impact projection">
         <p className="bandTitle">Revenue Impact (7-Day Projection)</p>
-
-        {/* Highlight only the recommended row with subtle typography emphasis. */}
-        <p className="metaLabel" style={revenue.recommended === 'maintain' ? { fontWeight: 600 } : undefined}>
-          Maintain → {formatRevenue(revenue.maintain)}
-        </p>
-        <p className="metaLabel" style={revenue.recommended === 'plus2' ? { fontWeight: 600 } : undefined}>
-          +2% → {formatRevenue(revenue.plus2)}
-        </p>
-        <p className="metaLabel" style={revenue.recommended === 'minus2' ? { fontWeight: 600 } : undefined}>
-          -2% → {formatRevenue(revenue.minus2)}
-        </p>
+        {revenue.available ? (
+          <>
+            {/* Highlight only the recommended row with subtle typography emphasis. */}
+            <p className="metaLabel" style={revenue.recommended === 'maintain' ? { fontWeight: 600 } : undefined}>
+              Maintain → {formatRevenue(revenue.maintain)}
+            </p>
+            <p className="metaLabel" style={revenue.recommended === 'plus2' ? { fontWeight: 600 } : undefined}>
+              +2% → {formatRevenue(revenue.plus2)}
+            </p>
+            <p className="metaLabel" style={revenue.recommended === 'minus2' ? { fontWeight: 600 } : undefined}>
+              -2% → {formatRevenue(revenue.minus2)}
+            </p>
+            {revenue.estimated && revenue.reason ? <p className="metaLabel">{revenue.reason}</p> : null}
+          </>
+        ) : (
+          <p className="metaLabel">{revenue.reason || 'Insufficient data for revenue projection.'}</p>
+        )}
       </div>
 
       <p className="metaLabel">
