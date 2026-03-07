@@ -58,7 +58,10 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
     value: Number(entry.value || 0) * previewMultiplier,
   }));
 
-  const total = entries.reduce((sum, entry) => sum + Math.abs(entry.value), 0) || 1;
+  const referenceMax = rawEntries.reduce((maxValue, entry) => {
+    const magnitude = Math.abs(Number(entry.value || 0));
+    return magnitude > maxValue ? magnitude : maxValue;
+  }, 1);
   const previewDateLabel = preview?.date ? formatPreviewDate(preview.date) : '';
   const previewHint = previewDateLabel
     ? `Previewing ${previewDateLabel} (${Number(previewScore || 0).toFixed(1)})`
@@ -77,7 +80,8 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
 
       <div className="signalRows">
         {entries.map((entry) => {
-          const width = (Math.abs(entry.value) / total) * 100;
+          const rawWidth = (Math.abs(entry.value) / referenceMax) * 100;
+          const width = clamp(rawWidth, 0, 100);
           const delta = entry.value - entry.baseValue;
           return (
             <div key={entry.key} className="signalRow">

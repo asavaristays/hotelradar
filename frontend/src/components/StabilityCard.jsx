@@ -17,7 +17,7 @@ export default function StabilityCard({ marketStability, preview = null, baseDem
   const baseStatus = marketStability?.status || 'Stable';
   const baseScore = clamp(Number(marketStability?.volatilityScore || 0), 0, 100);
   const demandDelta = preview ? Math.abs(Number(preview?.score || 0) - Number(baseDemandScore || 50)) : 0;
-  const previewScore = preview ? clamp(baseScore + demandDelta * 0.55, 0, 100) : baseScore;
+  const previewScore = preview ? clamp(baseScore + demandDelta * 0.9, 0, 100) : baseScore;
   const status = preview ? statusFromVolatility(previewScore) : baseStatus;
   const score = previewScore;
   const tone = stabilityTone(status);
@@ -30,9 +30,12 @@ export default function StabilityCard({ marketStability, preview = null, baseDem
         {previewLabel ? <p className="metaLabel">{previewLabel}</p> : null}
       </header>
 
-      <p className={`stabilityStatus stability-${tone}`}>{status}</p>
+      <p className={`stabilityStatus stabilityStatus-${tone}`}>{status}</p>
       <div className="stabilityTrack" title={`Volatility score ${score.toFixed(1)}`}>
-        <div className={`stabilityFill stability-${tone} ${previewLabel ? 'stabilityFillPreview' : ''}`} style={{ width: `${score}%` }} />
+        <div
+          className={`stabilityFill stabilityFill-${tone} ${previewLabel ? 'stabilityFillPreview' : ''}`}
+          style={{ width: `${score}%` }}
+        />
       </div>
 
       <p className="metaLabel">Volatility score: {score.toFixed(1)}</p>

@@ -679,18 +679,27 @@ button:disabled {
   filter: saturate(1.08);
 }
 
-.stability-low {
+.stabilityStatus-low {
   color: var(--stable);
+}
+
+.stabilityStatus-medium {
+  color: var(--volatile);
+}
+
+.stabilityStatus-high {
+  color: var(--highly-volatile);
+}
+
+.stabilityFill-low {
   background: #16a34a;
 }
 
-.stability-medium {
-  color: var(--volatile);
+.stabilityFill-medium {
   background: #f59e0b;
 }
 
-.stability-high {
-  color: var(--highly-volatile);
+.stabilityFill-high {
   background: #dc2626;
 }
 
