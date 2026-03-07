@@ -1,4 +1,4 @@
-import { formatPercent } from './dashboardUtils.js';
+import { clamp, formatPercent } from './dashboardUtils.js';
 
 const BASE_SIGNAL_META = [
   { key: 'competitorMomentum', label: 'Competitor Momentum', className: 'signal-competitor' },
@@ -7,7 +7,19 @@ const BASE_SIGNAL_META = [
   { key: 'seasonImpact', label: 'Season Impact', className: 'signal-season' },
 ];
 
-export default function SignalBreakdownChart({ signalBreakdown }) {
+function formatPreviewDate(value) {
+  if (!value) return 'N/A';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export default function SignalBreakdownChart({ signalBreakdown, preview = null, baseScore = 50 }) {
+  const previewScore = Number(preview?.score || 0);
+  const safeBaseScore = Number(baseScore || 50);
+  const curveDelta = safeBaseScore > 0 ? (previewScore - safeBaseScore) / 50 : 0;
+  const previewMultiplier = preview ? clamp(1 + curveDelta, 0.65, 1.45) : 1;
+
   const weddingImpact = Number(signalBreakdown?.weddingImpact || 0);
   const corporateEventImpact = Number(signalBreakdown?.corporateEventImpact || 0);
   const otherEventImpact = Number(signalBreakdown?.otherEventImpact || 0);
@@ -29,7 +41,7 @@ export default function SignalBreakdownChart({ signalBreakdown }) {
       ]
     : [{ key: 'eventImpact', label: 'Event Impact', className: 'signal-event', value: eventImpact }];
 
-  const entries = [
+  const rawEntries = [
     ...BASE_SIGNAL_META.slice(0, 2).map((meta) => ({
       ...meta,
       value: Number(signalBreakdown?.[meta.key] || 0),
@@ -40,13 +52,22 @@ export default function SignalBreakdownChart({ signalBreakdown }) {
       value: Number(signalBreakdown?.[meta.key] || 0),
     })),
   ];
+  const entries = rawEntries.map((entry) => ({
+    ...entry,
+    value: Number(entry.value || 0) * previewMultiplier,
+  }));
 
   const total = entries.reduce((sum, entry) => sum + Math.abs(entry.value), 0) || 1;
+  const previewDateLabel = preview?.date ? formatPreviewDate(preview.date) : '';
+  const previewHint = previewDateLabel
+    ? `Previewing ${previewDateLabel} (${Number(previewScore || 0).toFixed(1)})`
+    : '';
 
   return (
     <section className="panel signalPanel" aria-label="Signal breakdown chart">
       <header className="panelHeader">
         <h2>Signal Breakdown</h2>
+        {previewHint ? <p className="metaLabel">{previewHint}</p> : null}
       </header>
 
       <div className="signalRows">
@@ -59,7 +80,10 @@ export default function SignalBreakdownChart({ signalBreakdown }) {
                 <strong>{formatPercent(entry.value, 2)}</strong>
               </div>
               <div className="signalTrack" title={`${entry.label}: ${formatPercent(entry.value, 2)}`}>
-                <div className={`signalFill ${entry.className}`} style={{ width: `${width}%` }} />
+                <div
+                  className={`signalFill ${entry.className} ${previewHint ? 'signalFillPreview' : ''}`}
+                  style={{ width: `${width}%` }}
+                />
               </div>
             </div>
           );

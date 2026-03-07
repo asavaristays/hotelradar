@@ -588,6 +588,11 @@ button:disabled {
 .signalFill {
   height: 100%;
   border-radius: 999px;
+  transition: width 260ms ease, filter 180ms ease;
+}
+
+.signalFillPreview {
+  filter: saturate(1.06);
 }
 
 .signal-competitor {
@@ -638,6 +643,11 @@ button:disabled {
 
 .stabilityFill {
   height: 100%;
+  transition: width 260ms ease, filter 180ms ease;
+}
+
+.stabilityFillPreview {
+  filter: saturate(1.08);
 }
 
 .stability-low {
@@ -1891,7 +1901,7 @@ button {
 
 .forwardHoverCard {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -1912,6 +1922,34 @@ button {
 
 .forwardHoverCard strong {
   font-size: 0.95rem;
+  display: block;
+}
+
+.curveStatus {
+  font-size: 0.88rem;
+}
+
+.curveStatus-surge {
+  color: #a16207;
+}
+
+.curveStatus-high {
+  color: #166534;
+}
+
+.curveStatus-watch {
+  color: #1d4ed8;
+}
+
+.curveStatus-soft {
+  color: #b91c1c;
+}
+
+.curveRevenueDelta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
 }
 
 .gridSearch {

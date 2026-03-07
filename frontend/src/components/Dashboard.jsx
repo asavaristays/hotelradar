@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import AlertsPanel from './AlertsPanel.jsx';
 import CompressionSnapshot from './CompressionSnapshot.jsx';
 import CompetitiveGrid from './CompetitiveGrid.jsx';
@@ -232,7 +233,7 @@ function PerformanceCard({ summary, signalQuality }) {
   );
 }
 
-function ExecutiveStrip({ dashboard }) {
+function ExecutiveStrip({ dashboard, preview = null }) {
   const score = Number(dashboard?.demandScore || 0).toFixed(1);
   const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
   const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
@@ -244,6 +245,9 @@ function ExecutiveStrip({ dashboard }) {
   const stayDate = dashboard?.marketContext?.checkinDate || 'N/A';
   const observedAt = formatTimestamp(dashboard?.marketContext?.observedAt || dashboard?.lastScrapedAt);
   const deltaDirection = deltaAmount > 0 ? 'Increase' : deltaAmount < 0 ? 'Reduce' : 'Hold';
+  const previewDate = preview?.date || null;
+  const previewStatus = preview?.statusLabel || '';
+  const previewRevenueDelta = Number(preview?.revenueDeltaPerRoom || 0);
 
   return (
     <section className="panel executiveStripPanel" aria-label="Executive decision strip">
@@ -284,6 +288,12 @@ function ExecutiveStrip({ dashboard }) {
       <div className="executiveStripMeta">
         <span>Stay date: <strong>{stayDate}</strong></span>
         <span>Observed at: <strong>{observedAt}</strong></span>
+        {previewDate ? (
+          <span>
+            Curve preview: <strong>{previewDate}</strong> | <strong>{previewStatus}</strong> | Revenue delta:{' '}
+            <strong>{previewRevenueDelta >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(previewRevenueDelta))}/room</strong>
+          </span>
+        ) : null}
       </div>
     </section>
   );
@@ -327,6 +337,12 @@ function ColorLegendFooter() {
 }
 
 export default function Dashboard({ dashboard, loading, error }) {
+  const [curvePreview, setCurvePreview] = useState(null);
+
+  useEffect(() => {
+    setCurvePreview(null);
+  }, [dashboard?.hotelId, dashboard?.lastUpdated]);
+
   if (loading) return <LoadingSkeleton />;
 
   if (error) {
@@ -355,7 +371,7 @@ export default function Dashboard({ dashboard, loading, error }) {
   return (
     <section id="hotel-dashboard-panel" className="dashboardLayout" aria-label="HotelRADAR dashboard">
       <MobileSummaryStrip dashboard={dashboard} />
-      <ExecutiveStrip dashboard={dashboard} />
+      <ExecutiveStrip dashboard={dashboard} preview={curvePreview} />
 
       <div className="row rowTop decisionRow">
         <DemandScoreCard
@@ -396,15 +412,24 @@ export default function Dashboard({ dashboard, loading, error }) {
       <div className="row rowMid signalRow">
         <details className="collapsiblePanel signalCollapse" open>
           <summary>Signal Breakdown</summary>
-          <SignalBreakdownChart signalBreakdown={dashboard.signalBreakdown} />
+          <SignalBreakdownChart
+            signalBreakdown={dashboard.signalBreakdown}
+            preview={curvePreview}
+            baseScore={Number(dashboard?.forwardCurve?.[0]?.score || dashboard?.demandScore || 50)}
+          />
         </details>
-        <StabilityCard marketStability={dashboard.marketStability} />
+        <StabilityCard
+          marketStability={dashboard.marketStability}
+          preview={curvePreview}
+          baseDemandScore={Number(dashboard?.demandScore || 50)}
+        />
       </div>
 
       <div className="row rowWide">
         <ForwardDemandChart
           forwardCurve={dashboard.forwardCurve}
           suggestedBase={dashboard.suggestedPricing?.base}
+          onPointChange={setCurvePreview}
         />
       </div>
 

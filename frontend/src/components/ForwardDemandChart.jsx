@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clamp, formatCurrency } from './dashboardUtils.js';
 
 function asDate(input) {
@@ -24,6 +24,14 @@ function demandBucket(score) {
   return 'Surge';
 }
 
+function dateStatus(score) {
+  const numeric = Number(score || 0);
+  if (numeric >= 85) return { label: 'Surge Opportunity', tone: 'surge' };
+  if (numeric >= 65) return { label: 'Premium Window', tone: 'high' };
+  if (numeric >= 45) return { label: 'Monitor Closely', tone: 'watch' };
+  return { label: 'Soft Demand', tone: 'soft' };
+}
+
 function indicativeRate(baseRate, currentScore, targetScore) {
   const safeBaseRate = Number(baseRate || 0);
   if (!Number.isFinite(safeBaseRate) || safeBaseRate <= 0) return null;
@@ -34,7 +42,11 @@ function indicativeRate(baseRate, currentScore, targetScore) {
   return Math.round(safeBaseRate * factor);
 }
 
-export default function ForwardDemandChart({ forwardCurve = [], suggestedBase = 0 }) {
+export default function ForwardDemandChart({
+  forwardCurve = [],
+  suggestedBase = 0,
+  onPointChange = null,
+}) {
   const [activeIndex, setActiveIndex] = useState(null);
 
   const chart = useMemo(() => {
@@ -113,6 +125,37 @@ export default function ForwardDemandChart({ forwardCurve = [], suggestedBase = 
 
   const resolvedIndex = activeIndex == null ? chart.peakIndex : activeIndex;
   const activePoint = chart.points[resolvedIndex] || chart.peakPoint || chart.points[0];
+  const baselinePoint = chart.points[0] || activePoint;
+  const baselineRate = Number(baselinePoint?.indicativeRate || 0);
+  const activeRate = Number(activePoint?.indicativeRate || 0);
+  const revenueDeltaPerRoom = activeRate > 0 && baselineRate > 0 ? activeRate - baselineRate : 0;
+  const revenueDeltaPct =
+    activeRate > 0 && baselineRate > 0 ? ((activeRate - baselineRate) / baselineRate) * 100 : 0;
+  const status = dateStatus(activePoint?.score);
+
+  useEffect(() => {
+    if (typeof onPointChange !== 'function' || !activePoint) return;
+    onPointChange({
+      index: resolvedIndex,
+      date: activePoint.date,
+      score: Number(activePoint.score || 0),
+      demandLabel: activePoint.label || demandBucket(Number(activePoint.score || 0)),
+      indicativeRate: activeRate || null,
+      revenueDeltaPerRoom: revenueDeltaPerRoom || 0,
+      revenueDeltaPct: revenueDeltaPct || 0,
+      statusLabel: status.label,
+      statusTone: status.tone,
+    });
+  }, [
+    activePoint,
+    activeRate,
+    onPointChange,
+    resolvedIndex,
+    revenueDeltaPerRoom,
+    revenueDeltaPct,
+    status.label,
+    status.tone,
+  ]);
 
   function updateActiveFromPointer(event) {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -145,6 +188,14 @@ export default function ForwardDemandChart({ forwardCurve = [], suggestedBase = 
           <strong>
             {activePoint?.indicativeRate ? `₹${formatCurrency(activePoint.indicativeRate)}` : 'Unavailable'}
           </strong>
+        </div>
+        <div>
+          <span>Date status</span>
+          <strong className={`curveStatus curveStatus-${status.tone}`}>{status.label}</strong>
+          <small className="curveRevenueDelta">
+            {revenueDeltaPerRoom >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(revenueDeltaPerRoom))} / room ({revenueDeltaPct >= 0 ? '+' : ''}
+            {revenueDeltaPct.toFixed(1)}%)
+          </small>
         </div>
       </div>
 
