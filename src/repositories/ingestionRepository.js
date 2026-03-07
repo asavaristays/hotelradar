@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { focusCityKeys } from '../config/productScope.js';
 
 export async function listActiveHotelsForIngestion() {
   const { rows } = await pool.query(
@@ -11,7 +12,9 @@ export async function listActiveHotelsForIngestion() {
      FROM hotels h
      LEFT JOIN cities c ON c.id = h.city_id
      WHERE COALESCE(h.subscription_status, 'active') = 'active'
+       AND LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])
      ORDER BY h.hotel_name ASC`,
+    [focusCityKeys],
   );
   return rows;
 }
@@ -79,4 +82,3 @@ export async function insertHotelRateSnapshot({ hotelId, checkinDate, price, cap
   );
   return rows[0] || null;
 }
-

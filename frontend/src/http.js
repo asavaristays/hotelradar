@@ -1,10 +1,20 @@
 export async function readResponseBody(response) {
-  const text = await response.text();
+  let text = '';
+  try {
+    text = await response.text();
+  } catch {
+    return {
+      text: '',
+      json: null,
+      readError: true,
+    };
+  }
 
   if (!text) {
     return {
       text: '',
       json: null,
+      readError: false,
     };
   }
 
@@ -12,11 +22,13 @@ export async function readResponseBody(response) {
     return {
       text,
       json: JSON.parse(text),
+      readError: false,
     };
   } catch {
     return {
       text,
       json: null,
+      readError: false,
     };
   }
 }

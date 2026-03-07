@@ -47,6 +47,8 @@ describe('recalculateDashboard integration', () => {
       }),
       listActiveAlerts: async () => [
         { severity: 'high', message: 'Competitor moved 8%.' },
+        { severity: 'high', message: 'Competitor moved 8%.' },
+        { severity: 'medium', message: 'OTA parity drifted 5%.' },
       ],
       evaluateAlerts,
       getMockCompetitorRates: async () => [],
@@ -77,6 +79,15 @@ describe('recalculateDashboard integration', () => {
     expect(dashboard.marketPosition).toHaveProperty('marketAvg');
     expect(Array.isArray(dashboard.explanation)).toBe(true);
     expect(Array.isArray(dashboard.alerts)).toBe(true);
+    expect(dashboard.alerts).toContain('HIGH: Competitor moved 8%. (x2)');
+    expect(dashboard.alerts).toContain('MEDIUM: OTA parity drifted 5%.');
+    expect(Array.isArray(dashboard.alertGroups)).toBe(true);
+    expect(dashboard.alertGroups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ severity: 'HIGH', message: 'Competitor moved 8%.', count: 2 }),
+        expect.objectContaining({ severity: 'MEDIUM', message: 'OTA parity drifted 5%.', count: 1 }),
+      ]),
+    );
     expect(Array.isArray(dashboard.competitiveGrid)).toBe(true);
     expect(Array.isArray(dashboard.forwardCurve)).toBe(true);
     expect(Array.isArray(dashboard.otaParity.rows)).toBe(true);

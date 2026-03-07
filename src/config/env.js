@@ -98,6 +98,7 @@ const env = {
     !isProduction,
   ),
   otaSnapshotFile: readOptionalString('OTA_SNAPSHOT_FILE', ''),
+  focusCities: parseCsv(process.env.FOCUS_CITIES, ['Goa', 'Mumbai']),
 
   migrationBaselineExisting: parseBoolean(process.env.MIGRATION_BASELINE_EXISTING, true),
   schemaCheckStrict: parseBoolean(process.env.SCHEMA_CHECK_STRICT, runtimeDefaults.schemaCheckStrict),

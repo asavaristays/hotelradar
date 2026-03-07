@@ -1,11 +1,14 @@
 import { pool } from '../db/pool.js';
+import { focusCityKeys } from '../config/productScope.js';
 
 export async function listHotels() {
   const { rows } = await pool.query(
     `SELECT h.id, h.hotel_name, COALESCE(c.name, h.city) AS city
      FROM hotels h
      LEFT JOIN cities c ON c.id = h.city_id
+     WHERE LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])
      ORDER BY hotel_name ASC`,
+    [focusCityKeys],
   );
   return rows;
 }
@@ -17,8 +20,9 @@ export async function listHotelsForUser(userId) {
      JOIN hotels h ON h.id = hu.hotel_id
      LEFT JOIN cities c ON c.id = h.city_id
      WHERE hu.user_id = $1
+       AND LOWER(COALESCE(c.name, h.city)) = ANY($2::text[])
      ORDER BY h.hotel_name ASC`,
-    [userId],
+    [userId, focusCityKeys],
   );
   return rows;
 }
@@ -42,14 +46,15 @@ export async function getHotelById(hotelId) {
       sp.monthly_weights_json,
       sp.weekend_multiplier,
       sp.volatility_multiplier,
-      sp.event_sensitivity,
-      sp.compression_sensitivity,
-      sp.confidence_bias
+     sp.event_sensitivity,
+     sp.compression_sensitivity,
+     sp.confidence_bias
      FROM hotels h
      LEFT JOIN cities c ON c.id = h.city_id
      LEFT JOIN season_profiles sp ON sp.id = c.season_profile_id
-     WHERE h.id = $1`,
-    [hotelId],
+     WHERE h.id = $1
+       AND LOWER(COALESCE(c.name, h.city)) = ANY($2::text[])`,
+    [hotelId, focusCityKeys],
   );
   return rows[0] || null;
 }

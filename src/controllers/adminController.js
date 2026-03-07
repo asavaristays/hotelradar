@@ -153,8 +153,13 @@ export async function patchHotelProfile(req, res, next) {
     validatePriceBounds(req.body || {});
     const row = await updateHotelProfile(req.params.id, req.body || {});
     if (!row) {
-      const error = new Error('Hotel not found.');
-      error.status = 404;
+      const requestedCityId = String(req.body?.city_id || '').trim();
+      const error = new Error(
+        requestedCityId
+          ? 'Selected city is outside current product scope. Only Goa and Mumbai are enabled.'
+          : 'Hotel not found.',
+      );
+      error.status = requestedCityId ? 400 : 404;
       throw error;
     }
     return res.json(row);

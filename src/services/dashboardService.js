@@ -171,6 +171,44 @@ function normalizeModelVersion(raw) {
   };
 }
 
+function normalizeAlertSeverity(raw = '') {
+  const value = String(raw || '').trim().toUpperCase();
+  if (value === 'CRITICAL') return 'CRITICAL';
+  if (value === 'HIGH') return 'HIGH';
+  if (value === 'MEDIUM') return 'MEDIUM';
+  if (value === 'LOW') return 'LOW';
+  return 'INFO';
+}
+
+function summarizeAlerts(alerts = []) {
+  const grouped = new Map();
+
+  for (const alert of alerts) {
+    const message = String(alert?.message || '').trim();
+    if (!message) continue;
+
+    const severity = normalizeAlertSeverity(alert?.severity);
+    const key = `${severity}:${message.toLowerCase()}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        severity,
+        message,
+        count: 1,
+      });
+    } else {
+      grouped.get(key).count += 1;
+    }
+  }
+
+  return Array.from(grouped.values());
+}
+
+function formatAlertSummary(alert) {
+  const count = Number(alert?.count || 0);
+  const suffix = count > 1 ? ` (x${count})` : '';
+  return `${alert.severity}: ${alert.message}${suffix}`;
+}
+
 function buildActionSummary(record, marketPosition, signalQuality = null) {
   const level = record.level || 'Moderate';
   const recommendation = record.recommendation || {};
@@ -314,6 +352,7 @@ function toDashboardContract({
       ? [record.explanation]
       : [];
   const normalizedPerf = normalizePerformanceSummary(performanceSummary);
+  const alertSummary = summarizeAlerts(alerts);
   const confidenceWithForecast = {
     ...confidence,
     forecastAccuracy60d: Number(normalizedPerf.rollingAccuracy30d || 0),
@@ -342,7 +381,8 @@ function toDashboardContract({
     signalQuality: dataHealth?.signalQuality || null,
     marketContext: normalizeMarketContext(marketContext),
     explanation,
-    alerts: alerts.map((alert) => `${String(alert.severity || '').toUpperCase()}: ${alert.message}`),
+    alerts: alertSummary.map(formatAlertSummary),
+    alertGroups: alertSummary,
     performanceSummary: normalizedPerf,
     modelVersion: normalizeModelVersion(modelVersion),
     viewerRole: viewerRole || null,

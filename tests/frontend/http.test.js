@@ -17,6 +17,23 @@ function buildResponse({ status = 500, body = '', contentType = 'text/plain' } =
   };
 }
 
+function buildConsumedResponse({ status = 500, contentType = 'text/plain' } = {}) {
+  return {
+    status,
+    headers: {
+      get(name) {
+        if (String(name || '').toLowerCase() === 'content-type') {
+          return contentType;
+        }
+        return null;
+      },
+    },
+    async text() {
+      throw new TypeError("Failed to execute 'text' on 'Response': body stream already read");
+    },
+  };
+}
+
 describe('frontend http parser', () => {
   test('returns safe fallback for html gateway responses', async () => {
     const response = buildResponse({
@@ -63,5 +80,19 @@ describe('frontend http parser', () => {
 
     expect(parsed.message).toBe('Unable to load hotels (HTTP 500).');
     expect(parsed.message).not.toContain('stack trace');
+  });
+
+  test('returns safe fallback when response body is already consumed', async () => {
+    const response = buildConsumedResponse({
+      status: 502,
+      contentType: 'text/html',
+    });
+
+    const parsed = await parseServerError(response, 'Unable to load dashboard');
+
+    expect(parsed.message).toBe(
+      'Unable to load dashboard. Service is temporarily unavailable. Please retry in a minute.',
+    );
+    expect(parsed.message).not.toContain('body stream already read');
   });
 });

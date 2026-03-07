@@ -342,6 +342,13 @@ export default function Dashboard({ dashboard, loading, error }) {
     );
   }
 
+  const groupedAlerts =
+    Array.isArray(dashboard.alertGroups) && dashboard.alertGroups.length
+      ? dashboard.alertGroups
+      : Array.isArray(dashboard.alerts)
+        ? dashboard.alerts
+        : [];
+
   return (
     <section id="hotel-dashboard-panel" className="dashboardLayout" aria-label="HotelRADAR dashboard">
       <MobileSummaryStrip dashboard={dashboard} />
@@ -363,6 +370,8 @@ export default function Dashboard({ dashboard, loading, error }) {
           confidence={dashboard.confidence}
           suggestedPricing={dashboard.suggestedPricing}
           demandScore={dashboard.demandScore}
+          performanceSummary={dashboard.performanceSummary}
+          signalQuality={dashboard.signalQuality}
         />
       </div>
 
@@ -409,7 +418,7 @@ export default function Dashboard({ dashboard, loading, error }) {
         />
         <CompressionSnapshot
           forwardCurve={dashboard.forwardCurve}
-          alerts={dashboard.alerts || []}
+          alerts={groupedAlerts}
           compression={dashboard.compression}
         />
       </div>
@@ -428,7 +437,7 @@ export default function Dashboard({ dashboard, loading, error }) {
 
       <div className="row rowMid">
         <InsightsCard dashboard={dashboard} viewerRole={dashboard.viewerRole} />
-        <AlertsPanel alerts={dashboard.alerts || []} />
+        <AlertsPanel alerts={dashboard.alerts || []} alertGroups={dashboard.alertGroups || []} />
       </div>
 
       <div className="row rowWide">

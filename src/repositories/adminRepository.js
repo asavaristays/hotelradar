@@ -1,10 +1,14 @@
 import { pool } from '../db/pool.js';
+import { assertCityInScope, focusCityKeys } from '../config/productScope.js';
 
 export async function listStates() {
   const { rows } = await pool.query(
-    `SELECT id, name, country, timezone, created_at
-     FROM states
-     ORDER BY name ASC`,
+    `SELECT DISTINCT s.id, s.name, s.country, s.timezone, s.created_at
+     FROM states s
+     JOIN cities c ON c.state_id = s.id
+     WHERE LOWER(c.name) = ANY($1::text[])
+     ORDER BY s.name ASC`,
+    [focusCityKeys],
   );
   return rows;
 }
@@ -28,8 +32,8 @@ export async function listHolidayCalendars() {
 }
 
 export async function listCities(filters = {}) {
-  const values = [];
-  const where = [];
+  const values = [focusCityKeys];
+  const where = [`LOWER(c.name) = ANY($1::text[])`];
   if (filters.stateId) {
     values.push(filters.stateId);
     where.push(`c.state_id = $${values.length}`);
@@ -56,8 +60,8 @@ export async function listCities(filters = {}) {
 }
 
 export async function listHotelProfiles(filters = {}) {
-  const values = [];
-  const where = [];
+  const values = [focusCityKeys];
+  const where = [`LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])`];
 
   if (filters.stateId) {
     values.push(filters.stateId);
@@ -174,6 +178,7 @@ export async function createSeasonProfile(payload) {
 
 export async function createCity(payload) {
   const { name, state_id, airport_code, season_profile_id, holiday_calendar_id = null } = payload;
+  assertCityInScope(name, 'City');
   const { rows } = await pool.query(
     `INSERT INTO cities (name, state_id, airport_code, season_profile_id, holiday_calendar_id)
      VALUES ($1,$2,$3,$4,$5)
@@ -246,6 +251,7 @@ export async function createHotel(payload) {
       $9
     FROM cities c
     WHERE c.id = $10
+      AND LOWER(c.name) = ANY($11::text[])
     RETURNING id, hotel_name, city, city_id, subscription_status, base_price_min, base_price_max
      ),
      baseline_rate AS (
@@ -271,6 +277,7 @@ export async function createHotel(payload) {
       subscription_status,
       alert_sensitivity,
       city_id,
+      focusCityKeys,
     ],
   );
   return rows[0] || null;
@@ -297,12 +304,13 @@ export async function updateHotelProfile(hotelId, payload) {
        SELECT c.id, c.name
        FROM cities c
        WHERE c.id = COALESCE($3::uuid, (SELECT city_id FROM current_hotel))
+         AND LOWER(c.name) = ANY($9::text[])
      )
      UPDATE hotels h
      SET
        hotel_name = COALESCE($2, h.hotel_name),
        name = COALESCE($2, h.name, h.hotel_name),
-       city_id = COALESCE($3::uuid, h.city_id),
+       city_id = COALESCE((SELECT id FROM resolved_city), h.city_id),
        city = COALESCE((SELECT name FROM resolved_city), h.city),
        room_count = COALESCE($4, h.room_count),
        base_price_min = COALESCE($5, h.base_price_min),
@@ -310,6 +318,7 @@ export async function updateHotelProfile(hotelId, payload) {
        alert_sensitivity = COALESCE($7, h.alert_sensitivity),
        subscription_status = COALESCE($8, h.subscription_status)
      WHERE h.id = $1
+       AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM resolved_city))
      RETURNING h.id, h.hotel_name, h.city_id, h.city, h.subscription_status`,
     [
       hotelId,
@@ -320,6 +329,7 @@ export async function updateHotelProfile(hotelId, payload) {
       Number.isFinite(Number(base_price_max)) ? Number(base_price_max) : null,
       alert_sensitivity || null,
       subscription_status || null,
+      focusCityKeys,
     ],
   );
 
@@ -374,8 +384,8 @@ export async function upsertHotelUserForHotel(payload) {
 }
 
 export async function listUsageAnalytics(filters = {}) {
-  const values = [];
-  const where = [];
+  const values = [focusCityKeys];
+  const where = [`LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])`];
 
   if (filters.hotelId) {
     values.push(filters.hotelId);
@@ -404,8 +414,8 @@ export async function listUsageAnalytics(filters = {}) {
 }
 
 export async function listPasswordResetRequests(filters = {}) {
-  const values = [];
-  const where = [];
+  const values = [focusCityKeys];
+  const where = [`LOWER(COALESCE(c.name, h.city, '')) = ANY($1::text[])`];
 
   if (filters.status) {
     values.push(filters.status);
@@ -428,6 +438,7 @@ export async function listPasswordResetRequests(filters = {}) {
        u.full_name
      FROM password_reset_requests pr
      LEFT JOIN hotels h ON h.id = pr.hotel_id
+     LEFT JOIN cities c ON c.id = h.city_id
      LEFT JOIN users u ON u.id = pr.user_id
      ${whereClause}
      ORDER BY pr.requested_at DESC

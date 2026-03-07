@@ -66,6 +66,7 @@ RECALC_QUEUE_POLL_MS=2000
 RECALC_QUEUE_MAX_ATTEMPTS=3
 RECALC_QUEUE_RETRY_BASE_SECONDS=20
 RECALC_QUEUE_RETRY_MAX_SECONDS=300
+FOCUS_CITIES=Goa,Mumbai
 ```
 
 ## Setup
@@ -106,6 +107,7 @@ Production notes:
 - Set `ALLOW_MOCK_COMPETITOR_FALLBACK=false` to prevent synthetic competitor rates in live environments.
 - Set `ALLOW_ESTIMATED_OTA_PARITY=false` to avoid market-estimated OTA rows when channel-scraped data is unavailable.
 - Set `OTA_SNAPSHOT_FILE=/opt/radar_light/shared/ota_snapshots/latest.json` (or keep default path).
+- Set `FOCUS_CITIES=Goa,Mumbai` to keep product scope limited to these operating cities.
 - Scheduler script: `scripts/run_rate_cycle.sh` (ingest first, then recalculate active hotels).
 
 Snapshot JSON format (`rows` also accepted as wrapper key):

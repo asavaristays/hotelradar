@@ -38,7 +38,13 @@ function formatVolatilityError(value) {
   return `±${safe.toFixed(1)}%`;
 }
 
-export default function ConfidenceCard({ confidence, suggestedPricing, demandScore }) {
+export default function ConfidenceCard({
+  confidence,
+  suggestedPricing,
+  demandScore,
+  performanceSummary = null,
+  signalQuality = null,
+}) {
   const riskLevel = suggestedPricing?.riskLevel || 'Low';
   const riskClass = `riskBadge risk-${riskTone(riskLevel)}`;
   const factors = Array.isArray(confidence?.factors) ? confidence.factors : [];
@@ -46,6 +52,8 @@ export default function ConfidenceCard({ confidence, suggestedPricing, demandSco
   const forecastAccuracy60d = Number(confidence?.forecastAccuracy60d || 0);
   const volatilityError = Number(confidence?.volatilityError || 0);
   const marketHeat = Number(suggestedPricing?.marketHeat || 1);
+  const sampleSize = Number(signalQuality?.sampleSize ?? performanceSummary?.sampleSize ?? 0);
+  const calibrationMode = signalQuality?.mode === 'calibrating' || sampleSize < 7;
 
   return (
     <section className="panel confidenceCard" aria-label="Risk heat confidence card">
@@ -70,9 +78,16 @@ export default function ConfidenceCard({ confidence, suggestedPricing, demandSco
         <p className="confidenceValue">
           {confidence?.level || 'N/A'} ({confidenceScore})
         </p>
-        {/* Added forecast confidence diagnostics below the main score in secondary typography. */}
-        <p className="metaLabel">Forecast Accuracy (60d): {formatForecastAccuracy(forecastAccuracy60d)}</p>
-        <p className="metaLabel">Volatility Error Margin: {formatVolatilityError(volatilityError)}</p>
+        {calibrationMode ? (
+          <p className="metaLabel">
+            Forecast diagnostics are calibrating ({sampleSize}/7 validated snapshots).
+          </p>
+        ) : (
+          <>
+            <p className="metaLabel">Forecast Accuracy (60d): {formatForecastAccuracy(forecastAccuracy60d)}</p>
+            <p className="metaLabel">Volatility Error Margin: {formatVolatilityError(volatilityError)}</p>
+          </>
+        )}
       </div>
 
       <ul className="compactList">
