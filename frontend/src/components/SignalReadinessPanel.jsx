@@ -56,6 +56,10 @@ export default function SignalReadinessPanel({ signalQuality, marketContext, las
           <strong>{formatTimestamp(marketContext?.observedAt || lastScrapedAt)}</strong>
         </div>
         <div>
+          <span>Last event sync</span>
+          <strong>{formatTimestamp(marketContext?.lastEventSync)}</strong>
+        </div>
+        <div>
           <span>Validated snapshots</span>
           <strong>{Number(signalQuality?.sampleSize || 0)}</strong>
         </div>

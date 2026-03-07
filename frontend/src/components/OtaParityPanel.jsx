@@ -13,6 +13,29 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
+function formatGap(gapPct, estimated = false) {
+  const numeric = Number(gapPct || 0);
+  if (!estimated) return formatPercent(numeric, 2);
+  const absValue = Math.abs(numeric).toFixed(1);
+  const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : '';
+  return `~${sign}${absValue}% (estimated +/-5%)`;
+}
+
+function sourceBadgeTone(estimated = false) {
+  return estimated ? 'watch' : 'good';
+}
+
+function sourceLabel(estimated = false) {
+  return estimated ? 'Estimated' : 'Live OTA';
+}
+
+function softenedStatus(row = {}) {
+  if (!row?.estimated) return row?.status || 'Unknown';
+  if (row.status === 'Overpriced vs OTA') return 'Likely overpriced (estimated)';
+  if (row.status === 'Underpriced vs OTA') return 'Likely underpriced (estimated)';
+  return 'Likely in parity (estimated)';
+}
+
 export default function OtaParityPanel({ otaParity, marketContext }) {
   const rows = Array.isArray(otaParity?.rows) ? otaParity.rows : [];
   const summary = otaParity?.summary || {};
@@ -56,11 +79,15 @@ export default function OtaParityPanel({ otaParity, marketContext }) {
                   <tr key={row.channel}>
                     <td>{row.channel}</td>
                     <td>₹{formatCurrency(row.otaPrice)}</td>
-                    <td>{formatPercent(row.gapPct, 2)}</td>
+                    <td>{formatGap(row.gapPct, row.estimated)}</td>
                     <td>
-                      <span className={`parityBadge ${statusClass(row.status)}`}>{row.status}</span>
+                      <span className={`parityBadge ${statusClass(row.status)}`}>{softenedStatus(row)}</span>
                     </td>
-                    <td>{row.estimated ? 'Estimated' : 'Scraped'}</td>
+                    <td>
+                      <span className={`metricBadge metric-${sourceBadgeTone(row.estimated)} otaTrustBadge`}>
+                        {sourceLabel(row.estimated)}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -72,11 +99,18 @@ export default function OtaParityPanel({ otaParity, marketContext }) {
               <article key={row.channel} className="compCard">
                 <div className="parityCardHeader">
                   <strong>{row.channel}</strong>
-                  <span className={`parityBadge ${statusClass(row.status)}`}>{row.status}</span>
+                  <span className={`parityBadge ${statusClass(row.status)}`}>{softenedStatus(row)}</span>
                 </div>
                 <p>OTA Price: <strong>₹{formatCurrency(row.otaPrice)}</strong></p>
-                <p>Gap: <strong>{formatPercent(row.gapPct, 2)}</strong></p>
-                <p>Source: <strong>{row.estimated ? 'Estimated' : 'Scraped'}</strong></p>
+                <p>Gap: <strong>{formatGap(row.gapPct, row.estimated)}</strong></p>
+                <p>
+                  Source:{' '}
+                  <strong>
+                    <span className={`metricBadge metric-${sourceBadgeTone(row.estimated)} otaTrustBadge`}>
+                      {sourceLabel(row.estimated)}
+                    </span>
+                  </strong>
+                </p>
               </article>
             ))}
           </div>

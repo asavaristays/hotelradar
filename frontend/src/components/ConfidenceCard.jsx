@@ -54,6 +54,9 @@ export default function ConfidenceCard({
   const marketHeat = Number(suggestedPricing?.marketHeat || 1);
   const sampleSize = Number(signalQuality?.sampleSize ?? performanceSummary?.sampleSize ?? 0);
   const calibrationMode = signalQuality?.mode === 'calibrating' || sampleSize < 7;
+  const confidenceHeadline = calibrationMode
+    ? 'Calibrating - verify before acting'
+    : `${confidence?.level || 'N/A'} (${confidenceScore})`;
 
   return (
     <section className="panel confidenceCard" aria-label="Risk heat confidence card">
@@ -75,9 +78,7 @@ export default function ConfidenceCard({
 
       <div className="confidenceSummary">
         <p className="metaLabel">Demand Confidence</p>
-        <p className="confidenceValue">
-          {confidence?.level || 'N/A'} ({confidenceScore})
-        </p>
+        <p className="confidenceValue">{confidenceHeadline}</p>
         {calibrationMode ? (
           <p className="metaLabel">
             Forecast diagnostics are calibrating ({sampleSize}/7 validated snapshots).

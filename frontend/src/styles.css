@@ -2363,6 +2363,11 @@ button {
   color: var(--text-primary);
 }
 
+.otaTrustBadge {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+}
+
 .premiumSidebar {
   display: flex;
   flex-direction: column;

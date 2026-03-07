@@ -180,10 +180,23 @@ function normalizeMarketContext(raw = {}) {
   return {
     checkinDate: raw?.checkinDate || null,
     observedAt: raw?.observedAt || null,
+    lastEventSync: raw?.lastEventSync || null,
     hotelRows: Number(raw?.hotelRows || 0),
     competitorRows: Number(raw?.competitorRows || 0),
     otaRows: Number(raw?.otaRows || 0),
   };
+}
+
+function deriveLastEventSync(events = []) {
+  let latestMs = null;
+  for (const eventRow of events) {
+    const raw = eventRow?.scraped_at || eventRow?.scrapedAt || null;
+    if (!raw) continue;
+    const parsedMs = new Date(raw).getTime();
+    if (Number.isNaN(parsedMs)) continue;
+    latestMs = latestMs == null ? parsedMs : Math.max(latestMs, parsedMs);
+  }
+  return latestMs == null ? null : new Date(latestMs).toISOString();
 }
 
 function normalizePerformanceSummary(raw) {
@@ -742,6 +755,10 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
       listDataHealthIssues: deps.listDataHealthIssues,
     },
   );
+  const marketContext = {
+    ...marketScope,
+    lastEventSync: deriveLastEventSync(events),
+  };
 
   return toDashboardContract({
     hotel,
@@ -761,7 +778,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     modelVersion,
     otaParity,
     dataHealth,
-    marketContext: marketScope,
+    marketContext,
   });
 }
 
