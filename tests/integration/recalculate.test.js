@@ -120,6 +120,197 @@ describe('recalculateDashboard integration', () => {
     expect(evaluateAlerts).toHaveBeenCalledTimes(1);
   });
 
+  test('forces product lock when output-integrity guard finds stale surge alerts', async () => {
+    const nowIso = new Date().toISOString();
+    const deps = {
+      getHotelById: async () => ({
+        id: '11111111-1111-4111-8111-111111111111',
+        city: 'Mumbai',
+        hotel_name: 'Marine Drive Grand',
+        alert_sensitivity: 'balanced',
+        room_count: 52,
+      }),
+      getLatestMarketCheckinDate: async () => ({
+        checkin_date: '2026-03-14',
+        observed_at: nowIso,
+        hotel_rows: 1,
+      }),
+      getCompetitorRatesForHotel: async () => [
+        { id: 'c1', competitor_name: 'Trident Nariman Point', price_today: 18000, price_48h_ago: 17200 },
+        { id: 'c2', competitor_name: 'The St. Regis Mumbai', price_today: 18800, price_48h_ago: 18000 },
+        { id: 'ota1', competitor_name: 'Booking.com', price_today: 18600, price_48h_ago: 17900 },
+        { id: 'ota2', competitor_name: 'Agoda', price_today: 18500, price_48h_ago: 17850 },
+      ],
+      getLatestHotelPrice: async () => 17850,
+      getLatestCompetitorScrapeAt: async () => nowIso,
+      getAirfareSeries: async () => buildAirfareSeries(),
+      getUpcomingHolidays: async () => [],
+      getUpcomingEvents: async () => [
+        {
+          event_name: 'BKC Corporate Summit',
+          city: 'Mumbai',
+          start_date: '2026-03-19',
+          end_date: '2026-03-20',
+          category: 'conference',
+          scale: 'large',
+          impact_score: 12,
+          scraped_at: nowIso,
+        },
+      ],
+      getCityWeights: async () => ({
+        competitor_weight: 0.45,
+        holiday_weight: 0.25,
+        airfare_weight: 0.2,
+        season_weight: 0.1,
+      }),
+      getLatestDemandScore: async () => null,
+      getPreviousDemandScore: async () => null,
+      insertDemandScore: async (payload) => ({
+        id: 987,
+        demand_score: payload.demandScore,
+        level: payload.level,
+        recommendation: payload.recommendation,
+        confidence: payload.confidence,
+        explanation: payload.explanation,
+        market_position: payload.marketPosition,
+        signals: payload.signals,
+        created_at: nowIso,
+      }),
+      listActiveAlerts: async () => [
+        {
+          severity: 'critical',
+          alert_type: 'surge_window',
+          message: 'Demand surge window detected within 3 days.',
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      evaluateAlerts: async () => ({ created: [], skipped: 0 }),
+      getMockCompetitorRates: async () => [],
+      getCalibration: async () => ({
+        global: {
+          thresholds: { otaParityParityBand: 2, otaParityGap: 5 },
+          dataHealth: {
+            minSampleForAccuracy: 0,
+            minForecastAccuracy: 0,
+            minEventRowsFocusCity: 1,
+            minOtaLiveRowsForAction: 1,
+          },
+        },
+      }),
+      getPerformance: async () => ({
+        direction_accuracy: 88,
+        alert_precision: 82,
+        position_improvement_pct: 6,
+        rolling_accuracy_30d: 84,
+        stability_deviation: 8,
+        sample_size: 12,
+      }),
+      getValidatedPerformance: async () => ({
+        direction_accuracy: 88,
+        rolling_accuracy_30d: 84,
+        stability_deviation: 8,
+        sample_size: 12,
+        directionSamples: 12,
+      }),
+      touchHotelCalculatedAt: async () => null,
+    };
+
+    const dashboard = await recalculateDashboard('11111111-1111-4111-8111-111111111111', {}, deps);
+    expect(dashboard.outputGuard).toEqual(
+      expect.objectContaining({
+        blocked: true,
+      }),
+    );
+    expect(dashboard.signalQuality.mode).toBe('verify');
+    expect(dashboard.productLock.enabled).toBe(true);
+    expect(dashboard.productLock.reason).toContain('stale surge alert');
+  });
+
+  test('disables product lock when forceProductUnlock override is enabled', async () => {
+    const nowIso = new Date().toISOString();
+    const deps = {
+      getHotelById: async () => ({
+        id: '11111111-1111-4111-8111-111111111111',
+        city: 'Mumbai',
+        hotel_name: 'Marine Drive Grand',
+        alert_sensitivity: 'balanced',
+        room_count: 52,
+      }),
+      getLatestMarketCheckinDate: async () => ({
+        checkin_date: '2026-03-14',
+        observed_at: nowIso,
+        hotel_rows: 1,
+      }),
+      getCompetitorRatesForHotel: async () => [
+        { id: 'c1', competitor_name: 'Trident Nariman Point', price_today: 18000, price_48h_ago: 17200 },
+        { id: 'c2', competitor_name: 'The St. Regis Mumbai', price_today: 18800, price_48h_ago: 18000 },
+      ],
+      getLatestHotelPrice: async () => 17850,
+      getLatestCompetitorScrapeAt: async () => nowIso,
+      getAirfareSeries: async () => buildAirfareSeries(),
+      getUpcomingHolidays: async () => [],
+      getUpcomingEvents: async () => [],
+      getCityWeights: async () => ({
+        competitor_weight: 0.45,
+        holiday_weight: 0.25,
+        airfare_weight: 0.2,
+        season_weight: 0.1,
+      }),
+      getLatestDemandScore: async () => null,
+      getPreviousDemandScore: async () => null,
+      insertDemandScore: async (payload) => ({
+        id: 988,
+        demand_score: payload.demandScore,
+        level: payload.level,
+        recommendation: payload.recommendation,
+        confidence: payload.confidence,
+        explanation: payload.explanation,
+        market_position: payload.marketPosition,
+        signals: payload.signals,
+        created_at: nowIso,
+      }),
+      listActiveAlerts: async () => [
+        {
+          severity: 'critical',
+          alert_type: 'surge_window',
+          message: 'Demand surge window detected within 3 days.',
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      evaluateAlerts: async () => ({ created: [], skipped: 0 }),
+      getMockCompetitorRates: async () => [],
+      getCalibration: async () => ({
+        global: {
+          thresholds: { otaParityParityBand: 2, otaParityGap: 5 },
+          dataHealth: {
+            forceProductUnlock: true,
+          },
+        },
+      }),
+      getPerformance: async () => ({
+        direction_accuracy: 40,
+        alert_precision: 40,
+        position_improvement_pct: 0,
+        rolling_accuracy_30d: 0,
+        stability_deviation: 40,
+        sample_size: 0,
+      }),
+      getValidatedPerformance: async () => ({
+        direction_accuracy: 40,
+        rolling_accuracy_30d: 0,
+        stability_deviation: 40,
+        sample_size: 0,
+        directionSamples: 0,
+      }),
+      touchHotelCalculatedAt: async () => null,
+    };
+
+    const dashboard = await recalculateDashboard('11111111-1111-4111-8111-111111111111', {}, deps);
+    expect(dashboard.signalQuality.forceUnlocked).toBe(true);
+    expect(dashboard.productLock.enabled).toBe(false);
+    expect(dashboard.productLock.reason).toContain('Permanent product unlock override');
+  });
+
   test('falls back to neutral behavior when competitor and airfare are missing', async () => {
     const deps = {
       getHotelById: async () => ({

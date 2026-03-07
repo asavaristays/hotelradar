@@ -373,7 +373,7 @@ function normalizeAlertSeverity(raw = '') {
 
 function summarizeAlerts(alerts = []) {
   const grouped = new Map();
-  const staleWindowMs = 7 * 24 * 60 * 60 * 1000;
+  const staleWindowMs = 72 * 60 * 60 * 1000;
 
   for (const alert of alerts) {
     const message = String(alert?.message || '').trim();
@@ -430,27 +430,197 @@ function formatAlertSummary(alert) {
 }
 
 const PRODUCT_LOCK_FOCUS_CITY_KEYS = new Set(['goa', 'mumbai']);
+const OUTPUT_GUARD_STALE_SURGE_DAYS = 3;
+const NARRATIVE_FIELDS = ['summary', 'marketStory', 'pricingRationale', 'actionGuidance'];
 
 function normalizeCityKey(value = '') {
   return String(value || '').trim().toLowerCase();
 }
 
-function buildProductLock(city, signalQuality = null) {
+function normalizeSentenceKey(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitSentences(value = '') {
+  return String(value || '')
+    .split(/[.!?]+/)
+    .map((entry) => normalizeSentenceKey(entry))
+    .filter(Boolean);
+}
+
+function collectNarrativeDuplicates(narrative = {}) {
+  const seen = new Map();
+  const duplicates = new Set();
+
+  for (const field of NARRATIVE_FIELDS) {
+    const sentences = splitSentences(narrative?.[field] || '');
+    for (const sentence of sentences) {
+      const count = Number(seen.get(sentence) || 0) + 1;
+      seen.set(sentence, count);
+      if (count > 1) {
+        duplicates.add(sentence);
+      }
+    }
+  }
+
+  return Array.from(duplicates);
+}
+
+function countStaleSurgeAlerts(alerts = []) {
+  const staleWindowMs = OUTPUT_GUARD_STALE_SURGE_DAYS * 24 * 60 * 60 * 1000;
+  return alerts.filter((alert) => {
+    const type = String(alert?.alert_type || '').trim().toLowerCase();
+    if (type !== 'surge_window') return false;
+    const createdAtMs = new Date(alert?.created_at || 0).getTime();
+    return Number.isFinite(createdAtMs) && Date.now() - createdAtMs > staleWindowMs;
+  }).length;
+}
+
+function collectCriticalOutputGaps({
+  suggestedPricing,
+  marketPosition,
+  marketContext,
+  forwardCurve,
+}) {
+  const gaps = [];
+  const base = Number(suggestedPricing?.base || 0);
+  const marketAvg = Number(marketPosition?.marketAvg || 0);
+  const curveSize = Array.isArray(forwardCurve) ? forwardCurve.length : 0;
+
+  if (!Number.isFinite(base) || base <= 0) {
+    gaps.push('suggested base price is missing');
+  }
+  if (!Number.isFinite(marketAvg) || marketAvg <= 0) {
+    gaps.push('market average is unavailable for selected stay date');
+  }
+  if (!marketContext?.checkinDate) {
+    gaps.push('stay-date basis is missing');
+  }
+  if (curveSize < 7) {
+    gaps.push('forward demand curve is incomplete');
+  }
+
+  return gaps;
+}
+
+function buildOutputGuard({
+  city,
+  alerts,
+  narrative,
+  suggestedPricing,
+  marketPosition,
+  marketContext,
+  forwardCurve,
+}) {
+  if (!PRODUCT_LOCK_FOCUS_CITY_KEYS.has(normalizeCityKey(city))) {
+    return {
+      blocked: false,
+      summary: '',
+      issues: [],
+    };
+  }
+
+  const issues = [];
+  const duplicateNarrativeLines = collectNarrativeDuplicates(narrative);
+  if (duplicateNarrativeLines.length) {
+    issues.push({
+      code: 'duplicate_narrative_sentences',
+      severity: 'high',
+      message: `duplicate narrative lines detected (${duplicateNarrativeLines.length})`,
+    });
+  }
+
+  const staleSurgeCount = countStaleSurgeAlerts(alerts);
+  if (staleSurgeCount > 0) {
+    issues.push({
+      code: 'stale_surge_alerts',
+      severity: 'high',
+      message: `${staleSurgeCount} stale surge alert(s) older than ${OUTPUT_GUARD_STALE_SURGE_DAYS} days`,
+    });
+  }
+
+  for (const gap of collectCriticalOutputGaps({ suggestedPricing, marketPosition, marketContext, forwardCurve })) {
+    issues.push({
+      code: 'critical_output_gap',
+      severity: 'high',
+      message: gap,
+    });
+  }
+
+  if (!issues.length) {
+    return {
+      blocked: false,
+      summary: '',
+      issues: [],
+    };
+  }
+
+  return {
+    blocked: true,
+    summary: `Output integrity checks flagged: ${issues.map((issue) => issue.message).join('; ')}.`,
+    issues,
+  };
+}
+
+function mergeSignalQualityWithOutputGuard(signalQuality = null, outputGuard = null) {
+  if (!outputGuard?.blocked) return signalQuality;
+
+  const baseSignalQuality = signalQuality || {};
+  if (baseSignalQuality.forceUnlocked) {
+    return {
+      ...baseSignalQuality,
+      outputGuard,
+    };
+  }
+  const mode = String(baseSignalQuality.mode || '').toLowerCase();
+  if (mode === 'calibrating') {
+    return {
+      ...baseSignalQuality,
+      summary: baseSignalQuality.summary
+        ? `${baseSignalQuality.summary} ${outputGuard.summary}`
+        : outputGuard.summary,
+      outputGuard,
+    };
+  }
+
+  return {
+    ...baseSignalQuality,
+    grade: 'Review',
+    mode: 'verify',
+    summary: `Verify before acting: ${outputGuard.summary.replace(/^Verify before acting:\s*/i, '')}`,
+    outputGuard,
+  };
+}
+
+function buildProductLock(city, signalQuality = null, outputGuard = null) {
   const cityKey = normalizeCityKey(city);
   const mode = String(signalQuality?.mode || '').toLowerCase();
+  const forceUnlocked = Boolean(signalQuality?.forceUnlocked);
   const inFocusScope = PRODUCT_LOCK_FOCUS_CITY_KEYS.has(cityKey);
-  const enabled = inFocusScope && mode !== 'actionable';
+  const outputBlocked = Boolean(outputGuard?.blocked);
+  const enabled = !forceUnlocked && inFocusScope && (mode !== 'actionable' || outputBlocked);
 
   return {
     enabled,
     scope: inFocusScope ? 'goa_mumbai' : 'default',
     mode: mode || 'unknown',
     reason: enabled
-      ? signalQuality?.summary || 'Signal quality is below trusted threshold. Pricing output is locked.'
-      : 'Signal quality is actionable.',
+      ? outputBlocked
+        ? outputGuard.summary
+        : signalQuality?.summary || 'Signal quality is below trusted threshold. Pricing output is locked.'
+      : forceUnlocked
+        ? 'Permanent product unlock override is enabled via calibration settings.'
+        : 'Signal quality is actionable.',
     unlockCriteria: inFocusScope
-      ? 'Unlock requires actionable signal quality with fresh competitor, OTA, and event inputs.'
+      ? forceUnlocked
+        ? 'Disable global.dataHealth.forceProductUnlock to restore strict lock gates.'
+        : 'Unlock requires actionable signal quality with fresh competitor, OTA, and event inputs, and clean output-integrity checks.'
       : 'No scope lock applied for this market.',
+    checks: outputGuard?.issues || [],
   };
 }
 
@@ -542,7 +712,110 @@ function buildChangeSummary(currentRecord, previousRecord) {
   };
 }
 
-function buildSignals({ hotel, record, competitorRates, airfareSeries, holidays, events }) {
+function clampShare(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return clamp(parsed, 0, 1);
+}
+
+function normalizeManualSignalOverrides(raw = null) {
+  if (!raw || typeof raw !== 'object') return null;
+  const pickScore = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return clamp(parsed, 0, 100);
+  };
+  const pickShare = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return clamp(parsed, 0, 1);
+  };
+
+  const competitorScore = pickScore(raw?.competitor?.score ?? raw?.competitorScore);
+  const holidayScore = pickScore(raw?.holiday?.score ?? raw?.holidayScore);
+  const airfareScore = pickScore(raw?.airfare?.score ?? raw?.airfareScore);
+  const seasonScore = pickScore(raw?.season?.score ?? raw?.seasonScore);
+  const eventShare = pickShare(raw?.holiday?.eventShare ?? raw?.eventShare);
+  const weddingShare = pickShare(raw?.holiday?.weddingShare ?? raw?.weddingShare);
+  const corporateShare = pickShare(raw?.holiday?.corporateShare ?? raw?.corporateShare);
+
+  const normalized = {};
+  if (competitorScore != null) normalized.competitor = { score: competitorScore };
+  if (holidayScore != null || eventShare != null || weddingShare != null || corporateShare != null) {
+    normalized.holiday = {};
+    if (holidayScore != null) normalized.holiday.score = holidayScore;
+    if (eventShare != null) normalized.holiday.eventShare = eventShare;
+    if (weddingShare != null) normalized.holiday.weddingShare = weddingShare;
+    if (corporateShare != null) normalized.holiday.corporateShare = corporateShare;
+  }
+  if (airfareScore != null) normalized.airfare = { score: airfareScore };
+  if (seasonScore != null) normalized.season = { score: seasonScore };
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+function applyManualSignalOverrides(signals, manualOverrides = null) {
+  const overrides = normalizeManualSignalOverrides(manualOverrides);
+  if (!overrides) return signals;
+  const nextSignals = {
+    competitor: { ...(signals?.competitor || {}) },
+    holiday: { ...(signals?.holiday || {}) },
+    airfare: { ...(signals?.airfare || {}) },
+    season: { ...(signals?.season || {}) },
+  };
+
+  if (overrides.competitor?.score != null) {
+    nextSignals.competitor.score = overrides.competitor.score;
+    nextSignals.competitor.neutral = false;
+  }
+  if (overrides.airfare?.score != null) {
+    nextSignals.airfare.score = overrides.airfare.score;
+    nextSignals.airfare.neutral = false;
+  }
+  if (overrides.season?.score != null) {
+    nextSignals.season.score = overrides.season.score;
+    nextSignals.season.neutral = false;
+  }
+  if (overrides.holiday) {
+    if (overrides.holiday.score != null) {
+      nextSignals.holiday.score = overrides.holiday.score;
+      nextSignals.holiday.neutral = false;
+    }
+    const eventShare =
+      overrides.holiday.eventShare != null
+        ? clampShare(overrides.holiday.eventShare, 0)
+        : clampShare(nextSignals.holiday.eventShare, 0);
+    nextSignals.holiday.eventShare = eventShare;
+
+    const weddingShareRaw =
+      overrides.holiday.weddingShare != null
+        ? clampShare(overrides.holiday.weddingShare, 0)
+        : clampShare(nextSignals.holiday.weddingShare, 0);
+    const corporateShareRaw =
+      overrides.holiday.corporateShare != null
+        ? clampShare(overrides.holiday.corporateShare, 0)
+        : clampShare(nextSignals.holiday.corporateShare, 0);
+    const totalShare = weddingShareRaw + corporateShareRaw;
+    const scale = totalShare > 1 ? 1 / totalShare : 1;
+    const weddingShare = clampShare(weddingShareRaw * scale, 0);
+    const corporateShare = clampShare(corporateShareRaw * scale, 0);
+    const otherShare = clampShare(1 - weddingShare - corporateShare, 0);
+    nextSignals.holiday.weddingShare = weddingShare;
+    nextSignals.holiday.corporateShare = corporateShare;
+    nextSignals.holiday.eventCategoryShare = {
+      ...(nextSignals.holiday.eventCategoryShare || {}),
+      wedding_season: weddingShare,
+      conference: corporateShare,
+      general: otherShare,
+    };
+    nextSignals.holiday.manualOverride = true;
+  }
+
+  return nextSignals;
+}
+
+function buildSignals({ hotel, record, competitorRates, airfareSeries, holidays, events }, options = {}) {
+  const forceRecompute = Boolean(options?.forceRecompute);
+  const manualOverrides = normalizeManualSignalOverrides(options?.manualSignalOverrides || null);
   const monthlyWeights = hotel.monthly_weights_json || null;
   const seasonProfileMonthly = monthlyWeights
     ? [
@@ -561,17 +834,28 @@ function buildSignals({ hotel, record, competitorRates, airfareSeries, holidays,
       ].map((n) => Number(n ?? 50))
     : null;
 
-  return {
-    competitor: record.signals?.competitor || computeCompetitorScore(competitorRates),
-    holiday: record.signals?.holiday || computeHolidayScore({ city: hotel.city, holidays, events }),
-    airfare: record.signals?.airfare || computeAirfareScore({ city: hotel.city, series: airfareSeries }),
+  const computedSignals = {
+    competitor:
+      !forceRecompute && record.signals?.competitor
+        ? record.signals.competitor
+        : computeCompetitorScore(competitorRates),
+    holiday:
+      !forceRecompute && record.signals?.holiday
+        ? record.signals.holiday
+        : computeHolidayScore({ city: hotel.city, holidays, events }),
+    airfare:
+      !forceRecompute && record.signals?.airfare
+        ? record.signals.airfare
+        : computeAirfareScore({ city: hotel.city, series: airfareSeries }),
     season:
-      record.signals?.season ||
-      computeSeasonScore({
-        city: hotel.city,
-        seasonProfileMonthly,
-      }),
+      !forceRecompute && record.signals?.season
+        ? record.signals.season
+        : computeSeasonScore({
+            city: hotel.city,
+            seasonProfileMonthly,
+          }),
   };
+  return applyManualSignalOverrides(computedSignals, manualOverrides);
 }
 
 function toDashboardContract({
@@ -602,8 +886,18 @@ function toDashboardContract({
   const normalizedPerf = normalizePerformanceSummary(performanceSummary);
   const normalizedSuggestedPricing = normalizeSuggestedPricing(record.recommendation);
   const normalizedMarketPosition = normalizeMarketPosition(record.market_position);
-  const signalQuality = dataHealth?.signalQuality || null;
-  const productLock = buildProductLock(hotel?.city, signalQuality);
+  const rawSignalQuality = dataHealth?.signalQuality || null;
+  const outputGuard = buildOutputGuard({
+    city: hotel?.city,
+    alerts,
+    narrative,
+    suggestedPricing: normalizedSuggestedPricing,
+    marketPosition: normalizedMarketPosition,
+    marketContext,
+    forwardCurve,
+  });
+  const signalQuality = mergeSignalQualityWithOutputGuard(rawSignalQuality, outputGuard);
+  const productLock = buildProductLock(hotel?.city, signalQuality, outputGuard);
   const revenueImpact = buildRevenueImpact({
     hotel,
     marketPosition: normalizedMarketPosition,
@@ -641,6 +935,7 @@ function toDashboardContract({
     dataHealth: dataHealth || null,
     signalQuality,
     productLock,
+    outputGuard,
     marketContext: normalizeMarketContext(marketContext),
     explanation,
     alerts: alertSummary.map(formatAlertSummary),
@@ -684,11 +979,23 @@ async function fetchCompetitorRatesWithFallback(hotelInput, deps) {
   return [];
 }
 
-async function loadMarketScope(hotel, deps = defaultDeps) {
-  const latestMarketCheckin = deps.getLatestMarketCheckinDate
-    ? await deps.getLatestMarketCheckinDate(hotel.id)
-    : null;
-  const checkinDate = latestMarketCheckin?.checkin_date || null;
+function normalizeCheckinDate(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const parsed = new Date(`${raw}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10) === raw ? raw : null;
+}
+
+async function loadMarketScope(hotel, deps = defaultDeps, options = {}) {
+  const requestedCheckinDate = normalizeCheckinDate(options?.checkinDate || options?.checkin_date || null);
+  const latestMarketCheckin = requestedCheckinDate
+    ? null
+    : deps.getLatestMarketCheckinDate
+      ? await deps.getLatestMarketCheckinDate(hotel.id)
+      : null;
+  const checkinDate = requestedCheckinDate || latestMarketCheckin?.checkin_date || null;
 
   const [allRates, hotelPriceRaw, lastScrapedAt] = await Promise.all([
     fetchCompetitorRatesWithFallback(hotel, {
@@ -704,11 +1011,14 @@ async function loadMarketScope(hotel, deps = defaultDeps) {
 
   const segmented = splitRateRows(allRates);
   const observedAt = latestMarketCheckin?.observed_at || lastScrapedAt || null;
+  const hotelRows = requestedCheckinDate
+    ? (hotelPriceRaw && Number(hotelPriceRaw) > 0 ? 1 : 0)
+    : Number(latestMarketCheckin?.hotel_rows || 0);
 
   return {
     checkinDate,
     observedAt: observedAt ? new Date(observedAt).toISOString() : null,
-    hotelRows: Number(latestMarketCheckin?.hotel_rows || 0),
+    hotelRows,
     competitorRows: segmented.hotelCompetitorRates.length,
     otaRows: segmented.otaParityRates.length,
     allRates,
@@ -719,7 +1029,7 @@ async function loadMarketScope(hotel, deps = defaultDeps) {
   };
 }
 
-export async function getCompetitiveGrid(hotelId, deps = defaultDeps, preloadedScope = null) {
+export async function getCompetitiveGrid(hotelId, deps = defaultDeps, preloadedScope = null, options = {}) {
   const hotel = await deps.getHotelById(hotelId);
   if (!hotel) {
     const error = new Error('Hotel not found');
@@ -727,7 +1037,11 @@ export async function getCompetitiveGrid(hotelId, deps = defaultDeps, preloadedS
     throw error;
   }
 
-  const marketScope = preloadedScope || (await loadMarketScope(hotel, deps));
+  const marketScope =
+    preloadedScope ||
+    (await loadMarketScope(hotel, deps, {
+      checkinDate: options?.checkinDate || options?.checkin_date || null,
+    }));
   const competitorRates = marketScope.hotelCompetitorRates;
   const hotelPriceRaw = marketScope.hotelPriceRaw;
 
@@ -776,8 +1090,16 @@ async function buildDerivedIntelligence({
   weights,
   marketPosition,
   calibration,
+  forceRecomputeSignals = false,
+  manualSignalOverrides = null,
 }) {
-  const signals = buildSignals({ hotel, record, competitorRates, airfareSeries, holidays, events });
+  const signals = buildSignals(
+    { hotel, record, competitorRates, airfareSeries, holidays, events },
+    {
+      forceRecompute: forceRecomputeSignals,
+      manualSignalOverrides,
+    },
+  );
   const compression = computeCompression({
     competitorRates,
     marketPosition,
@@ -829,7 +1151,13 @@ async function buildDerivedIntelligence({
 
 async function buildDashboardResponse(hotel, record, deps, preloaded = {}, context = {}) {
   const performanceGetter = deps.getPerformance || (async () => null);
-  const marketScope = preloaded.marketScope || (await loadMarketScope(hotel, deps));
+  const requestedCheckinDate = normalizeCheckinDate(context?.checkin_date || context?.checkinDate || null);
+  const manualSignalOverrides = normalizeManualSignalOverrides(context?.manual_signal_overrides || null);
+  const marketScope =
+    preloaded.marketScope ||
+    (await loadMarketScope(hotel, deps, {
+      checkinDate: requestedCheckinDate,
+    }));
   const competitorRates = preloaded.competitorRates || marketScope.hotelCompetitorRates;
   const otaParityRates = preloaded.otaParityRates || marketScope.otaParityRates;
   const [airfareSeries, holidays, events, cityWeights, alerts, competitiveGrid, calibration, previousRecord, canaryOverride] = await Promise.all([
@@ -864,6 +1192,8 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     weights,
     marketPosition,
     calibration,
+    forceRecomputeSignals: Boolean(requestedCheckinDate),
+    manualSignalOverrides,
   });
   const [performanceSummaryRaw, validatedPerformanceSummary] = await Promise.all([
     performanceGetter(hotel.id),
@@ -950,7 +1280,11 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
     throw error;
   }
 
-  const marketScope = await loadMarketScope(hotel, deps);
+  const requestedCheckinDate = normalizeCheckinDate(context?.checkin_date || context?.checkinDate || null);
+  const manualSignalOverrides = normalizeManualSignalOverrides(context?.manual_signal_overrides || null);
+  const marketScope = await loadMarketScope(hotel, deps, {
+    checkinDate: requestedCheckinDate,
+  });
   const competitorRates = marketScope.hotelCompetitorRates;
   const otaParityRates = marketScope.otaParityRates;
 
@@ -971,7 +1305,7 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
     canaryOverride?.enabled ? canaryOverride.override_weights : null,
   );
 
-  const signals = {
+  const computedSignals = {
     competitor: computeCompetitorScore(competitorRates),
     holiday: computeHolidayScore({ city: hotel.city, holidays, events }),
     airfare: computeAirfareScore({ city: hotel.city, series: airfareSeries }),
@@ -995,6 +1329,7 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
         : null,
     }),
   };
+  const signals = applyManualSignalOverrides(computedSignals, manualSignalOverrides);
 
   const aggregated = aggregateDemand({
     city: hotel.city,
@@ -1194,7 +1529,7 @@ export async function getDataHealth(hotelId, context = {}, deps = defaultDeps) {
   return dashboard?.dataHealth || null;
 }
 
-export async function getOtaParity(hotelId, deps = defaultDeps) {
+export async function getOtaParity(hotelId, deps = defaultDeps, options = {}) {
   const hotel = await deps.getHotelById(hotelId);
   if (!hotel) {
     const error = new Error('Hotel not found');
@@ -1203,7 +1538,9 @@ export async function getOtaParity(hotelId, deps = defaultDeps) {
   }
 
   const [marketScope, calibration] = await Promise.all([
-    loadMarketScope(hotel, deps),
+    loadMarketScope(hotel, deps, {
+      checkinDate: options?.checkinDate || options?.checkin_date || null,
+    }),
     deps.getCalibration ? deps.getCalibration() : getCalibration(),
   ]);
   const competitorRates = marketScope.otaParityRates;

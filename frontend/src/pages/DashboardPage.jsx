@@ -8,6 +8,7 @@ import { parseServerError as parseHttpServerError, readResponseBody } from '../h
 
 export default function DashboardPage({ session, onLogout, onNavigate }) {
   const [selectedHotelId, setSelectedHotelId] = useState('');
+  const [selectedCheckinDate, setSelectedCheckinDate] = useState('');
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,6 +20,29 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const [betaAcceptLoading, setBetaAcceptLoading] = useState(false);
   const [betaAcceptError, setBetaAcceptError] = useState('');
   const [pendingHotelId, setPendingHotelId] = useState('');
+  const [manualSignalForm, setManualSignalForm] = useState({
+    event_name: '',
+    venue: '',
+    start_date: '',
+    end_date: '',
+    category: 'conference',
+    scale: 'medium',
+    confidence: 'confirmed',
+    impact_score: 12,
+  });
+  const [manualSignals, setManualSignals] = useState([]);
+  const [manualSignalsLoading, setManualSignalsLoading] = useState(false);
+  const [manualSignalsSubmitting, setManualSignalsSubmitting] = useState(false);
+  const [manualSignalsError, setManualSignalsError] = useState('');
+  const [manualSliderOverrides, setManualSliderOverrides] = useState({
+    competitorScore: 55,
+    holidayScore: 60,
+    eventSharePct: 60,
+    weddingSharePct: 35,
+    corporateSharePct: 45,
+    airfareScore: 55,
+    seasonScore: 55,
+  });
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -26,12 +50,35 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  async function fetchCompetitiveGrid(hotelId) {
-    const response = await fetch(`/hotel/${encodeURIComponent(hotelId)}/competitive-grid`, {
+  function normalizeDateInput(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  function buildDashboardUrl(hotelId, checkinDate = '') {
+    const params = new URLSearchParams();
+    const safeDate = normalizeDateInput(checkinDate);
+    if (safeDate) params.set('checkin_date', safeDate);
+    const query = params.toString();
+    return `/hotel/${encodeURIComponent(hotelId)}/dashboard${query ? `?${query}` : ''}`;
+  }
+
+  async function fetchCompetitiveGrid(hotelId, checkinDate = '') {
+    const params = new URLSearchParams();
+    const safeDate = normalizeDateInput(checkinDate);
+    if (safeDate) params.set('checkin_date', safeDate);
+    const response = await fetch(
+      `/hotel/${encodeURIComponent(hotelId)}/competitive-grid${params.size ? `?${params.toString()}` : ''}`,
+      {
       headers: {
         Authorization: `Bearer ${session.token}`,
       },
-    });
+      },
+    );
 
     if (!response.ok) {
       return [];
@@ -53,15 +100,16 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     setError('User Error: Beta legal acceptance required before dashboard access.');
   }
 
-  async function loadDashboard(hotelIdOverride = '') {
+  async function loadDashboard(hotelIdOverride = '', checkinDateOverride = '') {
     const overrideId = typeof hotelIdOverride === 'string' ? hotelIdOverride : '';
     const hotelId = String(overrideId || selectedHotelId || '').trim();
+    const activeDate = normalizeDateInput(checkinDateOverride || selectedCheckinDate || '');
     if (!hotelId) return;
 
     setLoading(true);
     setError('');
     try {
-      const dashboardRes = await fetch(`/hotel/${encodeURIComponent(hotelId)}/dashboard`, {
+      const dashboardRes = await fetch(buildDashboardUrl(hotelId, activeDate), {
         headers: {
           Authorization: `Bearer ${session.token}`,
         },
@@ -77,12 +125,14 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
       const body = await readResponseBody(dashboardRes);
       const dashboardJson = body.json;
       if (!Array.isArray(dashboardJson?.competitiveGrid) || dashboardJson.competitiveGrid.length <= 1) {
-        const fallbackGrid = await fetchCompetitiveGrid(hotelId);
+        const fallbackGrid = await fetchCompetitiveGrid(hotelId, activeDate);
         if (fallbackGrid.length) {
           dashboardJson.competitiveGrid = fallbackGrid;
         }
       }
       setDashboard(dashboardJson);
+      const responseDate = normalizeDateInput(dashboardJson?.marketContext?.checkinDate || '');
+      setSelectedCheckinDate(activeDate || responseDate);
       if (hotelId !== selectedHotelId) {
         setSelectedHotelId(hotelId);
       }
@@ -94,7 +144,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     }
   }
 
-  async function waitForRecalculationCompletion(hotelId, jobId) {
+  async function waitForRecalculationCompletion(hotelId, jobId, checkinDate = '') {
     for (let i = 0; i < 90; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       const statusRes = await fetch(
@@ -120,7 +170,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
       setRecalcJob(statusPayload);
 
       if (statusPayload.status === 'completed') {
-        await loadDashboard(hotelId);
+        await loadDashboard(hotelId, checkinDate);
         return;
       }
 
@@ -132,8 +182,34 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     throw new Error('Recalculation is taking longer than expected. Please retry.');
   }
 
-  async function handleRecalculate(hotelIdOverride = '') {
+  function buildManualSignalOverridePayload() {
+    const toScore = (value, fallback = 50) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return fallback;
+      return Math.max(0, Math.min(100, Math.round(numeric)));
+    };
+    const toShare = (pct) => {
+      const numeric = Number(pct);
+      if (!Number.isFinite(numeric)) return 0;
+      return Math.max(0, Math.min(100, numeric)) / 100;
+    };
+    return {
+      competitor: { score: toScore(manualSliderOverrides.competitorScore, 55) },
+      holiday: {
+        score: toScore(manualSliderOverrides.holidayScore, 60),
+        eventShare: toShare(manualSliderOverrides.eventSharePct),
+        weddingShare: toShare(manualSliderOverrides.weddingSharePct),
+        corporateShare: toShare(manualSliderOverrides.corporateSharePct),
+      },
+      airfare: { score: toScore(manualSliderOverrides.airfareScore, 55) },
+      season: { score: toScore(manualSliderOverrides.seasonScore, 55) },
+    };
+  }
+
+  async function handleRecalculate(hotelIdOverride = '', options = {}) {
     const hotelId = String(hotelIdOverride || selectedHotelId || dashboard?.hotelId || '').trim();
+    const activeDate = normalizeDateInput(selectedCheckinDate || dashboard?.marketContext?.checkinDate || '');
+    const manualOverrides = options?.manualSignalOverrides || null;
     if (!hotelId) return;
 
     setError('');
@@ -149,6 +225,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         body: JSON.stringify({
           triggered_by: 'manual',
           source: 'dashboard-ui',
+          ...(activeDate ? { checkin_date: activeDate } : {}),
+          ...(manualOverrides ? { manual_signal_overrides: manualOverrides } : {}),
         }),
       });
 
@@ -166,7 +244,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
           attempts: 0,
           maxAttempts: 3,
         });
-        await waitForRecalculationCompletion(hotelId, payload.jobId);
+        await waitForRecalculationCompletion(hotelId, payload.jobId, activeDate);
         setRecalcJob((prev) => ({
           ...(prev || {}),
           status: 'completed',
@@ -183,6 +261,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
       const body = await readResponseBody(response);
       const dashboardJson = body.json;
       setDashboard(dashboardJson);
+      const responseDate = normalizeDateInput(dashboardJson?.marketContext?.checkinDate || '');
+      setSelectedCheckinDate(activeDate || responseDate);
       setRecalcJob({ status: 'completed', hotelId });
     } catch (err) {
       setRecalcJob((prev) => ({
@@ -269,7 +349,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
 
       const hotelId = String(pendingHotelId || selectedHotelId || dashboard?.hotelId || '').trim();
       if (hotelId) {
-        await loadDashboard(hotelId);
+        await loadDashboard(hotelId, selectedCheckinDate);
       }
     } catch (err) {
       setBetaAcceptError(err.message || 'Unable to record beta acceptance.');
@@ -278,8 +358,126 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     }
   }
 
+  async function loadManualSignals(city) {
+    const safeCity = String(city || '').trim();
+    if (!safeCity) {
+      setManualSignals([]);
+      return;
+    }
+    setManualSignalsLoading(true);
+    setManualSignalsError('');
+    try {
+      const params = new URLSearchParams({ city: safeCity, horizon_days: '45' });
+      const response = await fetch(`/admin/manual-signals/events?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+        },
+      });
+      if (!response.ok) {
+        const parsed = await parseServerError(response, 'Unable to load manual signals');
+        throw new Error(parsed.message);
+      }
+      const body = await readResponseBody(response);
+      setManualSignals(Array.isArray(body.json?.rows) ? body.json.rows : []);
+    } catch (err) {
+      setManualSignalsError(err.message || 'Unable to load manual signals.');
+      setManualSignals([]);
+    } finally {
+      setManualSignalsLoading(false);
+    }
+  }
+
+  async function handleManualSignalSubmit(event) {
+    event.preventDefault();
+    const activeHotelId = String(selectedHotelId || dashboard?.hotelId || '').trim();
+    const activeCity = String(dashboard?.city || '').trim();
+    if (!activeHotelId || !activeCity) {
+      setManualSignalsError('Select a hotel dashboard before adding manual signals.');
+      return;
+    }
+
+    const payload = {
+      city: activeCity,
+      event_name: String(manualSignalForm.event_name || '').trim(),
+      venue: String(manualSignalForm.venue || '').trim(),
+      start_date: normalizeDateInput(manualSignalForm.start_date || selectedCheckinDate),
+      end_date: normalizeDateInput(manualSignalForm.end_date || manualSignalForm.start_date || selectedCheckinDate),
+      category: String(manualSignalForm.category || 'conference').trim(),
+      scale: String(manualSignalForm.scale || 'medium').trim(),
+      confidence: String(manualSignalForm.confidence || 'confirmed').trim(),
+      impact_score: Number(manualSignalForm.impact_score || 12),
+      source: 'manual-ui',
+    };
+
+    if (!payload.event_name || !payload.start_date) {
+      setManualSignalsError('Event name and start date are required.');
+      return;
+    }
+
+    setManualSignalsSubmitting(true);
+    setManualSignalsError('');
+    try {
+      const response = await fetch('/admin/manual-signals/events', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const parsed = await parseServerError(response, 'Unable to save manual signal');
+        throw new Error(parsed.message);
+      }
+
+      setManualSignalForm((prev) => ({
+        ...prev,
+        event_name: '',
+        venue: '',
+        start_date: payload.start_date,
+        end_date: payload.end_date,
+      }));
+      await loadManualSignals(activeCity);
+      await handleRecalculate(activeHotelId, {
+        manualSignalOverrides: buildManualSignalOverridePayload(),
+      });
+      setToast({
+        type: 'success',
+        message: `Manual signal added for ${activeCity}: ${payload.event_name}`,
+        hotelId: activeHotelId,
+      });
+    } catch (err) {
+      setManualSignalsError(err.message || 'Unable to save manual signal.');
+    } finally {
+      setManualSignalsSubmitting(false);
+    }
+  }
+
+  async function handleApplyDateFilter() {
+    const activeHotelId = String(selectedHotelId || dashboard?.hotelId || '').trim();
+    if (!activeHotelId) return;
+    await loadDashboard(activeHotelId, selectedCheckinDate);
+  }
+
+  async function handleApplyManualSliders() {
+    const activeHotelId = String(selectedHotelId || dashboard?.hotelId || '').trim();
+    if (!activeHotelId) {
+      setManualSignalsError('Select a hotel dashboard before applying manual sliders.');
+      return;
+    }
+    setManualSignalsError('');
+    await handleRecalculate(activeHotelId, {
+      manualSignalOverrides: buildManualSignalOverridePayload(),
+    });
+  }
+
   const adminRole = session?.user?.role || '';
   const showAdminPanel = adminRole === 'super_admin' || adminRole === 'admin';
+  const scopedCity = String(dashboard?.city || '').trim();
+  const scopedCityKey = scopedCity.toLowerCase();
+  const isFocusPilotCity = scopedCityKey === 'goa' || scopedCityKey === 'mumbai';
+  const canManageManualSignals = showAdminPanel && isFocusPilotCity;
+  const canUseManualSliders = Boolean(dashboard);
   const scopeLabel =
     adminRole === 'super_admin'
       ? 'Scope: All hotels'
@@ -296,6 +494,21 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const recalcStatus = recalcJob?.status || '';
   const recalcInProgress = recalcStatus === 'queued' || recalcStatus === 'processing';
   const productLockEnabled = Boolean(dashboard?.productLock?.enabled);
+
+  useEffect(() => {
+    if (!canManageManualSignals) {
+      setManualSignals([]);
+      return;
+    }
+    loadManualSignals(scopedCity);
+    const fallbackDate = normalizeDateInput(dashboard?.marketContext?.checkinDate || '');
+    setManualSignalForm((prev) => ({
+      ...prev,
+      start_date: prev.start_date || selectedCheckinDate || fallbackDate,
+      end_date: prev.end_date || selectedCheckinDate || fallbackDate,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManageManualSignals, scopedCity, dashboard?.hotelId]);
 
   return (
     <main className="premiumShell">
@@ -355,6 +568,23 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
             <p className="metaLabel headerUser">
               {(session.user.full_name || session.user.email)}
             </p>
+            <div className="topbarDateSearch">
+              <label htmlFor="dashboard-checkin-date" className="metaLabel">Stay Date</label>
+              <input
+                id="dashboard-checkin-date"
+                type="date"
+                value={selectedCheckinDate}
+                onChange={(event) => setSelectedCheckinDate(normalizeDateInput(event.target.value))}
+              />
+              <button
+                type="button"
+                className="secondaryButton"
+                onClick={handleApplyDateFilter}
+                disabled={loading || (!selectedHotelId && !dashboard?.hotelId)}
+              >
+                Apply Date
+              </button>
+            </div>
             <button
               type="button"
               className="secondaryButton"
@@ -412,6 +642,262 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
                   Dismiss
                 </button>
               </div>
+            </section>
+          )}
+
+          {(canManageManualSignals || canUseManualSliders) && (
+            <section className="panel manualSignalPanel" aria-label="Manual signal controls">
+              <header className="panelHeader">
+                <h3>Manual Signal Controls ({scopedCity || 'Selected Hotel'})</h3>
+                <p className="metaLabel">
+                  {canManageManualSignals
+                    ? 'Add wedding/corporate/event signals manually for pilot runs, then auto-recalculate this hotel.'
+                    : 'Use sliders for what-if sensing on selected stay date.'}
+                </p>
+              </header>
+              <div className="topbarDateSearch manualDateSearch">
+                <label htmlFor="manual-panel-checkin-date" className="metaLabel">Stay Date</label>
+                <input
+                  id="manual-panel-checkin-date"
+                  type="date"
+                  value={selectedCheckinDate}
+                  onChange={(event) => setSelectedCheckinDate(normalizeDateInput(event.target.value))}
+                />
+                <button
+                  type="button"
+                  className="secondaryButton"
+                  onClick={handleApplyDateFilter}
+                  disabled={loading || (!selectedHotelId && !dashboard?.hotelId)}
+                >
+                  Apply Date
+                </button>
+              </div>
+              {canManageManualSignals && (
+                <form className="adminForm" onSubmit={handleManualSignalSubmit}>
+                  <div className="adminGrid">
+                    <label>
+                      Event Name
+                      <input
+                        value={manualSignalForm.event_name}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, event_name: event.target.value }))}
+                        placeholder="e.g. Goa Wedding Expo"
+                      />
+                    </label>
+                    <label>
+                      Venue
+                      <input
+                        value={manualSignalForm.venue}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, venue: event.target.value }))}
+                        placeholder="Optional"
+                      />
+                    </label>
+                    <label>
+                      Start Date
+                      <input
+                        type="date"
+                        value={manualSignalForm.start_date}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, start_date: normalizeDateInput(event.target.value) }))}
+                      />
+                    </label>
+                    <label>
+                      End Date
+                      <input
+                        type="date"
+                        value={manualSignalForm.end_date}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, end_date: normalizeDateInput(event.target.value) }))}
+                      />
+                    </label>
+                    <label>
+                      Category
+                      <select
+                        value={manualSignalForm.category}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, category: event.target.value }))}
+                      >
+                        <option value="wedding_season">Wedding</option>
+                        <option value="conference">Conference</option>
+                        <option value="exhibition">Exhibition</option>
+                        <option value="sports">Sports</option>
+                        <option value="festival">Festival</option>
+                        <option value="general">General</option>
+                      </select>
+                    </label>
+                    <label>
+                      Scale
+                      <select
+                        value={manualSignalForm.scale}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, scale: event.target.value }))}
+                      >
+                        <option value="small">Small</option>
+                        <option value="medium">Medium</option>
+                        <option value="large">Large</option>
+                        <option value="mega">Mega</option>
+                      </select>
+                    </label>
+                    <label>
+                      Confidence
+                      <select
+                        value={manualSignalForm.confidence}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, confidence: event.target.value }))}
+                      >
+                        <option value="tentative">Tentative</option>
+                        <option value="confirmed">Confirmed</option>
+                      </select>
+                    </label>
+                    <label>
+                      Impact Score
+                      <input
+                        type="number"
+                        min="0"
+                        max="40"
+                        value={manualSignalForm.impact_score}
+                        onChange={(event) => setManualSignalForm((prev) => ({ ...prev, impact_score: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="manualSignalActions">
+                    <button type="submit" disabled={manualSignalsSubmitting || loading}>
+                      {manualSignalsSubmitting ? 'Saving...' : 'Add Signal + Recalculate'}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondaryButton"
+                      onClick={() => loadManualSignals(scopedCity)}
+                      disabled={manualSignalsLoading}
+                    >
+                      {manualSignalsLoading ? 'Refreshing...' : 'Refresh Signals'}
+                    </button>
+                  </div>
+                </form>
+              )}
+              <div className="manualSliderPanel">
+                <h4>Manual Signal Sliders</h4>
+                <p className="metaLabel">Use for pilot what-if control on selected stay date.</p>
+                <div className="manualSliderGrid">
+                  <label>
+                    Competitor Score ({Number(manualSliderOverrides.competitorScore || 0)})
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.competitorScore}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, competitorScore: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Holiday Score ({Number(manualSliderOverrides.holidayScore || 0)})
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.holidayScore}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, holidayScore: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Event Share % ({Number(manualSliderOverrides.eventSharePct || 0)}%)
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.eventSharePct}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, eventSharePct: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Wedding Share % ({Number(manualSliderOverrides.weddingSharePct || 0)}%)
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.weddingSharePct}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, weddingSharePct: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Corporate Share % ({Number(manualSliderOverrides.corporateSharePct || 0)}%)
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.corporateSharePct}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, corporateSharePct: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Airfare Score ({Number(manualSliderOverrides.airfareScore || 0)})
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.airfareScore}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, airfareScore: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Season Score ({Number(manualSliderOverrides.seasonScore || 0)})
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={manualSliderOverrides.seasonScore}
+                      onChange={(event) =>
+                        setManualSliderOverrides((prev) => ({ ...prev, seasonScore: Number(event.target.value) }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="manualSignalActions">
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    onClick={handleApplyManualSliders}
+                    disabled={loading || recalcInProgress}
+                  >
+                    Apply Sliders + Recalculate
+                  </button>
+                </div>
+              </div>
+              {manualSignalsError ? <p className="errorText">{manualSignalsError}</p> : null}
+              {canManageManualSignals && !!manualSignals.length && (
+                <div className="tableWrap manualSignalsTableWrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Event</th>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Scale</th>
+                        <th>Impact</th>
+                        <th>Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {manualSignals.slice(0, 8).map((row) => (
+                        <tr key={`${row.id || row.event_name}-${row.start_date}`}>
+                          <td>{row.event_name || 'N/A'}</td>
+                          <td>{normalizeDateInput(row.start_date)}</td>
+                          <td>{row.category || 'general'}</td>
+                          <td>{row.scale || 'medium'}</td>
+                          <td>{Number(row.impact_score || 0).toFixed(2)}</td>
+                          <td>{row.source || 'manual-ui'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           )}
 

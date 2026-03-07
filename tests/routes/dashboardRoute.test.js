@@ -85,6 +85,12 @@ const mockGetRecalculationJobStatus = jest.fn(async () => ({
   attempts: 0,
   maxAttempts: 3,
 }));
+const mockMaybeRefreshOtaForDashboard = jest.fn(async () => ({
+  refreshed: false,
+  skipped: true,
+  reason: 'not_required',
+  dashboard: null,
+}));
 
 jest.unstable_mockModule('../../src/services/dashboardService.js', () => ({
   getDashboard: mockGetDashboard,
@@ -99,6 +105,10 @@ jest.unstable_mockModule('../../src/services/dashboardService.js', () => ({
 jest.unstable_mockModule('../../src/services/recalcQueueService.js', () => ({
   enqueueRecalculationJob: mockEnqueueRecalculationJob,
   getRecalculationJobStatus: mockGetRecalculationJobStatus,
+}));
+
+jest.unstable_mockModule('../../src/services/onDemandOtaRefreshService.js', () => ({
+  maybeRefreshOtaForDashboard: mockMaybeRefreshOtaForDashboard,
 }));
 
 const {
@@ -127,6 +137,10 @@ function buildRes() {
 }
 
 describe('dashboard controller output shape', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   test('getHotelDashboard returns required contract', async () => {
     const req = { params: { id: '11111111-1111-4111-8111-111111111111' } };
     const res = buildRes();
@@ -151,6 +165,30 @@ describe('dashboard controller output shape', () => {
     expect(res.body).toHaveProperty('performanceSummary');
     expect(res.body).toHaveProperty('otaParity');
     expect(res.body).toHaveProperty('lastUpdated');
+  });
+
+  test('getHotelDashboard allows forced live refresh', async () => {
+    const baseDashboard = await mockGetDashboard();
+    const refreshedDashboard = { ...baseDashboard, demandScore: 92.4 };
+    mockMaybeRefreshOtaForDashboard.mockResolvedValueOnce({
+      refreshed: true,
+      dashboard: refreshedDashboard,
+      reason: 'completed',
+    });
+
+    const req = {
+      params: { id: '11111111-1111-4111-8111-111111111111' },
+      query: { refresh: 'force' },
+      user: { id: 'u1', role: 'super_admin' },
+    };
+    const res = buildRes();
+    const next = jest.fn();
+
+    await getHotelDashboard(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockMaybeRefreshOtaForDashboard).toHaveBeenCalledTimes(1);
+    expect(res.body?.demandScore).toBe(92.4);
   });
 
   test('getHotelOtaParity returns parity payload', async () => {

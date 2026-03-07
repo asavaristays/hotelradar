@@ -106,6 +106,19 @@ const env = {
     process.env.ENABLE_WEDDING_SIGNAL_GENERATOR,
     true,
   ),
+  enableOnDemandOtaRefresh: parseBoolean(
+    process.env.ENABLE_ON_DEMAND_OTA_REFRESH,
+    false,
+  ),
+  otaCollectorCommand: readOptionalString('OTA_COLLECT_COMMAND', ''),
+  onDemandOtaRefreshTimeoutMs: parseNumber(
+    process.env.ON_DEMAND_OTA_REFRESH_TIMEOUT_MS,
+    45000,
+  ),
+  onDemandOtaRefreshCooldownSec: parseNumber(
+    process.env.ON_DEMAND_OTA_REFRESH_COOLDOWN_SEC,
+    180,
+  ),
   focusCities: parseCsv(process.env.FOCUS_CITIES, ['Goa', 'Mumbai']),
 
   migrationBaselineExisting: parseBoolean(process.env.MIGRATION_BASELINE_EXISTING, true),

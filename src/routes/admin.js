@@ -6,6 +6,7 @@ import {
   getCityList,
   getHolidayCalendarList,
   getHotelProfiles,
+  getManualSignalEvents,
   getPasswordResetRequestList,
   getSeasonProfileList,
   getStateList,
@@ -19,6 +20,7 @@ import {
   postAlertFeedback,
   postCity,
   postHotel,
+  postManualSignalEvent,
   postOutcomeCsvUpload,
   postRunNightlyCalibration,
   postResolvePasswordReset,
@@ -36,10 +38,12 @@ adminRouter.get('/admin/states', getStateList);
 adminRouter.get('/admin/cities', getCityList);
 adminRouter.get('/admin/season-profiles', getSeasonProfileList);
 adminRouter.get('/admin/holiday-calendars', getHolidayCalendarList);
+adminRouter.get('/admin/manual-signals/events', getManualSignalEvents);
 adminRouter.get('/admin/hotels', getHotelProfiles);
 adminRouter.post('/admin/states', requireRole('super_admin'), postState);
 adminRouter.post('/admin/season-profiles', requireRole('super_admin'), postSeasonProfile);
 adminRouter.post('/admin/cities', postCity);
+adminRouter.post('/admin/manual-signals/events', postManualSignalEvent);
 adminRouter.post('/admin/hotels', postHotel);
 adminRouter.patch('/admin/hotels/:id', patchHotelProfile);
 adminRouter.patch('/admin/hotels/:id/user', patchHotelUserProfile);

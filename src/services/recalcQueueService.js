@@ -91,6 +91,8 @@ export async function processNextRecalculationJob() {
       source: payload.source || job.source || 'queue',
       user_id: payload.user_id || job.requested_by || null,
       user_role: payload.user_role || null,
+      checkin_date: payload.checkin_date || null,
+      manual_signal_overrides: payload.manual_signal_overrides || null,
     });
 
     const summary = summarizeDashboard(dashboard);

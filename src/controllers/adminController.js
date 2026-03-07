@@ -18,6 +18,8 @@ import {
 } from '../repositories/adminRepository.js';
 import { listAuditLogs } from '../repositories/auditRepository.js';
 import { getCalibrationRows, upsertCalibrationSetting } from '../repositories/calibrationRepository.js';
+import { listUpcomingEventsByCity, upsertCityEvent } from '../repositories/eventRepository.js';
+import { assertCityInScope } from '../config/productScope.js';
 import { hashPassword } from '../services/authService.js';
 import { recalculateDashboard } from '../services/dashboardService.js';
 import {
@@ -39,6 +41,23 @@ function validatePriceBounds(body = {}) {
     error.status = 400;
     throw error;
   }
+}
+
+function parseIsoDate(value = '', fieldName = 'date') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const error = new Error(`${fieldName} must be in YYYY-MM-DD format.`);
+    error.status = 400;
+    throw error;
+  }
+  const parsed = new Date(`${raw}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw) {
+    const error = new Error(`${fieldName} must be a valid calendar date.`);
+    error.status = 400;
+    throw error;
+  }
+  return raw;
 }
 
 function normalizeHotelCreateError(error) {
@@ -288,6 +307,84 @@ export async function getHolidayCalendarList(req, res, next) {
   try {
     const rows = await listHolidayCalendars();
     return res.json(rows);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getManualSignalEvents(req, res, next) {
+  try {
+    const city = String(req.query.city || '').trim();
+    if (!city) {
+      const error = new Error('city is required.');
+      error.status = 400;
+      throw error;
+    }
+    assertCityInScope(city);
+    const horizonDays = Number(req.query.horizon_days || 45);
+    const rows = await listUpcomingEventsByCity(city, {
+      horizonDays: Number.isFinite(horizonDays) ? horizonDays : 45,
+    });
+    return res.json({
+      city,
+      count: Array.isArray(rows) ? rows.length : 0,
+      rows: Array.isArray(rows) ? rows : [],
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function postManualSignalEvent(req, res, next) {
+  try {
+    const payload = req.body || {};
+    const city = String(payload.city || '').trim();
+    if (!city) {
+      const error = new Error('city is required.');
+      error.status = 400;
+      throw error;
+    }
+    assertCityInScope(city);
+
+    const eventName = String(payload.event_name || payload.eventName || '').trim();
+    const venue = String(payload.venue || '').trim();
+    const startDate = parseIsoDate(payload.start_date || payload.startDate, 'start_date');
+    const endDate = parseIsoDate(payload.end_date || payload.endDate || startDate, 'end_date');
+
+    if (!eventName) {
+      const error = new Error('event_name is required.');
+      error.status = 400;
+      throw error;
+    }
+    if (!startDate) {
+      const error = new Error('start_date is required.');
+      error.status = 400;
+      throw error;
+    }
+    if (endDate < startDate) {
+      const error = new Error('end_date cannot be earlier than start_date.');
+      error.status = 400;
+      throw error;
+    }
+
+    const row = await upsertCityEvent({
+      city,
+      eventName,
+      venue,
+      startDate,
+      endDate,
+      category: payload.category || 'general',
+      scale: payload.scale || 'medium',
+      confidence: payload.confidence || 'confirmed',
+      impactScore: payload.impact_score ?? payload.impactScore ?? 8,
+      source: payload.source || 'manual-ui',
+      estimatedAttendance: payload.estimated_attendance ?? payload.estimatedAttendance ?? null,
+      eventUrl: payload.event_url || payload.eventUrl || null,
+      radiusImpactKm: payload.radius_impact_km ?? payload.radiusImpactKm ?? 15,
+      scrapedAt: new Date().toISOString(),
+    });
+
+    return res.status(201).json(row);
   } catch (error) {
     return next(error);
   }
