@@ -11,17 +11,22 @@ function normalizeBand(minValue, maxValue) {
   return min <= max ? { min, max } : { min: max, max: min };
 }
 
-function ensureOrderedBands(rawBands) {
-  const safe = normalizeBand(rawBands.safe.min, rawBands.safe.max);
+export function ensureOrderedBands(rawBands) {
+  const MIN_SAFE_WIDTH = 300;
+  const MIN_AGGRESSIVE_WIDTH = 500;
+  const MIN_PREMIUM_WIDTH = 800;
+
+  const safeSeed = normalizeBand(rawBands.safe.min, rawBands.safe.max);
+  const safe = normalizeBand(safeSeed.min, Math.max(safeSeed.max, safeSeed.min + MIN_SAFE_WIDTH));
   const aggressiveSeed = normalizeBand(rawBands.aggressive.min, rawBands.aggressive.max);
   const premiumSeed = normalizeBand(rawBands.premium.min, rawBands.premium.max);
 
   const aggressiveMin = Math.max(aggressiveSeed.min, safe.max);
-  const aggressiveMax = Math.max(aggressiveSeed.max, aggressiveMin + 50);
+  const aggressiveMax = Math.max(aggressiveSeed.max, aggressiveMin + MIN_AGGRESSIVE_WIDTH);
   const aggressive = normalizeBand(aggressiveMin, aggressiveMax);
 
   const premiumMin = Math.max(premiumSeed.min, aggressive.max);
-  const premiumMax = Math.max(premiumSeed.max, premiumMin + 50);
+  const premiumMax = Math.max(premiumSeed.max, premiumMin + MIN_PREMIUM_WIDTH);
   const premium = normalizeBand(premiumMin, premiumMax);
 
   return { safe, aggressive, premium };

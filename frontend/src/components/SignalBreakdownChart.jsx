@@ -7,6 +7,17 @@ const BASE_SIGNAL_META = [
   { key: 'seasonImpact', label: 'Season Impact', className: 'signal-season' },
 ];
 
+const SIGNAL_SENSITIVITY = {
+  competitorMomentum: 0.35,
+  holidayImpact: 0.55,
+  eventImpact: 0.7,
+  weddingImpact: 0.75,
+  corporateEventImpact: 0.65,
+  otherEventImpact: 0.5,
+  airfareImpact: 0.25,
+  seasonImpact: 0.2,
+};
+
 function formatPreviewDate(value) {
   if (!value) return 'N/A';
   const parsed = new Date(`${value}T00:00:00`);
@@ -14,11 +25,15 @@ function formatPreviewDate(value) {
   return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export default function SignalBreakdownChart({ signalBreakdown, preview = null, baseScore = 50 }) {
+export default function SignalBreakdownChart({
+  signalBreakdown,
+  preview = null,
+  baseScore = 50,
+  showHeading = true,
+}) {
   const previewScore = Number(preview?.score || 0);
   const safeBaseScore = Number(baseScore || 50);
-  const curveDelta = safeBaseScore > 0 ? (previewScore - safeBaseScore) / 50 : 0;
-  const previewMultiplier = preview ? clamp(1 + curveDelta, 0.55, 1.55) : 1;
+  const curveDelta = preview ? clamp((previewScore - safeBaseScore) / 100, -0.5, 0.5) : 0;
 
   const weddingImpact = Number(signalBreakdown?.weddingImpact || 0);
   const corporateEventImpact = Number(signalBreakdown?.corporateEventImpact || 0);
@@ -52,10 +67,21 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
       value: Number(signalBreakdown?.[meta.key] || 0),
     })),
   ];
+
+  const adjustPreviewValue = (entryKey, rawValue) => {
+    const baseValue = Number(rawValue || 0);
+    if (!preview) return baseValue;
+
+    const sensitivity = SIGNAL_SENSITIVITY[entryKey] ?? 0.35;
+    const adjusted = baseValue * (1 + curveDelta * sensitivity);
+    const floor = Math.sign(baseValue || 1) * curveDelta * sensitivity * 4;
+    return adjusted + floor;
+  };
+
   const entries = rawEntries.map((entry) => ({
     ...entry,
     baseValue: Number(entry.value || 0),
-    value: Number(entry.value || 0) * previewMultiplier,
+    value: adjustPreviewValue(entry.key, entry.value),
   }));
 
   const referenceMax = rawEntries.reduce((maxValue, entry) => {
@@ -69,14 +95,12 @@ export default function SignalBreakdownChart({ signalBreakdown, preview = null, 
 
   return (
     <section className={`panel signalPanel ${previewHint ? 'signalPanelPreview' : ''}`} aria-label="Signal breakdown chart">
-      <header className="panelHeader">
-        <h2>Signal Breakdown</h2>
-        {previewHint ? (
-          <p className="metaLabel signalPreviewMeta">
-            {previewHint} | Multiplier {previewMultiplier.toFixed(2)}x
-          </p>
-        ) : null}
-      </header>
+      {showHeading || previewHint ? (
+        <header className="panelHeader">
+          {showHeading ? <h2>Signal Breakdown</h2> : null}
+          {previewHint ? <p className="metaLabel signalPreviewMeta">{previewHint}</p> : null}
+        </header>
+      ) : null}
 
       <div className="signalRows">
         {entries.map((entry) => {

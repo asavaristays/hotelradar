@@ -62,7 +62,12 @@ export default function SuggestedPricingCard({
     available: revenueImpact?.available !== false,
     estimated: Boolean(revenueImpact?.estimated),
     reason: revenueImpact?.reason || '',
+    basis: revenueImpact?.basis || null,
   };
+  const allZeroProjection = revenue.maintain <= 0 && revenue.plus2 <= 0 && revenue.minus2 <= 0;
+  const showProjection = revenue.available && !allZeroProjection;
+  const projectionFallbackReason = revenue.reason || 'Insufficient data for revenue projection.';
+  const showBasis = showProjection && Number(revenue?.basis?.roomNights || 0) > 0;
 
   return (
     <section className={`panel pricingCard ${trendClass}`} aria-label="Suggested pricing card">
@@ -87,7 +92,7 @@ export default function SuggestedPricingCard({
       {/* Revenue impact block: 7-day deterministic projection for key pricing scenarios. */}
       <div className="bandCard" aria-label="Revenue impact projection">
         <p className="bandTitle">Revenue Impact (7-Day Projection)</p>
-        {revenue.available ? (
+        {showProjection ? (
           <>
             {/* Highlight only the recommended row with subtle typography emphasis. */}
             <p className="metaLabel" style={revenue.recommended === 'maintain' ? { fontWeight: 600 } : undefined}>
@@ -99,10 +104,16 @@ export default function SuggestedPricingCard({
             <p className="metaLabel" style={revenue.recommended === 'minus2' ? { fontWeight: 600 } : undefined}>
               -2% → {formatRevenue(revenue.minus2)}
             </p>
+            {showBasis ? (
+              <p className="metaLabel">
+                Basis: {Number(revenue.basis.assumedRooms || 0)} rooms × {Number(revenue.basis.baselineOccupancy || 0).toFixed(1)}%
+                occupancy × ADR ₹{formatCurrency(Number(revenue.basis.adrUsed || 0))} (7-day room-nights {Number(revenue.basis.roomNights || 0)}).
+              </p>
+            ) : null}
             {revenue.estimated && revenue.reason ? <p className="metaLabel">{revenue.reason}</p> : null}
           </>
         ) : (
-          <p className="metaLabel">{revenue.reason || 'Insufficient data for revenue projection.'}</p>
+          <p className="metaLabel">{projectionFallbackReason}</p>
         )}
       </div>
 

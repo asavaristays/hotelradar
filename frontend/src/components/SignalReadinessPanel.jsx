@@ -18,6 +18,13 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
+function formatStayDate(value) {
+  if (!value) return 'Not fixed yet';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function SignalReadinessPanel({ signalQuality, marketContext, lastScrapedAt }) {
   const summary =
     signalQuality?.summary ||
@@ -37,7 +44,7 @@ export default function SignalReadinessPanel({ signalQuality, marketContext, las
       <div className="snapshotList signalSnapshotList">
         <div>
           <span>Stay date basis</span>
-          <strong>{marketContext?.checkinDate || 'Not fixed yet'}</strong>
+          <strong>{formatStayDate(marketContext?.checkinDate)}</strong>
         </div>
         <div>
           <span>Competitor rows</span>

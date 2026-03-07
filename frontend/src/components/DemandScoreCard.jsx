@@ -1,10 +1,19 @@
 import { clamp, demandTone } from './dashboardUtils.js';
 
-export default function DemandScoreCard({ demandScore, demandLevel, confidence }) {
+export default function DemandScoreCard({ demandScore, demandLevel, confidence, signalQuality = null }) {
   const score = clamp(Number(demandScore || 0), 0, 100);
   const tone = demandTone(demandLevel);
   const confidenceLabel = confidence?.level || 'N/A';
   const confidenceScore = Number(confidence?.score || 0);
+  const sampleSize = Number(signalQuality?.sampleSize || 0);
+  const mode = String(signalQuality?.mode || '').toLowerCase();
+  const calibrationMode = mode === 'calibrating' || sampleSize < 7;
+  const verifyMode = mode === 'verify';
+  const confidenceText = verifyMode
+    ? 'Verify before acting'
+    : calibrationMode
+      ? 'Calibrating'
+      : `${confidenceLabel} (${confidenceScore})`;
 
   return (
     <section className={`panel demandCard demandCard-${tone}`} aria-label="Demand score card">
@@ -23,7 +32,7 @@ export default function DemandScoreCard({ demandScore, demandLevel, confidence }
       <div className="metaRow">
         <p className="metaLabel">Confidence</p>
         <p className="metaValue">
-          {confidenceLabel} ({confidenceScore})
+          {confidenceText}
         </p>
       </div>
       <p className="demandHint">

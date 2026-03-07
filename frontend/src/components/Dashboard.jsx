@@ -57,6 +57,13 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
+function formatStayDate(value) {
+  if (!value) return 'N/A';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function InsightsCard({ dashboard, viewerRole }) {
   const explanation = Array.isArray(dashboard.explanation) && dashboard.explanation.length
     ? dashboard.explanation
@@ -145,13 +152,22 @@ function ChangeSummaryCard({ changeSummary }) {
   );
 }
 
-function MobileSummaryStrip({ dashboard }) {
+function MobileSummaryStrip({ dashboard, signalQuality = null }) {
   const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
   const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
   const deltaAmount = suggestedPrice - currentPrice;
   const deltaPct = currentPrice > 0 ? (deltaAmount / currentPrice) * 100 : 0;
   const confidenceScore = Number(dashboard?.confidence?.score || 0);
-  const stayDate = dashboard?.marketContext?.checkinDate || 'N/A';
+  const stayDate = formatStayDate(dashboard?.marketContext?.checkinDate);
+  const sampleSize = Number(signalQuality?.sampleSize || 0);
+  const mode = String(signalQuality?.mode || '').toLowerCase();
+  const calibrationMode = mode === 'calibrating' || sampleSize < 7;
+  const verifyMode = mode === 'verify';
+  const confidenceDisplay = verifyMode
+    ? 'Verify'
+    : calibrationMode
+      ? 'Calibrating'
+      : `${dashboard.confidence?.level || 'Unknown'} (${confidenceScore.toFixed(0)})`;
 
   return (
     <section className="panel mobileSummaryStrip" aria-label="Mobile summary">
@@ -177,7 +193,7 @@ function MobileSummaryStrip({ dashboard }) {
       </div>
       <div>
         <span className="metaLabel">Confidence</span>
-        <strong>{dashboard.confidence?.level || 'Unknown'} ({confidenceScore.toFixed(0)})</strong>
+        <strong>{confidenceDisplay}</strong>
       </div>
       <div>
         <span className="metaLabel">Stay Date</span>
@@ -233,7 +249,7 @@ function PerformanceCard({ summary, signalQuality }) {
   );
 }
 
-function ExecutiveStrip({ dashboard, preview = null }) {
+function ExecutiveStrip({ dashboard, signalQuality = null }) {
   const score = Number(dashboard?.demandScore || 0).toFixed(1);
   const currentPrice = Number(dashboard?.marketPosition?.hotelPrice || 0);
   const suggestedPrice = Number(dashboard?.suggestedPricing?.base || 0);
@@ -242,12 +258,23 @@ function ExecutiveStrip({ dashboard, preview = null }) {
   const heat = Number(dashboard?.suggestedPricing?.marketHeat || 1);
   const confidenceScore = Number(dashboard?.confidence?.score || 0);
   const confidenceLabel = dashboard?.confidence?.level || 'Unknown';
-  const stayDate = dashboard?.marketContext?.checkinDate || 'N/A';
+  const stayDate = formatStayDate(dashboard?.marketContext?.checkinDate);
   const observedAt = formatTimestamp(dashboard?.marketContext?.observedAt || dashboard?.lastScrapedAt);
   const deltaDirection = deltaAmount > 0 ? 'Increase' : deltaAmount < 0 ? 'Reduce' : 'Hold';
-  const previewDate = preview?.date || null;
-  const previewStatus = preview?.statusLabel || '';
-  const previewRevenueDelta = Number(preview?.revenueDeltaPerRoom || 0);
+  const sampleSize = Number(signalQuality?.sampleSize || 0);
+  const mode = String(signalQuality?.mode || '').toLowerCase();
+  const calibrationMode = mode === 'calibrating' || sampleSize < 7;
+  const verifyMode = mode === 'verify';
+  const confidenceValue = verifyMode
+    ? 'Verify'
+    : calibrationMode
+      ? 'Calibrating'
+      : `${confidenceLabel} (${confidenceScore.toFixed(0)})`;
+  const confidenceNote = verifyMode
+    ? 'Signal verification required'
+    : calibrationMode
+      ? 'Verify before acting'
+      : 'Recommendation confidence';
 
   return (
     <section className="panel executiveStripPanel" aria-label="Executive decision strip">
@@ -281,19 +308,13 @@ function ExecutiveStrip({ dashboard, preview = null }) {
         </article>
         <article>
           <span>Confidence</span>
-          <strong>{confidenceLabel} ({confidenceScore.toFixed(0)})</strong>
-          <small>Recommendation confidence</small>
+          <strong>{confidenceValue}</strong>
+          <small>{confidenceNote}</small>
         </article>
       </div>
       <div className="executiveStripMeta">
         <span>Stay date: <strong>{stayDate}</strong></span>
         <span>Observed at: <strong>{observedAt}</strong></span>
-        {previewDate ? (
-          <span>
-            Curve preview: <strong>{previewDate}</strong> | <strong>{previewStatus}</strong> | Revenue delta:{' '}
-            <strong>{previewRevenueDelta >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(previewRevenueDelta))}/room</strong>
-          </span>
-        ) : null}
       </div>
     </section>
   );
@@ -370,14 +391,15 @@ export default function Dashboard({ dashboard, loading, error }) {
 
   return (
     <section id="hotel-dashboard-panel" className="dashboardLayout" aria-label="HotelRADAR dashboard">
-      <MobileSummaryStrip dashboard={dashboard} />
-      <ExecutiveStrip dashboard={dashboard} preview={curvePreview} />
+      <MobileSummaryStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} />
+      <ExecutiveStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} />
 
       <div className="row rowTop decisionRow">
         <DemandScoreCard
           demandScore={dashboard.demandScore}
           demandLevel={dashboard.demandLevel}
           confidence={dashboard.confidence}
+          signalQuality={dashboard.signalQuality}
         />
         <SuggestedPricingCard
           suggestedPricing={dashboard.suggestedPricing}
@@ -416,6 +438,7 @@ export default function Dashboard({ dashboard, loading, error }) {
             signalBreakdown={dashboard.signalBreakdown}
             preview={curvePreview}
             baseScore={Number(dashboard?.demandScore || 50)}
+            showHeading={false}
           />
         </details>
         <StabilityCard

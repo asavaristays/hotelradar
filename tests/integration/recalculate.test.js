@@ -100,6 +100,14 @@ describe('recalculateDashboard integration', () => {
     expect(dashboard.revenueImpact.plus2).toBeGreaterThan(0);
     expect(dashboard.revenueImpact.minus2).toBeGreaterThan(0);
     expect(['maintain', 'plus2', 'minus2']).toContain(dashboard.revenueImpact.recommended);
+    expect(dashboard.revenueImpact.basis).toEqual(
+      expect.objectContaining({
+        assumedRooms: expect.any(Number),
+        roomNights: expect.any(Number),
+        baselineOccupancy: expect.any(Number),
+        adrUsed: expect.any(Number),
+      }),
+    );
     expect(evaluateAlerts).toHaveBeenCalledTimes(1);
   });
 
@@ -225,5 +233,64 @@ describe('recalculateDashboard integration', () => {
     expect(dashboard.revenueImpact.maintain).toBeGreaterThan(0);
     expect(dashboard.revenueImpact.plus2).toBeGreaterThan(0);
     expect(dashboard.revenueImpact.minus2).toBeGreaterThan(0);
+  });
+
+  test('returns unavailable revenue impact when no ADR basis exists', async () => {
+    const deps = {
+      getHotelById: async () => ({
+        id: '11111111-1111-4111-8111-111111111111',
+        city: 'Goa',
+        hotel_name: 'Hotel Taj Goa',
+        alert_sensitivity: 'balanced',
+        room_count: 48,
+      }),
+      getLatestDemandScore: async () => null,
+      getLatestMarketCheckinDate: async () => ({
+        checkin_date: '2026-03-16',
+        observed_at: new Date().toISOString(),
+        hotel_rows: 0,
+      }),
+      getCompetitorRatesForHotel: async () => [],
+      getLatestHotelPrice: async () => 0,
+      getLatestCompetitorScrapeAt: async () => new Date().toISOString(),
+      getAirfareSeries: async () => buildAirfareSeries(),
+      getUpcomingHolidays: async () => [],
+      getUpcomingEvents: async () => [],
+      getCityWeights: async () => ({
+        competitor_weight: 0.45,
+        holiday_weight: 0.25,
+        airfare_weight: 0.2,
+        season_weight: 0.1,
+      }),
+      insertDemandScore: async (payload) => ({
+        demand_score: payload.demandScore,
+        level: payload.level,
+        recommendation: payload.recommendation,
+        explanation: payload.explanation,
+        market_position: payload.marketPosition,
+        signals: payload.signals,
+      }),
+      listActiveAlerts: async () => [],
+      evaluateAlerts: async () => ({ created: [], skipped: 0 }),
+      getMockCompetitorRates: async () => [],
+      getCalibration: async () => null,
+      getPreviousDemandScore: async () => null,
+      getCanaryOverride: async () => null,
+      getPerformance: async () => ({
+        direction_accuracy: 70,
+        alert_precision: 75,
+        position_improvement_pct: 5,
+        rolling_accuracy_30d: 68,
+        stability_deviation: 12,
+        sample_size: 9,
+      }),
+      getValidatedPerformance: async () => null,
+    };
+
+    const dashboard = await recalculateDashboard('11111111-1111-4111-8111-111111111111', {}, deps);
+    expect(dashboard.revenueImpact.available).toBe(false);
+    expect(dashboard.revenueImpact.maintain).toBe(0);
+    expect(dashboard.revenueImpact.plus2).toBe(0);
+    expect(dashboard.revenueImpact.minus2).toBe(0);
   });
 });

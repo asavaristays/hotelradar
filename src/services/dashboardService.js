@@ -35,7 +35,7 @@ import { buildForwardCurve } from './intelligence-engine/forwardCurveEngine.js';
 import { computeHolidayScore } from './intelligence-engine/holidayEngine.js';
 import { buildNarrative } from './intelligence-engine/narrativeEngine.js';
 import { updatePerformanceMetrics } from './intelligence-engine/performanceEngine.js';
-import { computePricingRecommendation } from './intelligence-engine/pricingEngine.js';
+import { computePricingRecommendation, ensureOrderedBands } from './intelligence-engine/pricingEngine.js';
 import { computeSeasonScore } from './intelligence-engine/seasonEngine.js';
 import { computeSignalBreakdown } from './intelligence-engine/signalBreakdownEngine.js';
 import { computeMarketStability } from './intelligence-engine/stabilityEngine.js';
@@ -123,24 +123,34 @@ function normalizeSuggestedPricing(raw) {
   const pricing = raw || {};
 
   const base = toFiniteNumber(pricing.base ?? pricing.basePrice, 0);
-  const normalizeBand = (band = {}) => ({
+  const parseBand = (band = {}) => ({
     min: toFiniteNumber(band.min, 0),
     max: toFiniteNumber(band.max, 0),
   });
+  const defaultBands = {
+    safe: { min: 0, max: 0 },
+    aggressive: { min: 0, max: 0 },
+    premium: { min: 0, max: 0 },
+  };
+  const parsedBands = pricing.bands
+    ? {
+        safe: parseBand(pricing.bands.safe),
+        aggressive: parseBand(pricing.bands.aggressive),
+        premium: parseBand(pricing.bands.premium),
+      }
+    : defaultBands;
+  const hasAnyBandValue =
+    parsedBands.safe.min > 0 ||
+    parsedBands.safe.max > 0 ||
+    parsedBands.aggressive.min > 0 ||
+    parsedBands.aggressive.max > 0 ||
+    parsedBands.premium.min > 0 ||
+    parsedBands.premium.max > 0;
+  const bands = hasAnyBandValue ? ensureOrderedBands(parsedBands) : defaultBands;
 
   return {
     base,
-    bands: pricing.bands
-      ? {
-          safe: normalizeBand(pricing.bands.safe),
-          aggressive: normalizeBand(pricing.bands.aggressive),
-          premium: normalizeBand(pricing.bands.premium),
-        }
-      : {
-          safe: { min: 0, max: 0 },
-          aggressive: { min: 0, max: 0 },
-          premium: { min: 0, max: 0 },
-        },
+    bands,
     riskLevel: pricing.riskLevel || 'Low',
     marketHeat: toFiniteNumber(pricing.marketHeat, 1),
   };
@@ -226,14 +236,36 @@ function buildRevenueImpact({
       simulation?.revenueScenarios?.find((entry) => entry?.scenario === scenarioName)?.projectedRevenue || 0,
     );
 
+  const maintain = round(findRevenue('Maintain price'), 0);
+  const plus2 = round(findRevenue('+2% price'), 0);
+  const minus2 = round(findRevenue('-2% price'), 0);
+  const allZero = maintain <= 0 && plus2 <= 0 && minus2 <= 0;
+  if (allZero) {
+    return {
+      maintain: 0,
+      plus2: 0,
+      minus2: 0,
+      recommended: actionToRecommendedScenario(action),
+      available: false,
+      estimated: true,
+      reason: 'Insufficient ADR data for revenue projection.',
+    };
+  }
+
   return {
-    maintain: round(findRevenue('Maintain price'), 0),
-    plus2: round(findRevenue('+2% price'), 0),
-    minus2: round(findRevenue('-2% price'), 0),
+    maintain,
+    plus2,
+    minus2,
     recommended: actionToRecommendedScenario(action),
     available: true,
     estimated,
     reason,
+    basis: {
+      assumedRooms: roomCount > 0 ? roomCount : 100,
+      roomNights,
+      baselineOccupancy: Number(simulation?.baselineOccupancy || 0),
+      adrUsed: round(currentADR, 0),
+    },
   };
 }
 
@@ -348,18 +380,38 @@ function summarizeAlerts(alerts = []) {
 
     const severity = normalizeAlertSeverity(alert?.severity);
     const key = `${severity}:${message.toLowerCase()}`;
+    const createdAt = alert?.created_at ? new Date(alert.created_at).toISOString() : null;
     if (!grouped.has(key)) {
       grouped.set(key, {
         severity,
         message,
         count: 1,
+        firstSeenAt: createdAt,
+        lastSeenAt: createdAt,
       });
     } else {
-      grouped.get(key).count += 1;
+      const entry = grouped.get(key);
+      entry.count += 1;
+      if (createdAt) {
+        if (!entry.firstSeenAt || new Date(createdAt).getTime() < new Date(entry.firstSeenAt).getTime()) {
+          entry.firstSeenAt = createdAt;
+        }
+        if (!entry.lastSeenAt || new Date(createdAt).getTime() > new Date(entry.lastSeenAt).getTime()) {
+          entry.lastSeenAt = createdAt;
+        }
+      }
     }
   }
 
-  return Array.from(grouped.values());
+  return Array.from(grouped.values()).map((entry) => {
+    if (entry.severity === 'MEDIUM' || entry.severity === 'LOW' || entry.severity === 'INFO') {
+      return {
+        ...entry,
+        count: 1,
+      };
+    }
+    return entry;
+  });
 }
 
 function formatAlertSummary(alert) {
@@ -435,10 +487,13 @@ function buildChangeSummary(currentRecord, previousRecord) {
   const levelChanged = currentRecord.level !== previousRecord.level;
 
   const direction = scoreDelta > 0 ? 'up' : scoreDelta < 0 ? 'down' : 'flat';
-  const summary =
+  let summary =
     direction === 'flat'
       ? `Demand score is unchanged at ${currentScore.toFixed(2)}.`
       : `Demand score moved ${direction} by ${Math.abs(scoreDelta).toFixed(2)} points since the last snapshot.`;
+  if (direction !== 'flat' && Math.abs(positionDelta) < 0.01) {
+    summary = `${summary} Market position is unchanged because hotel and market rates remained stable for the selected stay date.`;
+  }
 
   return {
     hasPrevious: true,

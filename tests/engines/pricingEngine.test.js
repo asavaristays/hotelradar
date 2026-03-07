@@ -100,5 +100,8 @@ describe('pricingEngine', () => {
 
     expect(result.bands.safe.max).toBeLessThanOrEqual(result.bands.aggressive.min);
     expect(result.bands.aggressive.max).toBeLessThanOrEqual(result.bands.premium.min);
+    expect(result.bands.safe.max - result.bands.safe.min).toBeGreaterThanOrEqual(300);
+    expect(result.bands.aggressive.max - result.bands.aggressive.min).toBeGreaterThanOrEqual(500);
+    expect(result.bands.premium.max - result.bands.premium.min).toBeGreaterThanOrEqual(800);
   });
 });
