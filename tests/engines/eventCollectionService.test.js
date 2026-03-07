@@ -99,12 +99,14 @@ describe('eventCollectionService', () => {
   test('uses html fallback parsing for linkedin-like pages without json-ld', async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'event-collector-linkedin-'));
     const outputPath = path.join(tmpDir, 'latest.json');
+    const missingHintsPath = path.join(tmpDir, 'missing_hints.json');
     const html = `<html><head><title>Mumbai Corporate Planning Meetup | LinkedIn</title></head><body><p>Event date 2026-04-21</p></body></html>`;
 
     const summary = await runEventCollectionCycle(
       {
         outputPath,
         includeWeddingSignals: false,
+        linkedinHintsFile: missingHintsPath,
         sources: [
           {
             city: 'Mumbai',
@@ -122,6 +124,7 @@ describe('eventCollectionService', () => {
     );
 
     expect(summary.rowsWritten).toBe(1);
+    expect(summary.linkedinHintsAdded).toBe(0);
     const output = JSON.parse(await fs.readFile(outputPath, 'utf8'));
     expect(output[0].city).toBe('Mumbai');
     expect(output[0].category).toBe('conference');
