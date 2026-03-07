@@ -12,7 +12,7 @@ import {
   getPreviousDemandScore,
   insertDemandScore,
 } from '../repositories/demandRepository.js';
-import { getPerformance } from '../repositories/performanceRepository.js';
+import { getPerformance, getValidatedPerformance } from '../repositories/performanceRepository.js';
 import { getCanaryOverride, getModelVersionById } from '../repositories/calibrationFasttrackRepository.js';
 import {
   getAirfareSeries,
@@ -63,6 +63,7 @@ const defaultDeps = {
   getPreviousDemandScore,
   insertDemandScore,
   getPerformance,
+  getValidatedPerformance,
   listActiveAlerts,
   upsertDataHealthIssue,
   resolveInactiveDataHealthIssues,
@@ -195,6 +196,7 @@ function normalizePerformanceSummary(raw) {
       stabilityDeviation: 0,
       sampleSize: 0,
       updatedAt: null,
+      source: 'unavailable',
     };
   }
   return {
@@ -205,6 +207,35 @@ function normalizePerformanceSummary(raw) {
     stabilityDeviation: Number(raw.stabilityDeviation ?? raw.stability_deviation ?? 0),
     sampleSize: Number(raw.sampleSize ?? raw.sample_size ?? 0),
     updatedAt: raw.updatedAt ?? raw.updated_at ?? null,
+    source: raw.source || 'operational',
+  };
+}
+
+function mergePerformanceSummary(operationalRaw, validatedRaw) {
+  const operational = normalizePerformanceSummary(operationalRaw);
+  const validated = normalizePerformanceSummary(validatedRaw);
+
+  if (validatedRaw) {
+    return {
+      ...operational,
+      directionAccuracy: validated.directionAccuracy,
+      rollingAccuracy30d: validated.rollingAccuracy30d,
+      stabilityDeviation: validated.stabilityDeviation,
+      sampleSize: validated.sampleSize,
+      updatedAt: validated.updatedAt || operational.updatedAt,
+      source: validated.source || 'validated_outcomes',
+      directionSamples: Number(validatedRaw.directionSamples || 0),
+    };
+  }
+
+  // No validated outcomes yet: keep operational secondary KPIs but suppress forecast-accuracy claims.
+  return {
+    ...operational,
+    directionAccuracy: 0,
+    rollingAccuracy30d: 0,
+    stabilityDeviation: 0,
+    sampleSize: 0,
+    source: 'no_validated_outcomes',
   };
 }
 
@@ -668,7 +699,16 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     marketPosition,
     calibration,
   });
-  const performanceSummary = await performanceGetter(hotel.id);
+  const [performanceSummaryRaw, validatedPerformanceSummary] = await Promise.all([
+    performanceGetter(hotel.id),
+    deps.getValidatedPerformance
+      ? deps.getValidatedPerformance(hotel.id, 60)
+      : Promise.resolve(null),
+  ]);
+  const performanceSummary = mergePerformanceSummary(
+    performanceSummaryRaw,
+    validatedPerformanceSummary,
+  );
   const modelVersion =
     canaryOverride?.model_version_id && deps.getModelVersionById
       ? await deps.getModelVersionById(canaryOverride.model_version_id)
@@ -948,27 +988,13 @@ export async function getAlerts(hotelId, deps = defaultDeps) {
 }
 
 export async function getPerformanceSummary(hotelId, deps = defaultDeps) {
-  const row = await (deps.getPerformance || (async () => null))(hotelId);
-  if (!row) {
-    return {
-      directionAccuracy: 0,
-      alertPrecision: 0,
-      positionImprovementPct: 0,
-      rollingAccuracy30d: 0,
-      stabilityDeviation: 0,
-      sampleSize: 0,
-      updatedAt: null,
-    };
-  }
-  return {
-    directionAccuracy: Number(row.direction_accuracy),
-    alertPrecision: Number(row.alert_precision),
-    positionImprovementPct: Number(row.position_improvement_pct),
-    rollingAccuracy30d: Number(row.rolling_accuracy_30d),
-    stabilityDeviation: Number(row.stability_deviation),
-    sampleSize: Number(row.sample_size),
-    updatedAt: row.updated_at,
-  };
+  const [operationalRow, validatedRow] = await Promise.all([
+    (deps.getPerformance || (async () => null))(hotelId),
+    deps.getValidatedPerformance
+      ? deps.getValidatedPerformance(hotelId, 60)
+      : Promise.resolve(null),
+  ]);
+  return mergePerformanceSummary(operationalRow, validatedRow);
 }
 
 export async function getDataHealth(hotelId, context = {}, deps = defaultDeps) {
