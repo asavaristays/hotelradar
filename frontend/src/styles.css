@@ -112,6 +112,11 @@ body {
   margin-bottom: 12px;
 }
 
+.gridMetaBlock {
+  display: grid;
+  gap: 4px;
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -747,6 +752,10 @@ button:disabled {
 .snapshotList {
   display: grid;
   gap: 10px;
+}
+
+.signalSnapshotList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .snapshotList div {
@@ -1868,6 +1877,10 @@ button {
 @media (max-width: 768px) {
   .executiveStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .signalSnapshotList {
+    grid-template-columns: 1fr;
   }
 
   .forwardHoverCard {

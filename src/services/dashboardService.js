@@ -18,6 +18,7 @@ import {
   getAirfareSeries,
   getCityWeights,
   getCompetitorRatesForHotel,
+  getLatestMarketCheckinDate,
   getLatestCompetitorScrapeAt,
   getLatestHotelPrice,
   getUpcomingHolidays,
@@ -41,6 +42,7 @@ import { evaluateAlerts } from './alertService.js';
 import { computeMarketPosition } from './marketPositionService.js';
 import { computeOtaParity } from './otaParityService.js';
 import { computeDataHealthSnapshot } from './dataHealthService.js';
+import { splitRateRows } from './rateSourceService.js';
 import { average, clamp, round } from '../utils/math.js';
 import { getMockCompetitorRates } from '../../mock/mockScraper.js';
 
@@ -52,6 +54,7 @@ const defaultDeps = {
   getAirfareSeries,
   getUpcomingHolidays,
   getCityWeights,
+  getLatestMarketCheckinDate,
   getLatestCompetitorScrapeAt,
   getLatestDemandScore,
   getPreviousDemandScore,
@@ -118,6 +121,16 @@ function normalizeSuggestedPricing(raw) {
   };
 }
 
+function normalizeMarketContext(raw = {}) {
+  return {
+    checkinDate: raw?.checkinDate || null,
+    observedAt: raw?.observedAt || null,
+    hotelRows: Number(raw?.hotelRows || 0),
+    competitorRows: Number(raw?.competitorRows || 0),
+    otaRows: Number(raw?.otaRows || 0),
+  };
+}
+
 function normalizePerformanceSummary(raw) {
   if (!raw) {
     return {
@@ -158,12 +171,28 @@ function normalizeModelVersion(raw) {
   };
 }
 
-function buildActionSummary(record, marketPosition) {
+function buildActionSummary(record, marketPosition, signalQuality = null) {
   const level = record.level || 'Moderate';
   const recommendation = record.recommendation || {};
   const action = recommendation.action || 'maintain';
   const confidence = Number(record.confidence || 0);
   const positionPct = Number(marketPosition?.positionPct || 0);
+
+  if (signalQuality?.mode === 'verify') {
+    return {
+      title: 'Verify Market Before Acting',
+      message: signalQuality.summary,
+      action: 'verify',
+    };
+  }
+
+  if (signalQuality?.mode === 'calibrating') {
+    return {
+      title: 'Calibration In Progress',
+      message: signalQuality.summary,
+      action: 'calibrating',
+    };
+  }
 
   if (action === 'increase') {
     return {
@@ -277,6 +306,7 @@ function toDashboardContract({
   modelVersion,
   otaParity,
   dataHealth,
+  marketContext,
 }) {
   const explanation = Array.isArray(record.explanation)
     ? record.explanation
@@ -304,11 +334,13 @@ function toDashboardContract({
     signalBreakdown,
     forwardCurve,
     narrative,
-    actionSummary: buildActionSummary(record, record.market_position),
+    actionSummary: buildActionSummary(record, record.market_position, dataHealth?.signalQuality),
     changeSummary: buildChangeSummary(record, previousRecord),
     competitiveGrid,
     otaParity: otaParity || null,
     dataHealth: dataHealth || null,
+    signalQuality: dataHealth?.signalQuality || null,
+    marketContext: normalizeMarketContext(marketContext),
     explanation,
     alerts: alerts.map((alert) => `${String(alert.severity || '').toUpperCase()}: ${alert.message}`),
     performanceSummary: normalizedPerf,
@@ -350,7 +382,42 @@ async function fetchCompetitorRatesWithFallback(hotelInput, deps) {
   return [];
 }
 
-export async function getCompetitiveGrid(hotelId, deps = defaultDeps) {
+async function loadMarketScope(hotel, deps = defaultDeps) {
+  const latestMarketCheckin = deps.getLatestMarketCheckinDate
+    ? await deps.getLatestMarketCheckinDate(hotel.id)
+    : null;
+  const checkinDate = latestMarketCheckin?.checkin_date || null;
+
+  const [allRates, hotelPriceRaw, lastScrapedAt] = await Promise.all([
+    fetchCompetitorRatesWithFallback(hotel, {
+      ...deps,
+      getCompetitorRatesForHotel: (hotelId) =>
+        deps.getCompetitorRatesForHotel(hotelId, { checkinDate }),
+    }),
+    deps.getLatestHotelPrice(hotel.id, { checkinDate }),
+    deps.getLatestCompetitorScrapeAt
+      ? deps.getLatestCompetitorScrapeAt(hotel.id, { checkinDate })
+      : Promise.resolve(null),
+  ]);
+
+  const segmented = splitRateRows(allRates);
+  const observedAt = latestMarketCheckin?.observed_at || lastScrapedAt || null;
+
+  return {
+    checkinDate,
+    observedAt: observedAt ? new Date(observedAt).toISOString() : null,
+    hotelRows: Number(latestMarketCheckin?.hotel_rows || 0),
+    competitorRows: segmented.hotelCompetitorRates.length,
+    otaRows: segmented.otaParityRates.length,
+    allRates,
+    hotelCompetitorRates: segmented.hotelCompetitorRates,
+    otaParityRates: segmented.otaParityRates,
+    hotelPriceRaw,
+    lastScrapedAt,
+  };
+}
+
+export async function getCompetitiveGrid(hotelId, deps = defaultDeps, preloadedScope = null) {
   const hotel = await deps.getHotelById(hotelId);
   if (!hotel) {
     const error = new Error('Hotel not found');
@@ -358,10 +425,9 @@ export async function getCompetitiveGrid(hotelId, deps = defaultDeps) {
     throw error;
   }
 
-  const [competitorRates, hotelPriceRaw] = await Promise.all([
-    fetchCompetitorRatesWithFallback(hotel, deps),
-    deps.getLatestHotelPrice(hotel.id),
-  ]);
+  const marketScope = preloadedScope || (await loadMarketScope(hotel, deps));
+  const competitorRates = marketScope.hotelCompetitorRates;
+  const hotelPriceRaw = marketScope.hotelPriceRaw;
 
   const hotelPrice = Number(hotelPriceRaw || 0);
   const competitorPrices = competitorRates.map((row) => Number(row.price_today || 0)).filter((price) => price > 0);
@@ -458,15 +524,16 @@ async function buildDerivedIntelligence({
 
 async function buildDashboardResponse(hotel, record, deps, preloaded = {}, context = {}) {
   const performanceGetter = deps.getPerformance || (async () => null);
-  const [competitorRates, airfareSeries, holidays, cityWeights, alerts, competitiveGrid, calibration, lastScrapedAt, previousRecord, canaryOverride] = await Promise.all([
-    preloaded.competitorRates || fetchCompetitorRatesWithFallback(hotel, deps),
+  const marketScope = preloaded.marketScope || (await loadMarketScope(hotel, deps));
+  const competitorRates = preloaded.competitorRates || marketScope.hotelCompetitorRates;
+  const otaParityRates = preloaded.otaParityRates || marketScope.otaParityRates;
+  const [airfareSeries, holidays, cityWeights, alerts, competitiveGrid, calibration, previousRecord, canaryOverride] = await Promise.all([
     preloaded.airfareSeries || deps.getAirfareSeries(hotel.city),
     preloaded.holidays || deps.getUpcomingHolidays(hotel.city),
     preloaded.cityWeights || deps.getCityWeights(hotel.city),
     deps.listActiveAlerts(hotel.id, 20),
-    getCompetitiveGrid(hotel.id, deps),
+    getCompetitiveGrid(hotel.id, deps, marketScope),
     preloaded.calibration || (deps.getCalibration ? deps.getCalibration() : Promise.resolve(DEFAULT_CALIBRATION)),
-    deps.getLatestCompetitorScrapeAt ? deps.getLatestCompetitorScrapeAt(hotel.id) : Promise.resolve(null),
     preloaded.previousRecord ||
       (deps.getPreviousDemandScore
         ? deps.getPreviousDemandScore(hotel.id, record.id || null)
@@ -498,10 +565,10 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
       : null;
   const otaParity = computeOtaParity({
     hotelPrice: marketPosition.hotelPrice,
-    competitorRates,
+    competitorRates: otaParityRates,
     parityThresholdPct: Number(calibration?.global?.thresholds?.otaParityParityBand || 2),
     alertThresholdPct: Number(calibration?.global?.thresholds?.otaParityGap || 5),
-    lastScrapedAt,
+    lastScrapedAt: marketScope.lastScrapedAt,
     marketAvgPrice: marketPosition.marketAvg,
     allowEstimateFallback: env.allowEstimatedOtaParity,
   });
@@ -511,8 +578,9 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
       viewerRole: context.user_role || 'hotel_user',
       calibration,
       competitorRates,
+      otaParityRates,
       airfareSeries,
-      lastScrapedAt,
+      lastScrapedAt: marketScope.lastScrapedAt,
       otaParity,
       confidence: derived.confidence,
       marketStability: derived.marketStability,
@@ -538,11 +606,12 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     narrative: derived.narrative,
     performanceSummary,
     viewerRole: context.user_role || null,
-    lastScrapedAt,
+    lastScrapedAt: marketScope.lastScrapedAt,
     previousRecord,
     modelVersion,
     otaParity,
     dataHealth,
+    marketContext: marketScope,
   });
 }
 
@@ -557,10 +626,12 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
     throw error;
   }
 
-  const competitorRates = await fetchCompetitorRatesWithFallback(hotel, deps);
+  const marketScope = await loadMarketScope(hotel, deps);
+  const competitorRates = marketScope.hotelCompetitorRates;
+  const otaParityRates = marketScope.otaParityRates;
 
   const [hotelPriceRaw, airfareSeries, holidays, cityWeights, previousDemand, calibration, canaryOverride] = await Promise.all([
-    deps.getLatestHotelPrice(hotel.id),
+    Promise.resolve(marketScope.hotelPriceRaw),
     deps.getAirfareSeries(hotel.city),
     deps.getUpcomingHolidays(hotel.city),
     deps.getCityWeights(hotel.city),
@@ -609,10 +680,10 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
   const marketPosition = computeMarketPosition(hotelPriceRaw, competitorRates);
   const otaParity = computeOtaParity({
     hotelPrice: marketPosition.hotelPrice,
-    competitorRates,
+    competitorRates: otaParityRates,
     parityThresholdPct: Number(calibration?.global?.thresholds?.otaParityParityBand || 2),
     alertThresholdPct: Number(calibration?.global?.thresholds?.otaParityGap || 5),
-    lastScrapedAt: null,
+    lastScrapedAt: marketScope.lastScrapedAt,
     marketAvgPrice: marketPosition.marketAvg,
     allowEstimateFallback: env.allowEstimatedOtaParity,
   });
@@ -711,7 +782,9 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
     demandRecord,
     deps,
     {
+      marketScope,
       competitorRates,
+      otaParityRates,
       airfareSeries,
       holidays,
       cityWeights: weights,
@@ -799,12 +872,12 @@ export async function getOtaParity(hotelId, deps = defaultDeps) {
     throw error;
   }
 
-  const [competitorRates, hotelPriceRaw, calibration, lastScrapedAt] = await Promise.all([
-    fetchCompetitorRatesWithFallback(hotel, deps),
-    deps.getLatestHotelPrice(hotel.id),
+  const [marketScope, calibration] = await Promise.all([
+    loadMarketScope(hotel, deps),
     deps.getCalibration ? deps.getCalibration() : getCalibration(),
-    deps.getLatestCompetitorScrapeAt ? deps.getLatestCompetitorScrapeAt(hotel.id) : Promise.resolve(null),
   ]);
+  const competitorRates = marketScope.otaParityRates;
+  const hotelPriceRaw = marketScope.hotelPriceRaw;
 
   const marketAvg = average(
     competitorRates
@@ -817,7 +890,7 @@ export async function getOtaParity(hotelId, deps = defaultDeps) {
     competitorRates,
     parityThresholdPct: Number(calibration?.global?.thresholds?.otaParityParityBand || 2),
     alertThresholdPct: Number(calibration?.global?.thresholds?.otaParityGap || 5),
-    lastScrapedAt,
+    lastScrapedAt: marketScope.lastScrapedAt,
     marketAvgPrice: Number.isFinite(marketAvg) ? marketAvg : Number(hotelPriceRaw || 0),
     allowEstimateFallback: env.allowEstimatedOtaParity,
   });

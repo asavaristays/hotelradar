@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { parseServerError, readResponseBody } from '../http.js';
 
 const PROFILE_PAGE_SIZE = 25;
 
@@ -70,24 +71,12 @@ async function requestJson(path, token, options = {}) {
   });
 
   if (!response.ok) {
-    let message = '';
-    try {
-      const payload = await response.json();
-      const actor =
-        payload?.committedBy === 'user'
-          ? 'User Error'
-          : payload?.committedBy === 'system'
-            ? 'System Error'
-            : '';
-      const base = payload?.error || '';
-      message = actor ? `${actor}: ${base}` : base;
-    } catch {
-      message = await response.text();
-    }
-    throw new Error(message || `Request failed (${response.status})`);
+    const parsed = await parseServerError(response, 'Request failed');
+    throw new Error(parsed.message || `Request failed (${response.status})`);
   }
 
-  return response.json();
+  const body = await readResponseBody(response);
+  return body.json ?? null;
 }
 
 function formatDateTime(value) {

@@ -107,6 +107,8 @@ describe('dataHealthService', () => {
         airfareSeries: Array.from({ length: 10 }, (_, i) => ({ id: i })),
         lastScrapedAt: new Date().toISOString(),
         otaParity: {
+          sourceStatus: 'scraped',
+          rows: [{ channel: 'Booking.com', otaPrice: 10100, estimated: false, status: 'In Parity' }],
           parityThresholdPct: 2,
           alertThresholdPct: 5,
           summary: { maxAbsGapPct: 1.2 },
@@ -122,5 +124,12 @@ describe('dataHealthService', () => {
     expect(second.issueCounts.open).toBe(0);
     expect(second.issueCounts.resolved).toBeGreaterThan(0);
     expect(Array.isArray(second.resolvedRecently)).toBe(true);
+    expect(second.signalQuality).toEqual(
+      expect.objectContaining({
+        grade: expect.any(String),
+        mode: expect.any(String),
+        summary: expect.any(String),
+      }),
+    );
   });
 });

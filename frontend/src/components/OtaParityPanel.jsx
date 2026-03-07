@@ -13,19 +13,30 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
-export default function OtaParityPanel({ otaParity }) {
+export default function OtaParityPanel({ otaParity, marketContext }) {
   const rows = Array.isArray(otaParity?.rows) ? otaParity.rows : [];
   const summary = otaParity?.summary || {};
+  const sourceStatus = otaParity?.sourceStatus || 'missing';
+  const statusCopy =
+    sourceStatus === 'scraped'
+      ? 'Live OTA channel pricing captured for the current stay date.'
+      : sourceStatus === 'estimated'
+        ? 'Showing estimated OTA parity fallback until live channel pricing is captured.'
+        : 'No live OTA pricing feed configured for the current stay date.';
 
   return (
     <section className="panel otaParityPanel" aria-label="OTA parity">
       <header className="panelHeader">
         <h2>OTA Parity</h2>
-        <p className="metaLabel">Last scraped: {formatTimestamp(otaParity?.lastScrapedAt)}</p>
+        <p className="metaLabel">
+          Stay date: {marketContext?.checkinDate || 'N/A'} | Last scraped: {formatTimestamp(otaParity?.lastScrapedAt)}
+        </p>
       </header>
 
+      <p className="metaLabel">{statusCopy}</p>
+
       {!rows.length ? (
-        <p className="metaLabel">No OTA pricing feed configured yet.</p>
+        <p className="metaLabel">No OTA channel rows are available yet.</p>
       ) : (
         <>
           <div className="tableWrap desktopOnly">

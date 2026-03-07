@@ -60,14 +60,22 @@ function computeStatuses(metrics, rules) {
         : 'Stale';
 
   const otaParityStatus =
-    metrics.otaMaxGapPct <= metrics.otaParityBand
-      ? 'In Parity'
-      : metrics.otaMaxGapPct <= metrics.otaAlertThreshold
-        ? 'Watch'
-        : 'Mismatch';
+    metrics.otaSourceStatus === 'missing'
+      ? 'Unavailable'
+      : metrics.otaSourceStatus === 'estimated'
+        ? 'Estimated'
+        : metrics.otaMaxGapPct <= metrics.otaParityBand
+          ? 'In Parity'
+          : metrics.otaMaxGapPct <= metrics.otaAlertThreshold
+            ? 'Watch'
+            : 'Mismatch';
 
   const signalConsistency =
-    metrics.confidenceScore >= 75 && metrics.marketVolatility <= 55
+    metrics.competitorRows >= rules.minCompetitorRows &&
+    metrics.scrapeFreshnessHours != null &&
+    metrics.scrapeFreshnessHours <= rules.staleScrapeHours &&
+    metrics.confidenceScore >= 75 &&
+    metrics.marketVolatility <= 55
       ? 'Strong'
       : metrics.confidenceScore >= rules.minConfidenceScore
         ? 'Moderate'
@@ -120,7 +128,31 @@ function detectIssues(metrics, rules) {
     );
   }
 
-  if (metrics.otaMaxGapPct > metrics.otaAlertThreshold) {
+  if (metrics.otaSourceStatus === 'missing') {
+    issues.push(
+      issue(
+        'missing_ota_feed',
+        'OTA Feed Missing',
+        'medium',
+        'No live OTA channel rows were captured for the selected stay date.',
+        { otaRows: metrics.otaRows, otaLiveRows: metrics.otaLiveRows },
+      ),
+    );
+  }
+
+  if (metrics.otaSourceStatus === 'estimated') {
+    issues.push(
+      issue(
+        'estimated_ota_feed',
+        'OTA Parity Using Estimated Fallback',
+        'medium',
+        'OTA parity is using estimated market fallback instead of live OTA channel rows.',
+        { otaRows: metrics.otaRows, otaLiveRows: metrics.otaLiveRows },
+      ),
+    );
+  }
+
+  if (metrics.otaSourceStatus === 'scraped' && metrics.otaMaxGapPct > metrics.otaAlertThreshold) {
     issues.push(
       issue(
         'ota_parity_mismatch',
@@ -179,6 +211,83 @@ function detectIssues(metrics, rules) {
   return issues;
 }
 
+function buildSignalQuality(metrics, rules) {
+  const freshnessKnown = metrics.scrapeFreshnessHours != null;
+  const freshnessOk = freshnessKnown && metrics.scrapeFreshnessHours <= rules.staleScrapeHours;
+  const competitorOk = metrics.competitorRows >= rules.minCompetitorRows;
+  const confidenceOk = metrics.confidenceScore >= rules.minConfidenceScore;
+  const calibrationReady = metrics.sampleSize >= rules.minSampleForAccuracy;
+
+  const blockers = [];
+  const cautions = [];
+
+  if (!competitorOk) {
+    blockers.push(`${metrics.competitorRows}/${rules.minCompetitorRows} competitor rows captured`);
+  }
+  if (!freshnessKnown) {
+    blockers.push('scrape freshness is unknown');
+  } else if (!freshnessOk) {
+    blockers.push(`last scrape is ${metrics.scrapeFreshnessHours}h old`);
+  }
+  if (!calibrationReady) {
+    blockers.push(`${metrics.sampleSize}/${rules.minSampleForAccuracy} validated snapshots`);
+  }
+
+  if (metrics.otaSourceStatus === 'missing') {
+    cautions.push('no live OTA feed for the selected stay date');
+  } else if (metrics.otaSourceStatus === 'estimated') {
+    cautions.push('OTA parity is still using estimated fallback');
+  }
+
+  if (!confidenceOk) {
+    cautions.push(`confidence ${metrics.confidenceScore} is below target ${rules.minConfidenceScore}`);
+  }
+
+  if (!blockers.length && metrics.forecastAccuracy < rules.minForecastAccuracy) {
+    cautions.push(`forecast accuracy ${metrics.forecastAccuracy}% is below target ${rules.minForecastAccuracy}%`);
+  }
+
+  if (blockers.length) {
+    return {
+      grade: 'Calibrating',
+      mode: 'calibrating',
+      summary: `Signal quality is still calibrating: ${blockers.join('; ')}.`,
+      competitorRows: metrics.competitorRows,
+      otaRows: metrics.otaRows,
+      otaLiveRows: metrics.otaLiveRows,
+      otaSourceStatus: metrics.otaSourceStatus,
+      confidenceScore: round(metrics.confidenceScore, 1),
+      sampleSize: metrics.sampleSize,
+    };
+  }
+
+  if (cautions.length) {
+    return {
+      grade: 'Review',
+      mode: 'verify',
+      summary: `Verify before acting: ${cautions.join('; ')}.`,
+      competitorRows: metrics.competitorRows,
+      otaRows: metrics.otaRows,
+      otaLiveRows: metrics.otaLiveRows,
+      otaSourceStatus: metrics.otaSourceStatus,
+      confidenceScore: round(metrics.confidenceScore, 1),
+      sampleSize: metrics.sampleSize,
+    };
+  }
+
+  return {
+    grade: 'Trusted',
+    mode: 'actionable',
+    summary: `Signal quality is trusted: ${metrics.competitorRows} competitor rows and ${metrics.otaLiveRows} OTA channel rows captured within ${metrics.scrapeFreshnessHours}h.`,
+    competitorRows: metrics.competitorRows,
+    otaRows: metrics.otaRows,
+    otaLiveRows: metrics.otaLiveRows,
+    otaSourceStatus: metrics.otaSourceStatus,
+    confidenceScore: round(metrics.confidenceScore, 1),
+    sampleSize: metrics.sampleSize,
+  };
+}
+
 function sanitizeIssues(issues, includeDiagnostics) {
   return issues.map((row) => ({
     issueCode: row.issue_code || row.issueCode,
@@ -212,6 +321,11 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
     scrapeFreshnessHours: freshnessHours(input.lastScrapedAt),
     otaMaxGapPct: Number(input.otaParity?.summary?.maxAbsGapPct || 0),
     otaInParityChannels: Number(input.otaParity?.summary?.inParity || 0),
+    otaRows: Number((input.otaParity?.rows || []).length),
+    otaLiveRows: Number(
+      (input.otaParity?.rows || []).filter((row) => !row?.estimated && Number(row?.otaPrice || 0) > 0).length,
+    ),
+    otaSourceStatus: input.otaParity?.sourceStatus || 'missing',
     otaParityBand: Number(input.otaParity?.parityThresholdPct || 2),
     otaAlertThreshold: Number(input.otaParity?.alertThresholdPct || 5),
     confidenceScore: Number(input.confidence?.score || 0),
@@ -264,11 +378,13 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
 
   const includeDiagnostics = role === 'admin' || role === 'super_admin';
   const statuses = computeStatuses(metrics, rules);
+  const signalQuality = buildSignalQuality(metrics, rules);
 
   const base = {
     lastCheckedAt: now.toISOString(),
     lastScrapedAt: input.lastScrapedAt ? new Date(input.lastScrapedAt).toISOString() : null,
     statuses,
+    signalQuality,
     issueCounts: {
       open: openCount,
       resolved: resolvedCount,
@@ -295,6 +411,9 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
         competitorRows: metrics.competitorRows,
         airfarePoints: metrics.airfarePoints,
         scrapeFreshnessHours: metrics.scrapeFreshnessHours,
+        otaRows: metrics.otaRows,
+        otaLiveRows: metrics.otaLiveRows,
+        otaSourceStatus: metrics.otaSourceStatus,
         otaMaxGapPct: round(metrics.otaMaxGapPct, 2),
         confidenceScore: round(clamp(metrics.confidenceScore, 0, 100), 2),
         marketVolatility: round(clamp(metrics.marketVolatility, 0, 100), 2),
@@ -302,6 +421,7 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
         volatilityError: round(Math.max(0, metrics.volatilityError), 2),
         sampleSize: metrics.sampleSize,
       },
+      signalQuality,
       allIssues: sanitizeIssues(trackedIssues, true),
     },
   };

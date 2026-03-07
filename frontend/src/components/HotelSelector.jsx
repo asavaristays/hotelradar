@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { parseServerError, readResponseBody } from '../http.js';
 
 export default function HotelSelector({
   token,
@@ -26,24 +27,12 @@ export default function HotelSelector({
           },
         });
         if (!response.ok) {
-          let serverMessage = '';
-          try {
-            const payload = await response.json();
-            const actor =
-              payload?.committedBy === 'user'
-                ? 'User Error'
-                : payload?.committedBy === 'system'
-                  ? 'System Error'
-                  : '';
-            const base = payload?.error || '';
-            serverMessage = actor ? `${actor}: ${base}` : base;
-          } catch {
-            serverMessage = await response.text();
-          }
-          throw new Error(serverMessage || `Unable to load hotels (HTTP ${response.status}).`);
+          const parsed = await parseServerError(response, 'Unable to load hotels');
+          throw new Error(parsed.message || `Unable to load hotels (HTTP ${response.status}).`);
         }
 
-        const data = await response.json();
+        const body = await readResponseBody(response);
+        const data = body.json;
         if (!cancelled) {
           setHotels(Array.isArray(data) ? data : []);
         }

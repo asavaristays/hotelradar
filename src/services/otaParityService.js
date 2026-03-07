@@ -1,12 +1,5 @@
 import { average, round } from '../utils/math.js';
-
-const OTA_CHANNELS = [
-  { key: 'booking', label: 'Booking.com', patterns: [/booking/i] },
-  { key: 'agoda', label: 'Agoda', patterns: [/agoda/i] },
-  { key: 'makemytrip', label: 'MakeMyTrip', patterns: [/makemytrip/i, /\bmmt\b/i] },
-  { key: 'goibibo', label: 'Goibibo', patterns: [/goibibo/i] },
-  { key: 'expedia', label: 'Expedia', patterns: [/expedia/i] },
-];
+import { OTA_CHANNELS, detectOtaChannel } from './rateSourceService.js';
 
 const OTA_ESTIMATE_FACTORS = {
   booking: 1.04,
@@ -15,16 +8,6 @@ const OTA_ESTIMATE_FACTORS = {
   goibibo: 0.99,
   expedia: 1.02,
 };
-
-function detectChannel(rawName = '', rawUrl = '') {
-  const value = `${String(rawName || '')} ${String(rawUrl || '')}`.toLowerCase();
-  for (const channel of OTA_CHANNELS) {
-    if (channel.patterns.some((pattern) => pattern.test(value))) {
-      return channel;
-    }
-  }
-  return null;
-}
 
 function statusFromGap(gapPct, parityThresholdPct) {
   const absGap = Math.abs(Number(gapPct || 0));
@@ -64,7 +47,7 @@ export function computeOtaParity({
   const byChannel = new Map();
 
   for (const row of competitorRates) {
-    const channel = detectChannel(row?.competitor_name, row?.website_url || row?.url);
+    const channel = detectOtaChannel(row?.competitor_name, row?.website_url || row?.url);
     if (!channel) continue;
 
     const price = Number(row?.price_today || 0);
@@ -101,6 +84,11 @@ export function computeOtaParity({
   }
 
   const sortedRows = rows.sort((left, right) => left.channel.localeCompare(right.channel));
+  const sourceStatus = !sortedRows.length
+    ? 'missing'
+    : sortedRows.some((row) => row.estimated)
+      ? 'estimated'
+      : 'scraped';
   const maxAbsGapPct = sortedRows.length
     ? round(Math.max(...sortedRows.map((row) => Math.abs(Number(row.gapPct || 0)))), 2)
     : 0;
@@ -110,6 +98,8 @@ export function computeOtaParity({
     parityThresholdPct,
     alertThresholdPct,
     lastScrapedAt: lastScrapedAt ? new Date(lastScrapedAt).toISOString() : null,
+    sourceStatus,
+    channelCount: sortedRows.length,
     summary: {
       inParity: sortedRows.filter((row) => row.status === 'In Parity').length,
       underpriced: sortedRows.filter((row) => row.status === 'Underpriced vs OTA').length,

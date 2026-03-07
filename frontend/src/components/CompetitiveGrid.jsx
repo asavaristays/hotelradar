@@ -22,7 +22,7 @@ function movementClass(movement) {
   return 'neutralMove';
 }
 
-export default function CompetitiveGrid({ rows = [], ownHotelName = '' }) {
+export default function CompetitiveGrid({ rows = [], ownHotelName = '', marketContext = null }) {
   const [sortBy, setSortBy] = useState('price');
   const [direction, setDirection] = useState('desc');
   const [query, setQuery] = useState('');
@@ -55,7 +55,13 @@ export default function CompetitiveGrid({ rows = [], ownHotelName = '' }) {
   return (
     <section className="panel gridPanel" aria-label="Competitive grid">
       <header className="panelHeader">
-        <h2>Competitive Grid</h2>
+        <div className="gridMetaBlock">
+          <h2>Competitive Grid</h2>
+          <p className="metaLabel">
+            Stay date: {marketContext?.checkinDate || 'N/A'} | Competitor rows:{' '}
+            {Number(marketContext?.competitorRows || 0)}
+          </p>
+        </div>
         <input
           type="search"
           className="gridSearch"

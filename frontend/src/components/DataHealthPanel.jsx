@@ -16,7 +16,7 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
-export default function DataHealthPanel({ dataHealth, viewerRole }) {
+export default function DataHealthPanel({ dataHealth, viewerRole, marketContext = null }) {
   if (!dataHealth) {
     return (
       <section className="panel dataHealthPanel" aria-label="Data health">
@@ -34,13 +34,18 @@ export default function DataHealthPanel({ dataHealth, viewerRole }) {
   const openCount = Number(dataHealth?.issueCounts?.open || 0);
   const resolvedCount = Number(dataHealth?.issueCounts?.resolved || 0);
   const isAdmin = viewerRole === 'admin' || viewerRole === 'super_admin';
+  const signalQuality = dataHealth?.signalQuality || null;
 
   return (
     <section className="panel dataHealthPanel" aria-label="Data health">
       <header className="panelHeader">
         <h2>Data Health</h2>
-        <p className="metaLabel">Last checked: {formatTimestamp(dataHealth.lastCheckedAt)}</p>
+        <p className="metaLabel">
+          Stay date: {marketContext?.checkinDate || 'N/A'} | Last checked: {formatTimestamp(dataHealth.lastCheckedAt)}
+        </p>
       </header>
+
+      {signalQuality?.summary && <p className="metaLabel">{signalQuality.summary}</p>}
 
       <div className="snapshotList dataHealthStatuses">
         <div>

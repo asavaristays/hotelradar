@@ -4,6 +4,7 @@ import BetaAcceptanceModal from '../components/BetaAcceptanceModal.jsx';
 import Dashboard from '../components/Dashboard.jsx';
 import HotelSelector from '../components/HotelSelector.jsx';
 import { downloadDashboardPdf } from '../components/dashboardPdf.js';
+import { parseServerError as parseHttpServerError, readResponseBody } from '../http.js';
 
 export default function DashboardPage({ session, onLogout, onNavigate }) {
   const [selectedHotelId, setSelectedHotelId] = useState('');
@@ -35,32 +36,13 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     if (!response.ok) {
       return [];
     }
-    const payload = await response.json();
+    const body = await readResponseBody(response);
+    const payload = body.json;
     return Array.isArray(payload) ? payload : [];
   }
 
   async function parseServerError(response, fallbackPrefix) {
-    let serverMessage = '';
-    let parsedCode = '';
-    try {
-      const payload = await response.json();
-      parsedCode = payload?.code || '';
-      const actor =
-        payload?.committedBy === 'user'
-          ? 'User Error'
-          : payload?.committedBy === 'system'
-            ? 'System Error'
-            : '';
-      const base = payload?.error || payload?.message || '';
-      serverMessage = actor ? `${actor}: ${base}` : base;
-    } catch {
-      serverMessage = await response.text();
-    }
-    return {
-      status: response.status,
-      code: parsedCode,
-      message: serverMessage || `${fallbackPrefix} (HTTP ${response.status}).`,
-    };
+    return parseHttpServerError(response, fallbackPrefix);
   }
 
   function markLegalAcceptanceRequired(hotelId = '') {
@@ -92,7 +74,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         const parsed = await parseServerError(dashboardRes, 'Unable to load dashboard');
         throw new Error(parsed.message);
       }
-      const dashboardJson = await dashboardRes.json();
+      const body = await readResponseBody(dashboardRes);
+      const dashboardJson = body.json;
       if (!Array.isArray(dashboardJson?.competitiveGrid) || dashboardJson.competitiveGrid.length <= 1) {
         const fallbackGrid = await fetchCompetitiveGrid(hotelId);
         if (fallbackGrid.length) {
@@ -132,7 +115,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         throw new Error(parsed.message);
       }
 
-      const statusPayload = await statusRes.json();
+      const body = await readResponseBody(statusRes);
+      const statusPayload = body.json;
       setRecalcJob(statusPayload);
 
       if (statusPayload.status === 'completed') {
@@ -173,7 +157,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         throw new Error('User Error: Beta legal acceptance required before dashboard access.');
       }
       if (response.status === 202) {
-        const payload = await response.json();
+        const body = await readResponseBody(response);
+        const payload = body.json;
         setRecalcJob({
           id: payload.jobId,
           status: payload.status || 'queued',
@@ -195,7 +180,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
       }
 
       // Backward-compatible sync fallback.
-      const dashboardJson = await response.json();
+      const body = await readResponseBody(response);
+      const dashboardJson = body.json;
       setDashboard(dashboardJson);
       setRecalcJob({ status: 'completed', hotelId });
     } catch (err) {

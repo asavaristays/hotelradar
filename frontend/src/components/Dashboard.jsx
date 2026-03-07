@@ -7,6 +7,7 @@ import DemandScoreCard from './DemandScoreCard.jsx';
 import ForwardDemandChart from './ForwardDemandChart.jsx';
 import MarketPositionBar from './MarketPositionBar.jsx';
 import OtaParityPanel from './OtaParityPanel.jsx';
+import SignalReadinessPanel from './SignalReadinessPanel.jsx';
 import SignalBreakdownChart from './SignalBreakdownChart.jsx';
 import StabilityCard from './StabilityCard.jsx';
 import SuggestedPricingCard from './SuggestedPricingCard.jsx';
@@ -329,6 +330,14 @@ export default function Dashboard({ dashboard, loading, error }) {
         />
       </div>
 
+      <div className="row rowWide">
+        <SignalReadinessPanel
+          signalQuality={dashboard.signalQuality}
+          marketContext={dashboard.marketContext}
+          lastScrapedAt={dashboard.lastScrapedAt}
+        />
+      </div>
+
       <div className="row rowMid signalRow">
         <details className="collapsiblePanel signalCollapse" open>
           <summary>Signal Breakdown</summary>
@@ -350,7 +359,11 @@ export default function Dashboard({ dashboard, loading, error }) {
       </div>
 
       <div className="row rowBottom">
-        <CompetitiveGrid rows={dashboard.competitiveGrid} ownHotelName={dashboard.competitiveGrid?.[0]?.name} />
+        <CompetitiveGrid
+          rows={dashboard.competitiveGrid}
+          ownHotelName={dashboard.competitiveGrid?.[0]?.name}
+          marketContext={dashboard.marketContext}
+        />
         <CompressionSnapshot
           forwardCurve={dashboard.forwardCurve}
           alerts={dashboard.alerts || []}
@@ -359,11 +372,15 @@ export default function Dashboard({ dashboard, loading, error }) {
       </div>
 
       <div className="row rowWide">
-        <OtaParityPanel otaParity={dashboard.otaParity} />
+        <OtaParityPanel otaParity={dashboard.otaParity} marketContext={dashboard.marketContext} />
       </div>
 
       <div className="row rowWide">
-        <DataHealthPanel dataHealth={dashboard.dataHealth} viewerRole={dashboard.viewerRole} />
+        <DataHealthPanel
+          dataHealth={dashboard.dataHealth}
+          viewerRole={dashboard.viewerRole}
+          marketContext={dashboard.marketContext}
+        />
       </div>
 
       <div className="row rowMid">
