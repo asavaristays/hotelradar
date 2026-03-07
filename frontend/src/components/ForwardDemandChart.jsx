@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { clamp } from './dashboardUtils.js';
+import { useMemo, useState } from 'react';
+import { clamp, formatCurrency } from './dashboardUtils.js';
 
 function asDate(input) {
   return new Date(`${input}T00:00:00`);
@@ -10,7 +10,33 @@ function isWeekend(dateString) {
   return day === 0 || day === 6;
 }
 
-export default function ForwardDemandChart({ forwardCurve = [] }) {
+function formatHoverDate(value) {
+  if (!value) return 'N/A';
+  const parsed = asDate(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function demandBucket(score) {
+  if (score <= 40) return 'Low';
+  if (score <= 65) return 'Moderate';
+  if (score <= 85) return 'High';
+  return 'Surge';
+}
+
+function indicativeRate(baseRate, currentScore, targetScore) {
+  const safeBaseRate = Number(baseRate || 0);
+  if (!Number.isFinite(safeBaseRate) || safeBaseRate <= 0) return null;
+
+  const current = Number(currentScore || 0);
+  const target = Number(targetScore || 0);
+  const factor = clamp(1 + ((target - current) / 100) * 0.6, 0.82, 1.28);
+  return Math.round(safeBaseRate * factor);
+}
+
+export default function ForwardDemandChart({ forwardCurve = [], suggestedBase = 0 }) {
+  const [activeIndex, setActiveIndex] = useState(null);
+
   const chart = useMemo(() => {
     if (!forwardCurve.length) return null;
 
@@ -25,11 +51,19 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
     const min = Math.min(...values);
     const max = Math.max(...values);
     const spread = max - min || 1;
+    const currentScore = Number(forwardCurve[0]?.score || 0);
 
     const points = forwardCurve.map((point, index) => {
       const x = padX + (index / Math.max(forwardCurve.length - 1, 1)) * innerWidth;
       const y = padY + (1 - (Number(point.score || 0) - min) / spread) * innerHeight;
-      return { ...point, x, y };
+      return {
+        ...point,
+        x,
+        y,
+        index,
+        label: demandBucket(Number(point.score || 0)),
+        indicativeRate: indicativeRate(suggestedBase, currentScore, point.score),
+      };
     });
 
     const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x},${point.y}`).join(' ');
@@ -37,6 +71,7 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
       if (!current) return point;
       return Number(point.score || 0) > Number(current.score || 0) ? point : current;
     }, null);
+    const peakIndex = peakPoint?.index ?? 0;
 
     const weekendRects = forwardCurve
       .map((point, index) => ({ index, point }))
@@ -57,12 +92,13 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
       points,
       path,
       peakPoint,
+      peakIndex,
       weekendRects,
       first: forwardCurve[0],
       mid: forwardCurve[Math.floor(forwardCurve.length / 2)],
       last: forwardCurve[forwardCurve.length - 1],
     };
-  }, [forwardCurve]);
+  }, [forwardCurve, suggestedBase]);
 
   if (!chart) {
     return (
@@ -75,6 +111,17 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
     );
   }
 
+  const resolvedIndex = activeIndex == null ? chart.peakIndex : activeIndex;
+  const activePoint = chart.points[resolvedIndex] || chart.peakPoint || chart.points[0];
+
+  function updateActiveFromPointer(event) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const safeWidth = bounds.width || 1;
+    const ratio = clamp((event.clientX - bounds.left) / safeWidth, 0, 1);
+    const nextIndex = Math.round(ratio * Math.max(chart.points.length - 1, 0));
+    setActiveIndex(nextIndex);
+  }
+
   return (
     <section className="panel forwardPanel" aria-label="Forward demand curve">
       <header className="panelHeader">
@@ -84,8 +131,31 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
         </p>
       </header>
 
+      <div className="forwardHoverCard" aria-live="polite">
+        <div>
+          <span>Selected date</span>
+          <strong>{formatHoverDate(activePoint?.date)}</strong>
+        </div>
+        <div>
+          <span>Demand score</span>
+          <strong>{Number(activePoint?.score || 0).toFixed(1)} ({activePoint?.label || 'Moderate'})</strong>
+        </div>
+        <div>
+          <span>Indicative rate</span>
+          <strong>
+            {activePoint?.indicativeRate ? `₹${formatCurrency(activePoint.indicativeRate)}` : 'Unavailable'}
+          </strong>
+        </div>
+      </div>
+
       <div className="forwardChartWrap">
-        <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Forward demand line chart">
+        <svg
+          viewBox={`0 0 ${chart.width} ${chart.height}`}
+          role="img"
+          aria-label="Forward demand line chart"
+          onMouseMove={updateActiveFromPointer}
+          onMouseLeave={() => setActiveIndex(chart.peakIndex)}
+        >
           {chart.weekendRects.map((rect, idx) => (
             <rect
               // eslint-disable-next-line react/no-array-index-key
@@ -109,17 +179,34 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
 
           <path d={chart.path} className="curveLine" />
 
+          {activePoint ? (
+            <>
+              <line
+                x1={activePoint.x}
+                y1={chart.padY}
+                x2={activePoint.x}
+                y2={chart.height - chart.padY}
+                className="curveFocusLine"
+              />
+              <circle cx={activePoint.x} cy={activePoint.y} r={6.5} className="curveFocusHalo" />
+            </>
+          ) : null}
+
           {chart.points.map((point, index) => (
             <circle
               // eslint-disable-next-line react/no-array-index-key
               key={index}
               cx={point.x}
               cy={point.y}
-              r={index % 4 === 0 ? 3.4 : 2.4}
-              className="curvePoint"
+              r={index === resolvedIndex ? 4.6 : index % 4 === 0 ? 3.4 : 2.4}
+              className={`curvePoint ${index === resolvedIndex ? 'curvePointActive' : ''}`}
+              tabIndex="0"
+              onFocus={() => setActiveIndex(index)}
+              onMouseEnter={() => setActiveIndex(index)}
             >
               <title>
-                {point.date}: {Number(point.score || 0).toFixed(2)}
+                {point.date}: {Number(point.score || 0).toFixed(2)} | Indicative rate:{' '}
+                {point.indicativeRate ? `₹${formatCurrency(point.indicativeRate)}` : 'Unavailable'}
               </title>
             </circle>
           ))}
@@ -144,6 +231,7 @@ export default function ForwardDemandChart({ forwardCurve = [] }) {
           Peak forecast: <strong>{chart.peakPoint.date}</strong> at <strong>{Number(chart.peakPoint.score || 0).toFixed(1)}</strong>
         </p>
       ) : null}
+      <p className="metaLabel">Hover the curve to inspect stay date, demand score, and indicative rate.</p>
     </section>
   );
 }

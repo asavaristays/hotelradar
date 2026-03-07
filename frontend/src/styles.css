@@ -635,6 +635,7 @@ button:disabled {
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
+  cursor: crosshair;
 }
 
 .forwardChartWrap svg {
@@ -663,6 +664,24 @@ button:disabled {
 
 .curvePoint {
   fill: #0f766e;
+  transition: r 120ms ease, fill 120ms ease;
+}
+
+.curvePointActive {
+  fill: #0b5f59;
+}
+
+.curveFocusLine {
+  stroke: #0f766e;
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+  opacity: 0.7;
+}
+
+.curveFocusHalo {
+  fill: rgba(15, 118, 110, 0.14);
+  stroke: #0f766e;
+  stroke-width: 1.5;
 }
 
 .forwardAxisLabels {
@@ -1795,6 +1814,31 @@ button {
   color: #334155;
 }
 
+.forwardHoverCard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.forwardHoverCard div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.forwardHoverCard span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.forwardHoverCard strong {
+  font-size: 0.95rem;
+}
+
 .gridSearch {
   max-width: 170px;
   min-height: 32px;
@@ -1824,6 +1868,10 @@ button {
 @media (max-width: 768px) {
   .executiveStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .forwardHoverCard {
+    grid-template-columns: 1fr;
   }
 
   .gridSearch {

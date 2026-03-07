@@ -338,7 +338,10 @@ export default function Dashboard({ dashboard, loading, error }) {
       </div>
 
       <div className="row rowWide">
-        <ForwardDemandChart forwardCurve={dashboard.forwardCurve} />
+        <ForwardDemandChart
+          forwardCurve={dashboard.forwardCurve}
+          suggestedBase={dashboard.suggestedPricing?.base}
+        />
       </div>
 
       <div className="row rowMid">
