@@ -151,7 +151,10 @@ function eventBaseWeight(event = {}, city = '') {
  *   neutral:boolean,
  *   holidayBoost:number,
  *   eventBoost:number,
- *   eventShare:number
+ *   eventShare:number,
+ *   weddingShare:number,
+ *   corporateShare:number,
+ *   eventCategoryShare:Record<string, number>
  * }}
  */
 export function computeHolidayCompression(input) {
@@ -162,6 +165,7 @@ export function computeHolidayCompression(input) {
 
   let holidayBoost = 0;
   let eventBoost = 0;
+  const eventCategoryBoost = {};
   const reasons = [];
 
   for (const holiday of holidays) {
@@ -199,8 +203,10 @@ export function computeHolidayCompression(input) {
     const leadFactor = eventLeadFactor(daysAhead, daysToEnd);
     if (leadFactor <= 0) continue;
 
+    const category = normalizeCategory(event.category);
     const weighted = eventBaseWeight(event, city) * leadFactor;
     eventBoost += weighted;
+    eventCategoryBoost[category] = Number(eventCategoryBoost[category] || 0) + weighted;
 
     if (daysAhead >= 0 && daysAhead <= 3) {
       reasons.push(`${event.event_name || 'City event'} starts in ${daysAhead} day(s).`);
@@ -224,6 +230,17 @@ export function computeHolidayCompression(input) {
   });
   const totalBoost = Math.max(0.0001, holidayBoost + eventBoost);
   const eventShare = clamp(eventBoost / totalBoost, 0, 1);
+  const safeEventBoost = Math.max(0.0001, eventBoost);
+  const eventCategoryShare = Object.entries(eventCategoryBoost).reduce((acc, [category, boost]) => {
+    acc[category] = round(Number(boost || 0) / safeEventBoost, 4);
+    return acc;
+  }, {});
+  const weddingShare = clamp(Number(eventCategoryShare.wedding_season || 0), 0, 1);
+  const corporateShare = clamp(
+    Number(eventCategoryShare.conference || 0) + Number(eventCategoryShare.exhibition || 0),
+    0,
+    1,
+  );
   const hasDynamicEvents = events.length > 0;
 
   return {
@@ -237,5 +254,8 @@ export function computeHolidayCompression(input) {
     holidayBoost: round(holidayBoost, 2),
     eventBoost: round(eventBoost, 2),
     eventShare: round(eventShare, 4),
+    weddingShare: round(weddingShare, 4),
+    corporateShare: round(corporateShare, 4),
+    eventCategoryShare,
   };
 }

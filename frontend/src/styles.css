@@ -602,6 +602,18 @@ button:disabled {
   background: #8b5cf6;
 }
 
+.signal-wedding {
+  background: #ec4899;
+}
+
+.signal-corporate {
+  background: #0ea5a4;
+}
+
+.signal-event-other {
+  background: #a78bfa;
+}
+
 .signal-airfare {
   background: #f97316;
 }

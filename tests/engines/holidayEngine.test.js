@@ -85,5 +85,29 @@ describe('holidayEngine', () => {
     });
 
     expect(withWedding.eventBoost).toBeGreaterThan(generic.eventBoost);
+    expect(withWedding.weddingShare).toBeGreaterThan(0);
+    expect(generic.weddingShare).toBe(0);
+  });
+
+  test('tracks corporate share for conference/exhibition events', () => {
+    const today = new Date('2026-03-07T00:00:00Z');
+    const result = computeHolidayScore({
+      date: today,
+      city: 'Mumbai',
+      holidays: [],
+      events: [
+        {
+          event_name: 'BKC Corporate Summit',
+          start_date: '2026-03-10',
+          end_date: '2026-03-11',
+          category: 'conference',
+          scale: 'large',
+          confidence: 'confirmed',
+        },
+      ],
+    });
+
+    expect(result.eventBoost).toBeGreaterThan(0);
+    expect(result.corporateShare).toBeGreaterThan(0);
   });
 });
