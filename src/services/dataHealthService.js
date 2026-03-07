@@ -2,7 +2,10 @@ import { clamp, round } from '../utils/math.js';
 
 const DEFAULT_RULES = {
   staleScrapeHours: 12,
+  staleEventHours: 24,
   minCompetitorRows: 2,
+  minOtaLiveRowsForAction: 2,
+  minEventRowsFocusCity: 1,
   minAirfarePoints: 7,
   minConfidenceScore: 65,
   minSampleForAccuracy: 7,
@@ -11,11 +14,26 @@ const DEFAULT_RULES = {
   resolvedWindowDays: 7,
 };
 
+const FOCUS_CITY_KEYS = new Set(['goa', 'mumbai']);
+
+function normalizeCity(city = '') {
+  return String(city || '').trim().toLowerCase();
+}
+
+function isFocusCity(city = '') {
+  return FOCUS_CITY_KEYS.has(normalizeCity(city));
+}
+
 function normalizeRules(calibration = {}) {
   const cfg = calibration?.global?.dataHealth || {};
   return {
     staleScrapeHours: Number(cfg.staleScrapeHours || DEFAULT_RULES.staleScrapeHours),
+    staleEventHours: Number(cfg.staleEventHours || DEFAULT_RULES.staleEventHours),
     minCompetitorRows: Number(cfg.minCompetitorRows || DEFAULT_RULES.minCompetitorRows),
+    minOtaLiveRowsForAction: Number(
+      cfg.minOtaLiveRowsForAction || DEFAULT_RULES.minOtaLiveRowsForAction,
+    ),
+    minEventRowsFocusCity: Number(cfg.minEventRowsFocusCity || DEFAULT_RULES.minEventRowsFocusCity),
     minAirfarePoints: Number(cfg.minAirfarePoints || DEFAULT_RULES.minAirfarePoints),
     minConfidenceScore: Number(cfg.minConfidenceScore || DEFAULT_RULES.minConfidenceScore),
     minSampleForAccuracy: Number(cfg.minSampleForAccuracy || DEFAULT_RULES.minSampleForAccuracy),
@@ -41,6 +59,23 @@ function issue(code, title, severity, message, metadata = {}) {
     message,
     metadata,
   };
+}
+
+function deriveEventFreshnessHours(events = [], explicitSync = null) {
+  const explicitHours = freshnessHours(explicitSync);
+  if (explicitHours != null) return explicitHours;
+
+  let latestMs = null;
+  for (const row of events) {
+    const raw = row?.scraped_at || row?.scrapedAt || null;
+    if (!raw) continue;
+    const parsedMs = new Date(raw).getTime();
+    if (Number.isNaN(parsedMs)) continue;
+    latestMs = latestMs == null ? parsedMs : Math.max(latestMs, parsedMs);
+  }
+
+  if (latestMs == null) return null;
+  return freshnessHours(new Date(latestMs).toISOString());
 }
 
 function computeStatuses(metrics, rules) {
@@ -91,6 +126,7 @@ function computeStatuses(metrics, rules) {
 
 function detectIssues(metrics, rules) {
   const issues = [];
+  const focusCity = isFocusCity(metrics.city);
 
   if (metrics.competitorRows < rules.minCompetitorRows) {
     issues.push(
@@ -148,6 +184,51 @@ function detectIssues(metrics, rules) {
         'medium',
         'OTA parity is using estimated market fallback instead of live OTA channel rows.',
         { otaRows: metrics.otaRows, otaLiveRows: metrics.otaLiveRows },
+      ),
+    );
+  }
+
+  if (focusCity && metrics.otaLiveRows < rules.minOtaLiveRowsForAction) {
+    issues.push(
+      issue(
+        'low_live_ota_rows',
+        'Live OTA Coverage Incomplete',
+        'medium',
+        `Only ${metrics.otaLiveRows} live OTA row(s) available. Minimum required for trusted action is ${rules.minOtaLiveRowsForAction}.`,
+        { otaLiveRows: metrics.otaLiveRows, minRequired: rules.minOtaLiveRowsForAction },
+      ),
+    );
+  }
+
+  if (focusCity && metrics.eventRows < rules.minEventRowsFocusCity) {
+    issues.push(
+      issue(
+        'missing_city_events',
+        'City Event Feed Empty',
+        'medium',
+        `No city event rows detected for ${metrics.city} in the configured horizon.`,
+        { city: metrics.city, eventRows: metrics.eventRows, minRequired: rules.minEventRowsFocusCity },
+      ),
+    );
+  }
+
+  if (
+    focusCity &&
+    (metrics.eventFreshnessHours == null || metrics.eventFreshnessHours > rules.staleEventHours)
+  ) {
+    issues.push(
+      issue(
+        'stale_city_event_feed',
+        'City Event Feed Stale',
+        'medium',
+        metrics.eventFreshnessHours == null
+          ? `Event feed freshness is unknown for ${metrics.city}.`
+          : `Last event sync is ${metrics.eventFreshnessHours}h old; freshness SLA is ${rules.staleEventHours}h.`,
+        {
+          city: metrics.city,
+          eventFreshnessHours: metrics.eventFreshnessHours,
+          maxAllowedHours: rules.staleEventHours,
+        },
       ),
     );
   }
@@ -215,8 +296,13 @@ function buildSignalQuality(metrics, rules) {
   const freshnessKnown = metrics.scrapeFreshnessHours != null;
   const freshnessOk = freshnessKnown && metrics.scrapeFreshnessHours <= rules.staleScrapeHours;
   const competitorOk = metrics.competitorRows >= rules.minCompetitorRows;
+  const otaLiveOk = metrics.otaLiveRows >= rules.minOtaLiveRowsForAction;
   const confidenceOk = metrics.confidenceScore >= rules.minConfidenceScore;
   const calibrationReady = metrics.sampleSize >= rules.minSampleForAccuracy;
+  const focusCity = isFocusCity(metrics.city);
+  const eventFreshnessKnown = metrics.eventFreshnessHours != null;
+  const eventFreshnessOk = eventFreshnessKnown && metrics.eventFreshnessHours <= rules.staleEventHours;
+  const eventCoverageOk = !focusCity || metrics.eventRows >= rules.minEventRowsFocusCity;
 
   const blockers = [];
   const cautions = [];
@@ -238,6 +324,20 @@ function buildSignalQuality(metrics, rules) {
   } else if (metrics.otaSourceStatus === 'estimated') {
     cautions.push('OTA parity is still using estimated fallback');
   }
+  if (focusCity && !otaLiveOk) {
+    cautions.push(
+      `live OTA rows ${metrics.otaLiveRows}/${rules.minOtaLiveRowsForAction} are below trusted action threshold`,
+    );
+  }
+
+  if (focusCity && !eventCoverageOk) {
+    cautions.push(`event feed has no rows for ${metrics.city} in the active horizon`);
+  }
+  if (focusCity && !eventFreshnessKnown) {
+    cautions.push(`event feed freshness is unknown for ${metrics.city}`);
+  } else if (focusCity && !eventFreshnessOk) {
+    cautions.push(`event feed is stale at ${metrics.eventFreshnessHours}h (limit ${rules.staleEventHours}h)`);
+  }
 
   if (!confidenceOk) {
     cautions.push(`confidence ${metrics.confidenceScore} is below target ${rules.minConfidenceScore}`);
@@ -258,6 +358,8 @@ function buildSignalQuality(metrics, rules) {
       otaSourceStatus: metrics.otaSourceStatus,
       confidenceScore: round(metrics.confidenceScore, 1),
       sampleSize: metrics.sampleSize,
+      eventRows: metrics.eventRows,
+      eventFreshnessHours: metrics.eventFreshnessHours,
     };
   }
 
@@ -272,6 +374,8 @@ function buildSignalQuality(metrics, rules) {
       otaSourceStatus: metrics.otaSourceStatus,
       confidenceScore: round(metrics.confidenceScore, 1),
       sampleSize: metrics.sampleSize,
+      eventRows: metrics.eventRows,
+      eventFreshnessHours: metrics.eventFreshnessHours,
     };
   }
 
@@ -285,6 +389,8 @@ function buildSignalQuality(metrics, rules) {
     otaSourceStatus: metrics.otaSourceStatus,
     confidenceScore: round(metrics.confidenceScore, 1),
     sampleSize: metrics.sampleSize,
+    eventRows: metrics.eventRows,
+    eventFreshnessHours: metrics.eventFreshnessHours,
   };
 }
 
@@ -316,9 +422,12 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
   const now = new Date();
 
   const metrics = {
+    city: String(input.city || ''),
     competitorRows: Number((input.competitorRates || []).length),
     airfarePoints: Number((input.airfareSeries || []).length),
     scrapeFreshnessHours: freshnessHours(input.lastScrapedAt),
+    eventRows: Number((input.events || []).length),
+    eventFreshnessHours: deriveEventFreshnessHours(input.events || [], input.lastEventSync || null),
     otaMaxGapPct: Number(input.otaParity?.summary?.maxAbsGapPct || 0),
     otaInParityChannels: Number(input.otaParity?.summary?.inParity || 0),
     otaRows: Number((input.otaParity?.rows || []).length),
@@ -408,9 +517,12 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
     diagnostics: {
       thresholds: rules,
       metrics: {
+        city: metrics.city,
         competitorRows: metrics.competitorRows,
         airfarePoints: metrics.airfarePoints,
         scrapeFreshnessHours: metrics.scrapeFreshnessHours,
+        eventRows: metrics.eventRows,
+        eventFreshnessHours: metrics.eventFreshnessHours,
         otaRows: metrics.otaRows,
         otaLiveRows: metrics.otaLiveRows,
         otaSourceStatus: metrics.otaSourceStatus,

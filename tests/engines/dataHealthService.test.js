@@ -132,4 +132,41 @@ describe('dataHealthService', () => {
       }),
     );
   });
+
+  test('forces verify mode for Goa/Mumbai when event feed or live OTA coverage is weak', async () => {
+    const deps = inMemoryDeps();
+    const output = await computeDataHealthSnapshot(
+      {
+        hotelId: 'h3',
+        city: 'Mumbai',
+        viewerRole: 'admin',
+        calibration: {},
+        competitorRates: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }],
+        airfareSeries: Array.from({ length: 10 }, (_, i) => ({ id: i })),
+        events: [],
+        lastScrapedAt: new Date().toISOString(),
+        lastEventSync: null,
+        otaParity: {
+          sourceStatus: 'estimated',
+          rows: [],
+          parityThresholdPct: 2,
+          alertThresholdPct: 5,
+          summary: { maxAbsGapPct: 0 },
+        },
+        confidence: { score: 82 },
+        marketStability: { volatilityScore: 24 },
+        performanceSummary: { sampleSize: 9, rollingAccuracy30d: 76, stabilityDeviation: 10 },
+      },
+      deps,
+    );
+
+    expect(output.signalQuality).toEqual(
+      expect.objectContaining({
+        grade: 'Review',
+        mode: 'verify',
+      }),
+    );
+    expect(output.signalQuality.summary.toLowerCase()).toContain('event feed');
+    expect(output.signalQuality.summary.toLowerCase()).toContain('live ota rows');
+  });
 });

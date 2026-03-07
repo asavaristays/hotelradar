@@ -851,15 +851,19 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     marketAvgPrice: marketPosition.marketAvg,
     allowEstimateFallback: env.allowEstimatedOtaParity,
   });
+  const lastEventSync = deriveLastEventSync(events);
   const dataHealth = await computeDataHealthSnapshot(
     {
       hotelId: hotel.id,
+      city: hotel.city,
       viewerRole: context.user_role || 'hotel_user',
       calibration,
       competitorRates,
       otaParityRates,
       airfareSeries,
+      events,
       lastScrapedAt: marketScope.lastScrapedAt,
+      lastEventSync,
       otaParity,
       confidence: derived.confidence,
       marketStability: derived.marketStability,
@@ -873,7 +877,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
   );
   const marketContext = {
     ...marketScope,
-    lastEventSync: deriveLastEventSync(events),
+    lastEventSync,
   };
 
   return toDashboardContract({
