@@ -74,6 +74,26 @@ function round(value, precision = 2) {
   return Math.round(Number(value || 0) * factor) / factor;
 }
 
+function toIsoDateStart(raw) {
+  if (!raw) return null;
+  if (raw instanceof Date) {
+    if (Number.isNaN(raw.getTime())) return null;
+    return new Date(Date.UTC(raw.getUTCFullYear(), raw.getUTCMonth(), raw.getUTCDate())).toISOString();
+  }
+
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  // DATE columns may come as YYYY-MM-DD or as Date-like strings depending on driver settings.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return new Date(`${text}T00:00:00.000Z`).toISOString();
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())).toISOString();
+}
+
 export async function getValidatedPerformance(hotelId, days = 60) {
   try {
     const { rows } = await pool.query(
@@ -139,7 +159,7 @@ export async function getValidatedPerformance(hotelId, days = 60) {
       stabilityDeviation: round(mape, 2),
       sampleSize,
       directionSamples,
-      updatedAt: latestDate ? new Date(`${latestDate}T00:00:00.000Z`).toISOString() : null,
+      updatedAt: toIsoDateStart(latestDate),
       source: 'validated_outcomes',
     };
   } catch (error) {
