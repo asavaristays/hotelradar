@@ -125,6 +125,7 @@ Production notes:
 - Set `EVENT_SOURCE_URLS=` to override default sources using `City|source|url` entries (comma-separated).
 - Optional LinkedIn planning hints file: `EVENT_LINKEDIN_HINTS_FILE=/opt/radar_light/shared/event_snapshots/linkedin_hints.json`.
 - LinkedIn public URLs can also be added through `EVENT_SOURCE_URLS` with source label `linkedin-public` (parsed via safe HTML fallback when JSON-LD is unavailable).
+- Set `EVENT_COLLECT_TIMEOUT_MS=15000` (or higher) so slow source pages cannot hang collection.
 - Set `ENABLE_WEDDING_SIGNAL_GENERATOR=true` for Goa weekend wedding-window signals.
 - Set `FOCUS_CITIES=Goa,Mumbai` to keep product scope limited to these operating cities.
 - Scheduler script: `scripts/run_rate_cycle.sh` (ingest first, then recalculate active hotels).

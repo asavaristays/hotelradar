@@ -101,6 +101,7 @@ const env = {
   eventSnapshotFile: readOptionalString('EVENT_SNAPSHOT_FILE', ''),
   eventSourceUrls: readOptionalString('EVENT_SOURCE_URLS', ''),
   eventLinkedinHintsFile: readOptionalString('EVENT_LINKEDIN_HINTS_FILE', ''),
+  eventCollectTimeoutMs: parseNumber(process.env.EVENT_COLLECT_TIMEOUT_MS, 15000),
   enableWeddingSignalGenerator: parseBoolean(
     process.env.ENABLE_WEDDING_SIGNAL_GENERATOR,
     true,

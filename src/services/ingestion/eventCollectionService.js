@@ -14,6 +14,7 @@ const DEFAULT_SOURCES = [
 
 const DEFAULT_OUTPUT_PATH = '/opt/radar_light/shared/event_snapshots/latest.json';
 const DEFAULT_HORIZON_DAYS = 60;
+const DEFAULT_FETCH_TIMEOUT_MS = 15000;
 
 const CATEGORY_KEYWORDS = [
   { category: 'wedding_season', patterns: [/\bwedding\b/i, /\bshaadi\b/i, /\bbridal\b/i, /destination wedding/i] },
@@ -370,6 +371,23 @@ function resolveOutputPath(overridePath) {
   return DEFAULT_OUTPUT_PATH;
 }
 
+async function fetchWithTimeout(fetchImpl, url, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const safeTimeoutMs = Number.isFinite(Number(timeoutMs))
+    ? Math.max(1000, Number(timeoutMs))
+    : DEFAULT_FETCH_TIMEOUT_MS;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), safeTimeoutMs);
+  try {
+    return await fetchImpl(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function runEventCollectionCycle(options = {}, deps = defaultDeps) {
   const startedAt = Date.now();
   const nowIso = new Date().toISOString();
@@ -378,11 +396,17 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
   const horizonDays = Number.isFinite(Number(options.horizonDays))
     ? Number(options.horizonDays)
     : DEFAULT_HORIZON_DAYS;
+  const fetchTimeoutMs = Number.isFinite(Number(options.fetchTimeoutMs))
+    ? Number(options.fetchTimeoutMs)
+    : Number.isFinite(Number(env.eventCollectTimeoutMs))
+      ? Number(env.eventCollectTimeoutMs)
+      : DEFAULT_FETCH_TIMEOUT_MS;
 
   const summary = {
     startedAt: nowIso,
     outputPath,
     sourceCount: sources.length,
+    fetchTimeoutMs,
     sourceSuccess: 0,
     sourceFailed: 0,
     rowsCollected: 0,
@@ -397,12 +421,12 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
 
   for (const sourceDef of sources) {
     try {
-      const response = await deps.fetchImpl(sourceDef.url, {
+      const response = await fetchWithTimeout(deps.fetchImpl, sourceDef.url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; HotelRADAR Event Collector/1.0)',
           Accept: 'text/html,application/xhtml+xml',
         },
-      });
+      }, fetchTimeoutMs);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

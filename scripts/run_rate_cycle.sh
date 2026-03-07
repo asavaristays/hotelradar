@@ -11,6 +11,18 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
+export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-5}"
+
+run_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${timeout_seconds}s" "$@" || true
+  else
+    "$@" || true
+  fi
+}
+
 LOG_FILE="${RADAR_RATE_CYCLE_LOG:-/opt/radar_light/logs/rate_cycle.jsonl}"
 mkdir -p "$(dirname "$LOG_FILE")"
 
@@ -18,13 +30,13 @@ start_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "{\"ts\":\"${start_ts}\",\"event\":\"rate_cycle_start\"}" >> "$LOG_FILE"
 
 cd "$ROOT_DIR"
-node src/scripts/runEventCollector.js || true
-node src/scripts/runEventIngestion.js || true
-node src/scripts/runOtaIngestion.js || true
+run_with_timeout "${RADAR_EVENT_COLLECT_TIMEOUT_SEC:-90}" node src/scripts/runEventCollector.js
+run_with_timeout "${RADAR_EVENT_INGEST_TIMEOUT_SEC:-45}" node src/scripts/runEventIngestion.js
+run_with_timeout "${RADAR_OTA_INGEST_TIMEOUT_SEC:-90}" node src/scripts/runOtaIngestion.js
 
-HOTELS=$(psql "$DATABASE_URL" -t -A -c "SELECT id FROM hotels WHERE COALESCE(subscription_status, 'active')='active'")
+HOTELS=$(PGOPTIONS='-c statement_timeout=10000' psql "$DATABASE_URL" -t -A -c "SELECT id FROM hotels WHERE COALESCE(subscription_status, 'active')='active'")
 for hotel_id in $HOTELS; do
-  curl -s -X POST "http://127.0.0.1:3000/webhook/hotel/${hotel_id}/recalculate?sync=true" \
+  curl -s --connect-timeout 3 --max-time "${RADAR_RECALC_CURL_TIMEOUT_SEC:-20}" -X POST "http://127.0.0.1:3000/webhook/hotel/${hotel_id}/recalculate?sync=true" \
     -H "Content-Type: application/json" \
     -d '{"trigger":"cron","source":"rate-cycle"}' >/dev/null || true
 done
