@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { focusCityKeys } from '../config/productScope.js';
 
 export async function findHotelByNameInCity(city, hotelName) {
   const { rows } = await pool.query(
@@ -43,6 +44,75 @@ export async function upsertHotelDailyOutcomes(rows) {
       pickup_rooms = EXCLUDED.pickup_rooms,
       source = EXCLUDED.source,
       uploaded_by = EXCLUDED.uploaded_by
+    RETURNING id, hotel_id, outcome_date, actual_adr, occupancy_pct, pickup_rooms, source, created_at`,
+    values,
+  );
+
+  return inserted;
+}
+
+export async function listOutcomeBootstrapTargets() {
+  const { rows } = await pool.query(
+    `SELECT
+       h.id,
+       h.hotel_name,
+       COALESCE(c.name, h.city) AS city,
+       h.room_count,
+       h.base_price_min::float8 AS base_price_min,
+       h.base_price_max::float8 AS base_price_max,
+       latest_rate.price::float8 AS latest_price,
+       NULLIF(
+         regexp_replace(COALESCE(latest_demand.recommendation->>'base', ''), '[^0-9.+-]', '', 'g'),
+         ''
+       )::float8 AS latest_suggested_base
+     FROM hotels h
+     LEFT JOIN cities c ON c.id = h.city_id
+     LEFT JOIN LATERAL (
+       SELECT hrs.price
+       FROM hotel_rate_snapshots hrs
+       WHERE hrs.hotel_id = h.id
+       ORDER BY hrs.captured_at DESC
+       LIMIT 1
+     ) latest_rate ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT ds.recommendation
+       FROM demand_scores ds
+       WHERE ds.hotel_id = h.id
+       ORDER BY ds.created_at DESC
+       LIMIT 1
+     ) latest_demand ON TRUE
+     WHERE COALESCE(h.subscription_status, 'active') IN ('active', 'trial', 'paused')
+       AND LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])
+     ORDER BY city ASC, h.hotel_name ASC`,
+    [focusCityKeys],
+  );
+  return rows;
+}
+
+export async function insertOutcomeBootstrapRows(rows) {
+  if (!rows.length) return [];
+
+  const values = [];
+  const placeholders = rows.map((row, index) => {
+    const offset = index * 7;
+    values.push(
+      row.hotelId,
+      row.outcomeDate,
+      row.actualAdr,
+      row.occupancyPct,
+      row.pickupRooms,
+      row.source,
+      row.uploadedBy,
+    );
+    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`;
+  });
+
+  const { rows: inserted } = await pool.query(
+    `INSERT INTO hotel_daily_outcomes (
+      hotel_id, outcome_date, actual_adr, occupancy_pct, pickup_rooms, source, uploaded_by
+    )
+    VALUES ${placeholders.join(', ')}
+    ON CONFLICT (hotel_id, outcome_date) DO NOTHING
     RETURNING id, hotel_id, outcome_date, actual_adr, occupancy_pct, pickup_rooms, source, created_at`,
     values,
   );

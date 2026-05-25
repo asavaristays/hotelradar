@@ -1,21 +1,50 @@
 import { pool } from '../db/pool.js';
 import { focusCityKeys } from '../config/productScope.js';
+import { isVisibleHotelRecord } from '../utils/hotelVisibility.js';
 
 export async function listHotels() {
   const { rows } = await pool.query(
-    `SELECT h.id, h.hotel_name, COALESCE(c.name, h.city) AS city
+    `SELECT
+      h.id,
+      h.hotel_name,
+      COALESCE(c.name, h.city) AS city,
+      NULLIF(to_jsonb(h)->>'latitude', '')::numeric AS latitude,
+      NULLIF(to_jsonb(h)->>'longitude', '')::numeric AS longitude
      FROM hotels h
      LEFT JOIN cities c ON c.id = h.city_id
      WHERE LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])
      ORDER BY hotel_name ASC`,
     [focusCityKeys],
   );
-  return rows;
+  return rows.filter((row) => isVisibleHotelRecord(row));
+}
+
+export async function listHotelsByCity(city) {
+  const { rows } = await pool.query(
+    `SELECT
+      h.id,
+      h.hotel_name,
+      COALESCE(c.name, h.city) AS city,
+      NULLIF(to_jsonb(h)->>'latitude', '')::numeric AS latitude,
+      NULLIF(to_jsonb(h)->>'longitude', '')::numeric AS longitude
+     FROM hotels h
+     LEFT JOIN cities c ON c.id = h.city_id
+     WHERE LOWER(COALESCE(c.name, h.city)) = LOWER($1)
+       AND LOWER(COALESCE(c.name, h.city)) = ANY($2::text[])
+     ORDER BY hotel_name ASC`,
+    [String(city || '').trim(), focusCityKeys],
+  );
+  return rows.filter((row) => isVisibleHotelRecord(row));
 }
 
 export async function listHotelsForUser(userId) {
   const { rows } = await pool.query(
-    `SELECT h.id, h.hotel_name, COALESCE(c.name, h.city) AS city
+    `SELECT
+      h.id,
+      h.hotel_name,
+      COALESCE(c.name, h.city) AS city,
+      NULLIF(to_jsonb(h)->>'latitude', '')::numeric AS latitude,
+      NULLIF(to_jsonb(h)->>'longitude', '')::numeric AS longitude
      FROM hotel_users hu
      JOIN hotels h ON h.id = hu.hotel_id
      LEFT JOIN cities c ON c.id = h.city_id
@@ -24,7 +53,7 @@ export async function listHotelsForUser(userId) {
      ORDER BY h.hotel_name ASC`,
     [userId, focusCityKeys],
   );
-  return rows;
+  return rows.filter((row) => isVisibleHotelRecord(row));
 }
 
 export async function getHotelById(hotelId) {
@@ -34,6 +63,8 @@ export async function getHotelById(hotelId) {
       h.tenant_id,
       h.hotel_name,
       COALESCE(c.name, h.city) AS city,
+      NULLIF(to_jsonb(h)->>'latitude', '')::numeric AS latitude,
+      NULLIF(to_jsonb(h)->>'longitude', '')::numeric AS longitude,
       h.city_id,
       h.alert_sensitivity,
       h.room_count,
@@ -56,7 +87,11 @@ export async function getHotelById(hotelId) {
        AND LOWER(COALESCE(c.name, h.city)) = ANY($2::text[])`,
     [hotelId, focusCityKeys],
   );
-  return rows[0] || null;
+  const hotel = rows[0] || null;
+  if (!hotel || !isVisibleHotelRecord(hotel)) {
+    return null;
+  }
+  return hotel;
 }
 
 export async function touchHotelCalculatedAt(hotelId) {

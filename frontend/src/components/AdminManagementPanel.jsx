@@ -86,6 +86,11 @@ function formatDateTime(value) {
   return parsed.toLocaleString();
 }
 
+function buildDeleteConfirmationMessage(profile) {
+  const hotelName = String(profile?.hotel_name || '').trim() || 'this property';
+  return `Delete '${hotelName}' permanently? This will remove the property and all linked records.`;
+}
+
 export default function AdminManagementPanel({ role, token, onHotelCreated }) {
   const isSuperAdmin = role === 'super_admin';
 
@@ -451,16 +456,38 @@ export default function AdminManagementPanel({ role, token, onHotelCreated }) {
     }
 
     const profile = hotelProfiles.find((row) => row.id === profileForm.id);
-    const ok = window.confirm(`Delete hotel '${profile?.hotel_name || profileForm.id}'?`);
+    const ok = window.confirm(buildDeleteConfirmationMessage(profile || profileForm));
     if (!ok) return;
 
     try {
       const deleted = await requestJson(`/admin/hotels/${profileForm.id}`, token, {
         method: 'DELETE',
       });
-      setActionSuccess(`Hotel deleted: ${deleted.hotel_name}`);
+      setActionSuccess(`Successfully deleted property: ${deleted.hotel_name}`);
       setProfileForm(defaultProfileForm);
       setProfileUser(defaultProfileUser);
+      await Promise.all([loadHotelProfiles(), loadUsage()]);
+    } catch (error) {
+      setActionError(error.message || 'Unable to delete hotel.');
+    }
+  }
+
+  async function handleDeleteHotelFromList(profile) {
+    setActionError('');
+    setActionSuccess('');
+
+    const ok = window.confirm(buildDeleteConfirmationMessage(profile));
+    if (!ok) return;
+
+    try {
+      const deleted = await requestJson(`/admin/hotels/${profile.id}`, token, {
+        method: 'DELETE',
+      });
+      if (profileForm.id === profile.id) {
+        setProfileForm(defaultProfileForm);
+        setProfileUser(defaultProfileUser);
+      }
+      setActionSuccess(`Successfully deleted property: ${deleted.hotel_name}`);
       await Promise.all([loadHotelProfiles(), loadUsage()]);
     } catch (error) {
       setActionError(error.message || 'Unable to delete hotel.');
@@ -861,6 +888,15 @@ export default function AdminManagementPanel({ role, token, onHotelCreated }) {
                             >
                               {profile.subscription_status === 'active' ? 'Pause' : 'Activate'}
                             </button>
+                            {isSuperAdmin ? (
+                              <button
+                                type="button"
+                                className="dangerButton"
+                                onClick={() => handleDeleteHotelFromList(profile)}
+                              >
+                                Delete
+                              </button>
+                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -899,6 +935,15 @@ export default function AdminManagementPanel({ role, token, onHotelCreated }) {
                         >
                           {profile.subscription_status === 'active' ? 'Pause' : 'Activate'}
                         </button>
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            className="dangerButton"
+                            onClick={() => handleDeleteHotelFromList(profile)}
+                          >
+                            Delete
+                          </button>
+                        ) : null}
                       </div>
                     </article>
                   )) : null}
@@ -983,7 +1028,7 @@ export default function AdminManagementPanel({ role, token, onHotelCreated }) {
                 <button type="submit" disabled={!profileForm.id}>Save Hotel</button>
                 <button type="button" className="secondaryButton" disabled={!profileForm.id} onClick={handleUserSave}>Save User</button>
                 <button type="button" className="secondaryButton" disabled={!profileForm.id} onClick={() => onHotelCreated({ hotelId: profileForm.id, hotelName: profileForm.hotel_name, message: 'Dashboard opened.' })}>Open Dashboard</button>
-                {isSuperAdmin && <button type="button" className="dangerButton" disabled={!profileForm.id} onClick={handleDeleteHotel}>Delete Hotel</button>}
+                {isSuperAdmin && <button type="button" className="dangerButton" disabled={!profileForm.id} onClick={handleDeleteHotel}>Delete Property</button>}
               </div>
             </form>
           </div>

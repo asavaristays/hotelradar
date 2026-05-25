@@ -1,3 +1,4 @@
+import { focusCityKeys } from '../config/productScope.js';
 import { clamp, round } from '../utils/math.js';
 
 const DEFAULT_RULES = {
@@ -12,9 +13,10 @@ const DEFAULT_RULES = {
   minForecastAccuracy: 60,
   maxVolatilityError: 25,
   resolvedWindowDays: 7,
+  forceProductUnlock: false,
 };
 
-const FOCUS_CITY_KEYS = new Set(['goa', 'mumbai']);
+const FOCUS_CITY_KEYS = new Set(focusCityKeys);
 
 function normalizeCity(city = '') {
   return String(city || '').trim().toLowerCase();
@@ -29,8 +31,14 @@ function numericOrDefault(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function isTruthyEnv(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
 function normalizeRules(calibration = {}) {
   const cfg = calibration?.global?.dataHealth || {};
+  const forceUnlockFromEnv = isTruthyEnv(process.env.RADAR_FORCE_PRODUCT_UNLOCK);
   return {
     staleScrapeHours: numericOrDefault(cfg.staleScrapeHours, DEFAULT_RULES.staleScrapeHours),
     staleEventHours: numericOrDefault(cfg.staleEventHours, DEFAULT_RULES.staleEventHours),
@@ -55,6 +63,7 @@ function normalizeRules(calibration = {}) {
     ),
     maxVolatilityError: numericOrDefault(cfg.maxVolatilityError, DEFAULT_RULES.maxVolatilityError),
     resolvedWindowDays: numericOrDefault(cfg.resolvedWindowDays, DEFAULT_RULES.resolvedWindowDays),
+    forceProductUnlock: forceUnlockFromEnv || Boolean(cfg.forceProductUnlock),
   };
 }
 
@@ -308,6 +317,41 @@ function detectIssues(metrics, rules) {
 }
 
 function buildSignalQuality(metrics, rules) {
+  if (rules.forceProductUnlock) {
+    const warnings = [];
+    const focusCity = isFocusCity(metrics.city);
+    if (metrics.otaSourceStatus === 'missing') {
+      warnings.push('live OTA feed is missing');
+    } else if (metrics.otaSourceStatus === 'estimated') {
+      warnings.push('OTA parity is still using estimated fallback');
+    }
+    if (metrics.scrapeFreshnessHours == null) {
+      warnings.push('competitor scrape freshness is unknown');
+    } else if (metrics.scrapeFreshnessHours > rules.staleScrapeHours) {
+      warnings.push(`competitor scrape is stale at ${metrics.scrapeFreshnessHours}h`);
+    }
+    if (focusCity && metrics.eventRows < rules.minEventRowsFocusCity) {
+      warnings.push(`event feed has no rows for ${metrics.city}`);
+    }
+
+    return {
+      grade: 'Trusted',
+      mode: 'actionable',
+      summary: warnings.length
+        ? `Product lock override is enabled. Suggestions remain unlocked while these issues are addressed: ${warnings.join('; ')}.`
+        : 'Product lock override is enabled. Suggestions remain unlocked while signal readiness continues to improve.',
+      competitorRows: metrics.competitorRows,
+      otaRows: metrics.otaRows,
+      otaLiveRows: metrics.otaLiveRows,
+      otaSourceStatus: metrics.otaSourceStatus,
+      confidenceScore: round(metrics.confidenceScore, 1),
+      sampleSize: metrics.sampleSize,
+      eventRows: metrics.eventRows,
+      eventFreshnessHours: metrics.eventFreshnessHours,
+      forceUnlocked: true,
+    };
+  }
+
   const freshnessKnown = metrics.scrapeFreshnessHours != null;
   const freshnessOk = freshnessKnown && metrics.scrapeFreshnessHours <= rules.staleScrapeHours;
   const competitorOk = metrics.competitorRows >= rules.minCompetitorRows;
@@ -549,6 +593,7 @@ export async function computeDataHealthSnapshot(input, deps = {}) {
         sampleSize: metrics.sampleSize,
       },
       signalQuality,
+      pipeline: input.pipelineDiagnostics || null,
       allIssues: sanitizeIssues(trackedIssues, true),
     },
   };

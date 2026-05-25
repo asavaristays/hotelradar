@@ -50,9 +50,12 @@ export default function SignalBreakdownChart({
           className: 'signal-corporate',
           value: corporateEventImpact,
         },
-        ...(Math.abs(otherEventImpact) > 0
-          ? [{ key: 'otherEventImpact', label: 'Other Event Signal', className: 'signal-event-other', value: otherEventImpact }]
-          : []),
+        {
+          key: 'otherEventImpact',
+          label: 'Other Event Signal',
+          className: 'signal-event-other',
+          value: otherEventImpact,
+        },
       ]
     : [{ key: 'eventImpact', label: 'Event Impact', className: 'signal-event', value: eventImpact }];
 
@@ -105,13 +108,17 @@ export default function SignalBreakdownChart({
       <div className="signalRows">
         {entries.map((entry) => {
           const baseWidth = (Math.abs(entry.baseValue) / referenceMax) * 100;
-          const previewPulse = preview
-            ? curveDelta * (SIGNAL_SENSITIVITY[entry.key] ?? 0.35) * 45
-            : 0;
+          const sensitivity = SIGNAL_SENSITIVITY[entry.key] ?? 0.35;
+          const previewPulse = preview ? curveDelta * sensitivity * 70 : 0;
           // Keep width anchored to the base contribution, then apply a hover pulse so
           // low-magnitude rows (for example "Other Event Signal") visibly react too.
-          const width = clamp(baseWidth + previewPulse, 0, 100);
+          let width = clamp(baseWidth + previewPulse, 0, 100);
           const delta = entry.value - entry.baseValue;
+          if (preview && Math.abs(entry.baseValue) < 0.25) {
+            const previewVisibleWidth = clamp(Math.abs(previewPulse) * 1.8 + 4, 4, 24);
+            width = Math.max(width, previewVisibleWidth);
+          }
+          const previewIntensity = preview ? clamp(Math.abs(delta) / Math.max(Math.abs(entry.baseValue), 1), 0, 1) : 0;
           return (
             <div key={entry.key} className="signalRow">
               <div className="signalRowHeader">
@@ -128,8 +135,13 @@ export default function SignalBreakdownChart({
               </div>
               <div className="signalTrack" title={`${entry.label}: ${formatPercent(entry.value, 2)}`}>
                 <div
-                  className={`signalFill ${entry.className} ${previewHint ? 'signalFillPreview' : ''}`}
-                  style={{ width: `${width}%` }}
+                  className={`signalFill ${entry.className} ${previewHint ? 'signalFillPreview' : ''} ${
+                    previewHint ? (delta >= 0 ? 'signalFillPreviewUp' : 'signalFillPreviewDown') : ''
+                  }`}
+                  style={{
+                    width: `${width}%`,
+                    '--signal-preview-intensity': previewIntensity.toFixed(3),
+                  }}
                 />
               </div>
             </div>

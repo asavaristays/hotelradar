@@ -10,7 +10,23 @@ import {
   postRecalculate,
   postWebhookRecalculate,
 } from '../controllers/dashboardController.js';
+import { getMarketDemandController } from '../controllers/marketDemandController.js';
 import {
+  getCompetitorIntelligence,
+  getDemandCalendarEntries,
+  getDemandForecast,
+  getDebugSystemStatus,
+  getIntelligenceAlerts,
+  getLeadRadarExternalSignalFeed,
+  getLeadRadarUpcomingEvents,
+  getMarketCompression,
+  getMarketIntelligenceMap,
+  getMarketIntelligenceOpportunities,
+  getMarketPositionIntelligence,
+  getMorningBrief,
+  getRadarScore,
+  getRevenueAdvice,
+  getTodayMarketIntelligence,
   postMarketConfidence,
   postNormalizeRates,
   postPositionAnalysis,
@@ -31,3 +47,19 @@ dashboardRouter.post('/webhook/hotel/:id/recalculate', postWebhookRecalculate);
 dashboardRouter.post('/intelligence/normalize-rates', requireAuth, requireBetaAcceptance(), postNormalizeRates);
 dashboardRouter.post('/intelligence/market-confidence', requireAuth, requireBetaAcceptance(), postMarketConfidence);
 dashboardRouter.post('/intelligence/position-analysis', requireAuth, requireBetaAcceptance(), postPositionAnalysis);
+dashboardRouter.get('/api/intelligence/advice', requireAuth, requireBetaAcceptance(), getRevenueAdvice);
+dashboardRouter.get('/api/intelligence/competitors', requireAuth, requireBetaAcceptance(), getCompetitorIntelligence);
+dashboardRouter.get('/api/intelligence/demand-calendar', requireAuth, requireBetaAcceptance(), getDemandCalendarEntries);
+dashboardRouter.get('/api/market-demand', requireAuth, requireBetaAcceptance(), getMarketDemandController);
+dashboardRouter.get('/api/intelligence/demand-forecast', requireAuth, requireBetaAcceptance(), getDemandForecast);
+dashboardRouter.get('/api/intelligence/alerts', requireAuth, requireBetaAcceptance(), getIntelligenceAlerts);
+dashboardRouter.get('/api/intelligence/market-compression', requireAuth, requireBetaAcceptance(), getMarketCompression);
+dashboardRouter.get('/api/intelligence/morning-brief', requireAuth, requireBetaAcceptance(), getMorningBrief);
+dashboardRouter.get('/api/intelligence/map', requireAuth, requireBetaAcceptance(), getMarketIntelligenceMap);
+dashboardRouter.get('/api/intelligence/opportunities', requireAuth, requireBetaAcceptance(), getMarketIntelligenceOpportunities);
+dashboardRouter.get('/api/intelligence/leadradar-signals', requireAuth, requireBetaAcceptance(), getLeadRadarExternalSignalFeed);
+dashboardRouter.get('/api/intelligence/leadradar-events', requireAuth, requireBetaAcceptance(), getLeadRadarUpcomingEvents);
+dashboardRouter.get('/api/intelligence/market-position', requireAuth, requireBetaAcceptance(), getMarketPositionIntelligence);
+dashboardRouter.get('/api/intelligence/radar-score', requireAuth, requireBetaAcceptance(), getRadarScore);
+dashboardRouter.get('/api/intelligence/today', requireAuth, requireBetaAcceptance(), getTodayMarketIntelligence);
+dashboardRouter.get('/api/debug/system-status', requireAuth, requireBetaAcceptance(), getDebugSystemStatus);

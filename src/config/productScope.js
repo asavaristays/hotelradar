@@ -1,6 +1,7 @@
 import { env } from './env.js';
 
-const DEFAULT_FOCUS_CITIES = ['Goa', 'Mumbai'];
+const DEFAULT_FOCUS_CITIES = ['Goa', 'Mumbai', 'Jaipur'];
+const CITY_COVERAGE = ['Goa', 'Jaipur', 'Mumbai'];
 
 function normalizeCity(value = '') {
   return String(value || '').trim().toLowerCase();
@@ -40,6 +41,7 @@ function assertCityInScope(city = '', label = 'city') {
 export {
   focusCities,
   focusCityKeys,
+  CITY_COVERAGE as cityCoverage,
   isCityInScope,
   assertCityInScope,
   normalizeCity,

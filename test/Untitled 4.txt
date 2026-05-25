@@ -1,0 +1,58 @@
+Final Structure of Project 
+
+- Marketing Website : rapturousjigsaw.com 
+  Marketing Website Management : backend.rapturousjigsaw.com 
+   - Story-driven homepage, brand positioning, UX flow, CMS-ready structure 
+   - Experience pages, booking/inquiry flow, storytelling UI
+   - Content design, text, photos and video assets [ module ]
+   - Admin panel to changes text and photo updates on all pages similar to Wordpress 
+     [backend.rapturousjigsaw.com]
+     
+     One time cost: Rs. 75,000/-   
+
+
+- Events: event.rapturousjigsaw.com [front end ] event.backend.rapturousjigsaw.com 
+       - Dashboard
+       - Modules:
+       - Event creation [ SJPT or City specific]
+       - Cities
+       - Venues
+       - Slots
+       - Capacity control
+       - Registration
+       - Payments
+       - QR tickets
+       - Leaderboards
+       - School uploads
+       - Volunteer system
+       - Sponsor system
+       - Razorpay Integration 
+        
+       One time Cost: 1.45L          
+
+Existing Woo-commerce 
+       - shop.rapturousjigsaw.com 
+       - Updates and audit 
+       - Razorpay 
+        
+       [ No cost applicable as it manage by my in-house team] 
+
+Server Infrastructure Setup 
+       - VPS [ KVM 2 2 vCPU Cores, 8 GB and 100 GB space Monthly 929x12 + taxes and 
+         monthly Rs. 1299 subscription by client] 
+       - DB
+       - Backup and Recovery 
+       
+       One time Cost: Rs. 15000/-         
+
+Integration 
+     - SEO 
+     - Google Analytics 
+     - Pixel 
+
+Phase: 
+   - Configure and Ready for Beta Testing 
+   - Beta version Live 10-12 Days 
+   - Beta version launch 2 Months changes and updates includes
+  
+

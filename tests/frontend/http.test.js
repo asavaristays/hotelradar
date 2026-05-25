@@ -1,4 +1,5 @@
-import { parseServerError } from '../../frontend/src/http.js';
+import { jest } from '@jest/globals';
+import { SESSION_EXPIRED_EVENT, parseServerError } from '../../frontend/src/http.js';
 
 function buildResponse({ status = 500, body = '', contentType = 'text/plain' } = {}) {
   return {
@@ -35,6 +36,16 @@ function buildConsumedResponse({ status = 500, contentType = 'text/plain' } = {}
 }
 
 describe('frontend http parser', () => {
+  const originalDispatchEvent = globalThis.dispatchEvent;
+
+  afterEach(() => {
+    if (originalDispatchEvent) {
+      globalThis.dispatchEvent = originalDispatchEvent;
+    } else {
+      delete globalThis.dispatchEvent;
+    }
+  });
+
   test('returns safe fallback for html gateway responses', async () => {
     const response = buildResponse({
       status: 502,
@@ -94,5 +105,33 @@ describe('frontend http parser', () => {
       'Unable to load dashboard. Service is temporarily unavailable. Please retry in a minute.',
     );
     expect(parsed.message).not.toContain('body stream already read');
+  });
+
+  test('emits a session expired event for unauthorized responses', async () => {
+    const dispatchEvent = jest.fn(() => true);
+    globalThis.dispatchEvent = dispatchEvent;
+
+    const response = buildResponse({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        message: 'Unauthorized',
+        code: 'UNAUTHORIZED',
+      }),
+    });
+
+    const parsed = await parseServerError(response, 'Unable to load dashboard');
+
+    expect(parsed.message).toBe('Session expired. Please sign in again.');
+    expect(parsed.code).toBe('UNAUTHORIZED');
+    expect(parsed.sessionExpired).toBe(true);
+    expect(dispatchEvent).toHaveBeenCalledTimes(1);
+    const event = dispatchEvent.mock.calls[0][0];
+    expect(event.type).toBe(SESSION_EXPIRED_EVENT);
+    expect(event.detail).toEqual({
+      message: 'Session expired. Please sign in again.',
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
   });
 });

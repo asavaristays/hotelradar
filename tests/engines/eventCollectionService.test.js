@@ -2,7 +2,10 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import {
+  buildSourceList,
   classifyCategory,
+  eventFromHtmlFallback,
+  extractBookMyShowVenue,
   extractJsonLdBlocks,
   generateGoaWeddingSignals,
   parseSourceSpec,
@@ -86,6 +89,15 @@ describe('eventCollectionService', () => {
     );
 
     expect(summary.sourceSuccess).toBe(1);
+    expect(summary.sourceResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          city: 'Goa',
+          source: 'insider.in',
+          status: 'success',
+        }),
+      ]),
+    );
     expect(summary.rowsWritten).toBeGreaterThanOrEqual(2);
     expect(summary.weddingSignalsAdded).toBeGreaterThanOrEqual(0);
     expect(summary.linkedinHintsAdded).toBe(1);
@@ -131,12 +143,170 @@ describe('eventCollectionService', () => {
     expect(output[0].confidence).toBe('tentative');
   });
 
+  test('extracts offline BookMyShow venue details from html fallback', () => {
+    const html = `
+      <html>
+        <head>
+          <title>Infosys Leadership Meet | BookMyShow</title>
+          <meta property="og:description" content="Corporate event at Grand Hyatt Goa on 2026-04-21" />
+        </head>
+        <body>
+          <script>window.__DATA__ = {"venue":"Grand Hyatt Goa"}</script>
+          <p>2026-04-21</p>
+        </body>
+      </html>
+    `;
+
+    expect(extractBookMyShowVenue(html)).toBe('Grand Hyatt Goa');
+
+    const event = eventFromHtmlFallback(
+      html,
+      {
+        city: 'Goa',
+        source: 'bookmyshow.com',
+        url: 'https://in.bookmyshow.com/events/infosys-leadership-meet/ETTEST',
+      },
+      '2026-03-16T12:00:00.000Z',
+    );
+
+    expect(event).toMatchObject({
+      city: 'Goa',
+      venue: 'Grand Hyatt Goa',
+      source: 'bookmyshow.com',
+    });
+  });
+
+  test('drops online BookMyShow fallback events', () => {
+    const html = `
+      <html>
+        <head>
+          <title>Revenue Masterclass Online | BookMyShow</title>
+          <meta property="og:description" content="Join online on Zoom at 2026-04-25" />
+        </head>
+        <body>
+          <script>window.__DATA__ = {"venue":"Online"}</script>
+          <p>2026-04-25</p>
+        </body>
+      </html>
+    `;
+
+    const event = eventFromHtmlFallback(
+      html,
+      {
+        city: 'Mumbai',
+        source: 'bookmyshow.com',
+        url: 'https://in.bookmyshow.com/events/revenue-masterclass-online/ETTEST',
+      },
+      '2026-03-16T12:00:00.000Z',
+    );
+
+    expect(event).toBeNull();
+  });
+
+  test('writes BookMyShow debug capture when no events are parsed', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'event-collector-bms-debug-'));
+    const outputPath = path.join(tmpDir, 'latest.json');
+    const html = `
+      <html>
+        <head><title>BookMyShow Explore Goa</title></head>
+        <body><div id="app"></div></body>
+      </html>
+    `;
+
+    const summary = await runEventCollectionCycle(
+      {
+        outputPath,
+        includeWeddingSignals: false,
+        sources: [
+          {
+            city: 'Goa',
+            source: 'bookmyshow.com',
+            url: 'https://in.bookmyshow.com/explore/events-goa',
+          },
+        ],
+      },
+      {
+        fetchImpl: async () => ({ ok: true, status: 200, text: async () => html }),
+        readFile: fs.readFile,
+        writeFile: fs.writeFile,
+        mkdir: fs.mkdir,
+      },
+    );
+
+    expect(summary.bookmyshowDebugWritten).toBe(1);
+    expect(summary.sourceResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          city: 'Goa',
+          source: 'bookmyshow.com',
+          status: 'success',
+          rowsCollected: 0,
+        }),
+      ]),
+    );
+    const debugHtml = await fs.readFile(path.join(tmpDir, 'debug-bookmyshow', 'goa.html'), 'utf8');
+    const debugMeta = JSON.parse(await fs.readFile(path.join(tmpDir, 'debug-bookmyshow', 'goa.json'), 'utf8'));
+
+    expect(debugHtml).toContain('BookMyShow Explore Goa');
+    expect(debugMeta.reason).toBe('no_events_parsed');
+    expect(debugMeta.city).toBe('Goa');
+  });
+
   test('parses source spec in City|source|url format', () => {
     expect(parseSourceSpec('Goa|insider.in|https://insider.in/goa/all-events')).toEqual({
       city: 'Goa',
       source: 'insider.in',
       url: 'https://insider.in/goa/all-events',
     });
+  });
+
+  test('includes broader Jaipur event sources by default', () => {
+    const jaipurSources = buildSourceList().filter((entry) => entry.city === 'Jaipur');
+    expect(jaipurSources.map((entry) => entry.source)).toEqual(
+      expect.arrayContaining(['insider.in', 'bookmyshow.com', 'allevents.in', 'eventbrite.com']),
+    );
+  });
+
+  test('blocks IPL hint rows before the 2026 season start', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'event-collector-'));
+    const outputPath = path.join(tmpDir, 'latest.json');
+    const linkedinHintsFile = path.join(tmpDir, 'linkedin_hints.json');
+
+    await fs.writeFile(
+      linkedinHintsFile,
+      JSON.stringify([
+        {
+          name: 'IPL Match - Wankhede',
+          city: 'Mumbai',
+          venue: 'Wankhede Stadium',
+          start_date: '2026-03-12',
+          end_date: '2026-03-12',
+          category: 'ipl_match',
+          scale: 'large',
+        },
+      ]),
+      'utf8',
+    );
+
+    const summary = await runEventCollectionCycle(
+      {
+        outputPath,
+        includeWeddingSignals: false,
+        linkedinHintsFile,
+        sources: [],
+      },
+      {
+        fetchImpl: async () => ({ ok: true, status: 200, text: async () => '' }),
+        readFile: fs.readFile,
+        writeFile: fs.writeFile,
+        mkdir: fs.mkdir,
+      },
+    );
+
+    const output = JSON.parse(await fs.readFile(outputPath, 'utf8'));
+    expect(summary.rowsBlocked).toBe(1);
+    expect(summary.rowsWritten).toBe(0);
+    expect(output).toEqual([]);
   });
 
   test('generates Goa wedding signals for wedding season weekends', () => {

@@ -33,7 +33,7 @@ describe('eventIngestionService', () => {
       {
         // invalid row (unsupported city + missing date)
         name: 'Unknown Event',
-        city: 'Delhi',
+        city: 'Bengaluru',
       },
     ];
 
@@ -70,5 +70,44 @@ describe('eventIngestionService', () => {
     expect(summary.missingSnapshot).toBe(true);
     expect(summary.rowsRead).toBe(0);
     expect(summary.rowsUpserted).toBe(0);
+  });
+
+  test('blocks IPL rows before the 2026 season start', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'event-ingestion-'));
+    const snapshotPath = path.join(tmpDir, 'latest.json');
+    const upserts = [];
+
+    await fs.writeFile(
+      snapshotPath,
+      JSON.stringify([
+        {
+          name: 'IPL Match - Wankhede',
+          city: 'Mumbai',
+          venue: 'Wankhede Stadium',
+          start_date: '2026-03-12',
+          end_date: '2026-03-12',
+          category: 'ipl_match',
+          scale: 'large',
+          source: 'linkedin-hints',
+        },
+      ]),
+      'utf8',
+    );
+
+    const summary = await runEventIngestionCycle(
+      { snapshotPath },
+      {
+        readFile: fs.readFile,
+        upsertCityEvent: async (payload) => {
+          upserts.push(payload);
+          return payload;
+        },
+      },
+    );
+
+    expect(summary.rowsRead).toBe(1);
+    expect(summary.rowsUpserted).toBe(0);
+    expect(summary.skippedBlockedRow).toBe(1);
+    expect(upserts).toHaveLength(0);
   });
 });

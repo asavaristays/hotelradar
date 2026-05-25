@@ -33,7 +33,18 @@ import { requireAuth, requireRole } from '../middleware/authMiddleware.js';
 
 export const adminRouter = express.Router();
 
-adminRouter.use(requireAuth, requireRole('super_admin', 'admin'));
+function requireAdminApiAuth(req, res, next) {
+  if (!String(req.path || '').startsWith('/admin/')) {
+    return next();
+  }
+
+  return requireAuth(req, res, (authError) => {
+    if (authError) return next(authError);
+    return requireRole('super_admin', 'admin')(req, res, next);
+  });
+}
+
+adminRouter.use(requireAdminApiAuth);
 adminRouter.get('/admin/states', getStateList);
 adminRouter.get('/admin/cities', getCityList);
 adminRouter.get('/admin/season-profiles', getSeasonProfileList);

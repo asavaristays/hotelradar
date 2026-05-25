@@ -3,7 +3,7 @@ import { clamp, stabilityTone } from './dashboardUtils.js';
 function formatPreviewDate(value) {
   if (!value) return 'N/A';
   const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
+  if (Number.isNaN(parsed.getTime())) return 'N/A';
   return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 

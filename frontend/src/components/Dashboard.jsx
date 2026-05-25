@@ -4,10 +4,12 @@ import CompressionSnapshot from './CompressionSnapshot.jsx';
 import CompetitiveGrid from './CompetitiveGrid.jsx';
 import ConfidenceCard from './ConfidenceCard.jsx';
 import DataHealthPanel from './DataHealthPanel.jsx';
+import DemandForecast from './DemandForecast.jsx';
 import DemandScoreCard from './DemandScoreCard.jsx';
 import ForwardDemandChart from './ForwardDemandChart.jsx';
 import MarketPositionBar from './MarketPositionBar.jsx';
 import OtaParityPanel from './OtaParityPanel.jsx';
+import RadarScoreCard from './RadarScoreCard.jsx';
 import SignalReadinessPanel from './SignalReadinessPanel.jsx';
 import SignalBreakdownChart from './SignalBreakdownChart.jsx';
 import StabilityCard from './StabilityCard.jsx';
@@ -54,14 +56,20 @@ function formatTimestamp(value) {
   if (!value) return 'N/A';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return 'N/A';
-  return parsed.toLocaleString();
+  return parsed.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function formatStayDate(value) {
   if (!value) return 'N/A';
   const raw = String(value).trim();
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
+  if (Number.isNaN(parsed.getTime())) return 'N/A';
   return parsed.toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short',
@@ -143,20 +151,26 @@ function ChangeSummaryCard({ changeSummary }) {
   const summary = changeSummary?.summary || 'No prior snapshot available for comparison.';
   const scoreDelta = Number(changeSummary?.scoreDelta || 0);
   const positionDelta = Number(changeSummary?.positionDeltaPct || 0);
+  const scoreTone = scoreDelta > 0 ? 'up' : scoreDelta < 0 ? 'down' : 'flat';
+  const positionTone = positionDelta > 0 ? 'up' : positionDelta < 0 ? 'down' : 'flat';
+  const scoreLabel = scoreDelta > 0 ? 'Demand score up' : scoreDelta < 0 ? 'Demand score down' : 'Demand score steady';
+  const positionLabel =
+    positionDelta > 0 ? 'Market position improved' : positionDelta < 0 ? 'Market position softened' : 'Market position steady';
 
   return (
     <section className="panel changePanel" aria-label="Change summary">
       <header className="panelHeader">
         <h2>Change Since Last Snapshot</h2>
+        <span className="metricBadge metric-info">Critical Shift</span>
       </header>
       <p className="metaLabel">{summary}</p>
       <div className="snapshotList">
-        <div>
-          <span>Demand Score Delta</span>
+        <div className={`snapshotShift snapshotShift-${scoreTone}`}>
+          <span>{scoreLabel}</span>
           <strong>{formatPercent(scoreDelta, 2)}</strong>
         </div>
-        <div>
-          <span>Market Position Delta</span>
+        <div className={`snapshotShift snapshotShift-${positionTone}`}>
+          <span>{positionLabel}</span>
           <strong>{formatPercent(positionDelta, 2)}</strong>
         </div>
       </div>
@@ -373,7 +387,7 @@ function ColorLegendFooter() {
   );
 }
 
-export default function Dashboard({ dashboard, loading, error }) {
+export default function Dashboard({ dashboard, loading, error, token = '', hotelId = '' }) {
   const [curvePreview, setCurvePreview] = useState(null);
 
   useEffect(() => {
@@ -407,8 +421,23 @@ export default function Dashboard({ dashboard, loading, error }) {
 
   return (
     <section id="hotel-dashboard-panel" className="dashboardLayout" aria-label="HotelRADAR dashboard">
-      <MobileSummaryStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} productLock={dashboard.productLock} />
+      <RadarScoreCard
+        token={token}
+        hotelId={String(hotelId || dashboard?.hotelId || '').trim()}
+        fallbackData={{
+          marketStatus: dashboard?.demandLevel || '',
+          recommendedPrice: dashboard?.suggestedPricing?.base || 0,
+          positionVsMarket: dashboard?.marketPosition?.positionPct || 0,
+          generatedAt: dashboard?.lastUpdated || '',
+        }}
+      />
       <ExecutiveStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} productLock={dashboard.productLock} />
+      <div className="row rowMid">
+        <ChangeSummaryCard changeSummary={dashboard.changeSummary} />
+        <TodayActionCard actionSummary={dashboard.actionSummary} productLock={dashboard.productLock} />
+      </div>
+      <DemandForecast token={token} hotelId={String(hotelId || dashboard?.hotelId || '').trim()} />
+      <MobileSummaryStrip dashboard={dashboard} signalQuality={dashboard.signalQuality} productLock={dashboard.productLock} />
 
       {dashboard.productLock?.enabled ? (
         <section className="panel productLockBanner" aria-label="Product lock status">
@@ -487,49 +516,69 @@ export default function Dashboard({ dashboard, loading, error }) {
           onPointChange={setCurvePreview}
         />
       </div>
+      <details className="collapsiblePanel dashboardSecondarySection">
+        <summary>Deep Dive: diagnostics, parity, alerts, and market detail</summary>
 
-      <div className="row rowMid">
-        <TodayActionCard actionSummary={dashboard.actionSummary} productLock={dashboard.productLock} />
-        <ChangeSummaryCard changeSummary={dashboard.changeSummary} />
-      </div>
+        <div className="dashboardSecondarySectionBody">
+          <details className="collapsiblePanel dashboardNestedSection" open>
+            <summary>Market Detail</summary>
+            <div className="dashboardNestedSectionBody">
+              <div className="row rowBottom">
+                <CompetitiveGrid
+                  rows={dashboard.competitiveGrid}
+                  ownHotelName={dashboard.competitiveGrid?.[0]?.name}
+                  marketContext={dashboard.marketContext}
+                />
+                <CompressionSnapshot
+                  forwardCurve={dashboard.forwardCurve}
+                  alerts={groupedAlerts}
+                  compression={dashboard.compression}
+                />
+              </div>
+            </div>
+          </details>
 
-      <div className="row rowBottom">
-        <CompetitiveGrid
-          rows={dashboard.competitiveGrid}
-          ownHotelName={dashboard.competitiveGrid?.[0]?.name}
-          marketContext={dashboard.marketContext}
-        />
-        <CompressionSnapshot
-          forwardCurve={dashboard.forwardCurve}
-          alerts={groupedAlerts}
-          compression={dashboard.compression}
-        />
-      </div>
+          <details className="collapsiblePanel dashboardNestedSection">
+            <summary>Competitor &amp; Parity</summary>
+            <div className="dashboardNestedSectionBody">
+              <div className="row rowWide">
+                <OtaParityPanel otaParity={dashboard.otaParity} marketContext={dashboard.marketContext} />
+              </div>
+            </div>
+          </details>
 
-      <div className="row rowWide">
-        <OtaParityPanel otaParity={dashboard.otaParity} marketContext={dashboard.marketContext} />
-      </div>
+          <details className="collapsiblePanel dashboardNestedSection">
+            <summary>Alerts &amp; Signals</summary>
+            <div className="dashboardNestedSectionBody">
+              <div className="row rowMid">
+                <InsightsCard dashboard={dashboard} viewerRole={dashboard.viewerRole} />
+                <AlertsPanel alerts={dashboard.alerts || []} alertGroups={dashboard.alertGroups || []} />
+              </div>
+            </div>
+          </details>
 
-      <div className="row rowWide">
-        <DataHealthPanel
-          dataHealth={dashboard.dataHealth}
-          viewerRole={dashboard.viewerRole}
-          marketContext={dashboard.marketContext}
-        />
-      </div>
+          <details className="collapsiblePanel dashboardNestedSection">
+            <summary>Diagnostics</summary>
+            <div className="dashboardNestedSectionBody">
+              <div className="row rowWide">
+                <DataHealthPanel
+                  dataHealth={dashboard.dataHealth}
+                  viewerRole={dashboard.viewerRole}
+                  marketContext={dashboard.marketContext}
+                />
+              </div>
 
-      <div className="row rowMid">
-        <InsightsCard dashboard={dashboard} viewerRole={dashboard.viewerRole} />
-        <AlertsPanel alerts={dashboard.alerts || []} alertGroups={dashboard.alertGroups || []} />
-      </div>
+              <div className="row rowWide">
+                <PerformanceCard summary={dashboard.performanceSummary} signalQuality={dashboard.signalQuality} />
+              </div>
 
-      <div className="row rowWide">
-        <PerformanceCard summary={dashboard.performanceSummary} signalQuality={dashboard.signalQuality} />
-      </div>
-
-      <div className="row rowWide">
-        <ColorLegendFooter />
-      </div>
+              <div className="row rowWide">
+                <ColorLegendFooter />
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
     </section>
   );
 }

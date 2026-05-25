@@ -1,0 +1,8 @@
+DELETE FROM hotel_users
+WHERE hotel_id = '88888888-8888-4888-8888-888888888888';
+
+DELETE FROM users
+WHERE email = 'pinkcity@radar.ai';
+
+DELETE FROM hotels
+WHERE id = '88888888-8888-4888-8888-888888888888';

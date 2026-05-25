@@ -170,6 +170,38 @@ describe('dataHealthService', () => {
     expect(output.signalQuality.summary.toLowerCase()).toContain('live ota rows');
   });
 
+  test('treats Jaipur as a focus city for readiness checks', async () => {
+    const deps = inMemoryDeps();
+    const output = await computeDataHealthSnapshot(
+      {
+        hotelId: 'h-jaipur',
+        city: 'Jaipur',
+        viewerRole: 'admin',
+        calibration: {},
+        competitorRates: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }],
+        airfareSeries: Array.from({ length: 10 }, (_, i) => ({ id: i })),
+        events: [],
+        lastScrapedAt: new Date().toISOString(),
+        lastEventSync: null,
+        otaParity: {
+          sourceStatus: 'estimated',
+          rows: [],
+          parityThresholdPct: 2,
+          alertThresholdPct: 5,
+          summary: { maxAbsGapPct: 0 },
+        },
+        confidence: { score: 82 },
+        marketStability: { volatilityScore: 24 },
+        performanceSummary: { sampleSize: 9, rollingAccuracy30d: 76, stabilityDeviation: 10 },
+      },
+      deps,
+    );
+
+    expect(output.signalQuality.mode).toBe('verify');
+    expect(output.signalQuality.summary.toLowerCase()).toContain('jaipur');
+    expect(output.signalQuality.summary.toLowerCase()).toContain('live ota rows');
+  });
+
   test('honors minForecastAccuracy=0 override (does not fallback to default 60)', async () => {
     const deps = inMemoryDeps();
     const nowIso = new Date().toISOString();
@@ -215,5 +247,92 @@ describe('dataHealthService', () => {
 
     expect(output.diagnostics.thresholds.minForecastAccuracy).toBe(0);
     expect(output.signalQuality.mode).toBe('actionable');
+  });
+
+  test('forceProductUnlock override keeps signal quality actionable even when data is weak', async () => {
+    const deps = inMemoryDeps();
+    const output = await computeDataHealthSnapshot(
+      {
+        hotelId: 'h5',
+        city: 'Mumbai',
+        viewerRole: 'admin',
+        calibration: {
+          global: {
+            dataHealth: {
+              forceProductUnlock: true,
+            },
+          },
+        },
+        competitorRates: [],
+        airfareSeries: [],
+        events: [],
+        lastScrapedAt: null,
+        lastEventSync: null,
+        otaParity: {
+          sourceStatus: 'missing',
+          rows: [],
+          parityThresholdPct: 2,
+          alertThresholdPct: 5,
+          summary: { maxAbsGapPct: 0 },
+        },
+        confidence: { score: 40 },
+        marketStability: { volatilityScore: 80 },
+        performanceSummary: { sampleSize: 0, rollingAccuracy30d: 0, stabilityDeviation: 40 },
+      },
+      deps,
+    );
+
+    expect(output.signalQuality.mode).toBe('actionable');
+    expect(output.signalQuality.forceUnlocked).toBe(true);
+    expect(output.signalQuality.summary.toLowerCase()).toContain('live ota feed is missing');
+    expect(output.signalQuality.summary.toLowerCase()).toContain('mumbai');
+  });
+
+  test('RADAR_FORCE_PRODUCT_UNLOCK env override keeps signal quality actionable', async () => {
+    const deps = inMemoryDeps();
+    const previous = process.env.RADAR_FORCE_PRODUCT_UNLOCK;
+    process.env.RADAR_FORCE_PRODUCT_UNLOCK = 'true';
+
+    try {
+      const output = await computeDataHealthSnapshot(
+        {
+          hotelId: 'h6',
+          city: 'Goa',
+          viewerRole: 'admin',
+          calibration: {
+            global: {
+              dataHealth: {
+                forceProductUnlock: false,
+              },
+            },
+          },
+          competitorRates: [],
+          airfareSeries: [],
+          events: [],
+          lastScrapedAt: null,
+          lastEventSync: null,
+          otaParity: {
+            sourceStatus: 'missing',
+            rows: [],
+            parityThresholdPct: 2,
+            alertThresholdPct: 5,
+            summary: { maxAbsGapPct: 0 },
+          },
+          confidence: { score: 30 },
+          marketStability: { volatilityScore: 90 },
+          performanceSummary: { sampleSize: 0, rollingAccuracy30d: 0, stabilityDeviation: 60 },
+        },
+        deps,
+      );
+
+      expect(output.signalQuality.mode).toBe('actionable');
+      expect(output.signalQuality.forceUnlocked).toBe(true);
+    } finally {
+      if (previous == null) {
+        delete process.env.RADAR_FORCE_PRODUCT_UNLOCK;
+      } else {
+        process.env.RADAR_FORCE_PRODUCT_UNLOCK = previous;
+      }
+    }
   });
 });

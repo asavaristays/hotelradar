@@ -1,3 +1,6 @@
+import { useEffect, useMemo, useState } from 'react';
+import { buildApiPath, buildAuthHeaders, parseServerError } from '../http.js';
+
 function alertTone(value) {
   const text = String(value || '').toUpperCase();
   if (text.includes('CRITICAL')) return 'critical';
@@ -40,7 +43,13 @@ function formatSince(value) {
   if (!value) return '';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return '';
-  return parsed.toLocaleString('en-IN');
+  return parsed.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function groupAlerts(alerts = [], alertGroups = []) {
@@ -80,18 +89,137 @@ function groupAlerts(alerts = [], alertGroups = []) {
   return Array.from(grouped.values());
 }
 
-export default function AlertsPanel({ alerts = [], alertGroups = [] }) {
+function formatSignalSource(value) {
+  return String(value || '')
+    .trim()
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatAlertDate(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function IntelligenceAlertList({ items = [] }) {
+  return (
+    <ul className="alertList">
+      {items.map((alert) => (
+        <li
+          key={`${alert.alert_type}:${alert.signal_source}:${alert.created_at}`}
+          className={`alertItem intelligenceAlertItem intelligenceAlertItem-${alertTone(alert.severity)}`}
+        >
+          <div className="alertHead">
+            <span className={`alertChip alert-${alertTone(alert.severity)}`}>{alertLabel(alert.severity)}</span>
+            <span className="alertCountBadge">{alert.city}</span>
+          </div>
+          <p>{alert.message}</p>
+          <p className="metaLabel">
+            Signal source: <strong>{formatSignalSource(alert.signal_source)}</strong>
+          </p>
+          <p className="intelligenceAlertAction">{alert.recommended_action}</p>
+          {formatAlertDate(alert.created_at) ? (
+            <p className="metaLabel">Updated {formatAlertDate(alert.created_at)}</p>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function AlertsPanel({ alerts = [], alertGroups = [], mode = 'default', token = '', hotelId = '' }) {
+  const [intelligenceAlerts, setIntelligenceAlerts] = useState([]);
+  const [loading, setLoading] = useState(mode === 'intelligence');
+  const [error, setError] = useState('');
   const groupedAlerts = groupAlerts(alerts, alertGroups);
+  const isIntelligenceMode = mode === 'intelligence';
+
+  useEffect(() => {
+    if (!isIntelligenceMode) {
+      return undefined;
+    }
+
+    let active = true;
+
+    async function loadIntelligenceAlerts() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await fetch(buildApiPath('/api/intelligence/alerts', { hotel_id: hotelId }), {
+          headers: buildAuthHeaders(token),
+        });
+
+        if (!response.ok) {
+          const parsed = await parseServerError(response, 'Unable to load intelligence alerts');
+          throw new Error(parsed.message);
+        }
+
+        const payload = await response.json();
+        if (!active) {
+          return;
+        }
+
+        setIntelligenceAlerts(Array.isArray(payload?.alerts) ? payload.alerts : []);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(loadError.message || 'Unable to load intelligence alerts.');
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadIntelligenceAlerts();
+
+    return () => {
+      active = false;
+    };
+  }, [hotelId, isIntelligenceMode, token]);
+
+  const intelligenceTitle = useMemo(
+    () => (isIntelligenceMode ? 'Intelligence Alerts' : 'Alerts'),
+    [isIntelligenceMode],
+  );
 
   return (
     <section className="panel alertsPanel" aria-label="Alerts panel">
       <header className="panelHeader">
-        <h2>Alerts</h2>
+        <div className="gridMetaBlock">
+          <h2>{intelligenceTitle}</h2>
+          {isIntelligenceMode ? (
+            <p className="metaLabel">Latest market alerts detected from active intelligence signals.</p>
+          ) : null}
+        </div>
       </header>
 
-      {!groupedAlerts.length ? (
+      {isIntelligenceMode && loading ? <p className="metaLabel">Loading intelligence alerts…</p> : null}
+      {isIntelligenceMode && !loading && error ? <p className="errorText">{error}</p> : null}
+
+      {isIntelligenceMode ? (
+        !loading && !error && !intelligenceAlerts.length ? (
+          <p className="metaLabel">No intelligence alerts are active right now.</p>
+        ) : null
+      ) : !groupedAlerts.length ? (
         <p className="metaLabel">No active alerts.</p>
-      ) : (
+      ) : null}
+
+      {isIntelligenceMode && !loading && !error && intelligenceAlerts.length ? (
+        <IntelligenceAlertList items={intelligenceAlerts} />
+      ) : null}
+
+      {!isIntelligenceMode && groupedAlerts.length ? (
         <ul className="alertList">
           {groupedAlerts.map((alert) => (
             <li key={`${alert.severity}:${alert.message}`} className="alertItem">
@@ -106,7 +234,7 @@ export default function AlertsPanel({ alerts = [], alertGroups = [] }) {
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </section>
   );
 }

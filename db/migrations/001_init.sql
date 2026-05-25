@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS hotels (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   hotel_name TEXT NOT NULL,
-  city TEXT NOT NULL CHECK (city IN ('Goa', 'Mumbai')),
+  city TEXT NOT NULL CHECK (city IN ('Goa', 'Mumbai', 'Jaipur')),
   alert_sensitivity TEXT NOT NULL DEFAULT 'balanced' CHECK (alert_sensitivity IN ('conservative', 'balanced', 'aggressive')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS hotel_rate_snapshots (
 
 CREATE TABLE IF NOT EXISTS airfare_data (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  city TEXT NOT NULL CHECK (city IN ('Goa', 'Mumbai')),
+  city TEXT NOT NULL CHECK (city IN ('Goa', 'Mumbai', 'Jaipur')),
   date DATE NOT NULL,
   avg_price NUMERIC(10,2) NOT NULL CHECK (avg_price >= 0),
   UNIQUE (city, date)
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS airfare_data (
 
 CREATE TABLE IF NOT EXISTS holidays (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  city TEXT NOT NULL CHECK (city IN ('Goa', 'Mumbai')),
+  city TEXT NOT NULL CHECK (city IN ('Goa', 'Mumbai', 'Jaipur')),
   holiday_date DATE NOT NULL,
   holiday_name TEXT NOT NULL,
   holiday_type TEXT NOT NULL CHECK (holiday_type IN ('public', 'regional', 'long_weekend')),
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS holidays (
 );
 
 CREATE TABLE IF NOT EXISTS city_weights (
-  city TEXT PRIMARY KEY CHECK (city IN ('Goa', 'Mumbai')),
+  city TEXT PRIMARY KEY CHECK (city IN ('Goa', 'Mumbai', 'Jaipur')),
   competitor_weight NUMERIC(5,4) NOT NULL,
   holiday_weight NUMERIC(5,4) NOT NULL,
   airfare_weight NUMERIC(5,4) NOT NULL,
@@ -201,7 +201,8 @@ WHERE id IN (
 INSERT INTO city_weights (city, competitor_weight, holiday_weight, airfare_weight, season_weight)
 VALUES
   ('Goa', 0.45, 0.25, 0.20, 0.10),
-  ('Mumbai', 0.40, 0.30, 0.15, 0.15)
+  ('Mumbai', 0.40, 0.30, 0.15, 0.15),
+  ('Jaipur', 0.42, 0.26, 0.14, 0.18)
 ON CONFLICT (city) DO UPDATE
 SET competitor_weight = EXCLUDED.competitor_weight,
     holiday_weight = EXCLUDED.holiday_weight,

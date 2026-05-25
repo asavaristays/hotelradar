@@ -13,7 +13,7 @@ function isWeekend(dateString) {
 function formatHoverDate(value) {
   if (!value) return 'N/A';
   const parsed = asDate(value);
-  if (Number.isNaN(parsed.getTime())) return value;
+  if (Number.isNaN(parsed.getTime())) return 'N/A';
   return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
@@ -165,6 +165,16 @@ export default function ForwardDemandChart({
     setActiveIndex(nextIndex);
   }
 
+  function updateActiveFromTouch(event) {
+    const touch = event.touches?.[0] || event.changedTouches?.[0];
+    if (!touch) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const safeWidth = bounds.width || 1;
+    const ratio = clamp((touch.clientX - bounds.left) / safeWidth, 0, 1);
+    const nextIndex = Math.round(ratio * Math.max(chart.points.length - 1, 0));
+    setActiveIndex(nextIndex);
+  }
+
   return (
     <section className="panel forwardPanel" aria-label="Forward demand curve">
       <header className="panelHeader">
@@ -206,6 +216,9 @@ export default function ForwardDemandChart({
           aria-label="Forward demand line chart"
           onMouseMove={updateActiveFromPointer}
           onMouseLeave={() => setActiveIndex(chart.peakIndex)}
+          onTouchStart={updateActiveFromTouch}
+          onTouchMove={updateActiveFromTouch}
+          onTouchEnd={() => setActiveIndex(chart.peakIndex)}
         >
           {chart.weekendRects.map((rect, idx) => (
             <rect
@@ -256,7 +269,7 @@ export default function ForwardDemandChart({
               onMouseEnter={() => setActiveIndex(index)}
             >
               <title>
-                {point.date}: {Number(point.score || 0).toFixed(2)} | Indicative rate:{' '}
+                {formatHoverDate(point.date)}: {Number(point.score || 0).toFixed(2)} | Indicative rate:{' '}
                 {point.indicativeRate ? `₹${formatCurrency(point.indicativeRate)}` : 'Unavailable'}
               </title>
             </circle>
@@ -265,7 +278,7 @@ export default function ForwardDemandChart({
           {chart.peakPoint ? (
             <circle cx={chart.peakPoint.x} cy={chart.peakPoint.y} r={5.5} className="peakPoint">
               <title>
-                Peak day {chart.peakPoint.date}: {Number(chart.peakPoint.score || 0).toFixed(2)}
+                Peak day {formatHoverDate(chart.peakPoint.date)}: {Number(chart.peakPoint.score || 0).toFixed(2)}
               </title>
             </circle>
           ) : null}
@@ -273,13 +286,31 @@ export default function ForwardDemandChart({
       </div>
 
       <div className="forwardAxisLabels">
-        <span>{chart.first?.date}</span>
-        <span>{chart.mid?.date}</span>
-        <span>{chart.last?.date}</span>
+        <span>{formatHoverDate(chart.first?.date)}</span>
+        <span>{formatHoverDate(chart.mid?.date)}</span>
+        <span>{formatHoverDate(chart.last?.date)}</span>
       </div>
+      {chart.points.length > 1 ? (
+        <div className="forwardChartSlider" aria-label="Forward demand date selector">
+          <div className="forwardChartSliderMeta">
+            <span>Selected day</span>
+            <strong>{formatHoverDate(activePoint?.date)}</strong>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={String(Math.max(chart.points.length - 1, 0))}
+            step="1"
+            value={resolvedIndex}
+            onChange={(event) => setActiveIndex(Number(event.target.value || 0))}
+            aria-label="Forward demand curve slider"
+          />
+        </div>
+      ) : null}
       {chart.peakPoint ? (
         <p className="forwardCallout">
-          Peak forecast: <strong>{chart.peakPoint.date}</strong> at <strong>{Number(chart.peakPoint.score || 0).toFixed(1)}</strong>
+          Peak forecast: <strong>{formatHoverDate(chart.peakPoint.date)}</strong> at{' '}
+          <strong>{Number(chart.peakPoint.score || 0).toFixed(1)}</strong>
         </p>
       ) : null}
       <p className="metaLabel">Hover the curve to inspect stay date, demand score, and indicative rate.</p>

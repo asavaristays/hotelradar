@@ -53,6 +53,10 @@ export default function HotelSelector({
     };
   }, [token, reloadKey]);
 
+  const scopedHotels = hotels.filter((hotel) =>
+    ['goa', 'mumbai'].includes(String(hotel?.city || '').trim().toLowerCase()),
+  );
+
   return (
     <div className={`controls ${className}`.trim()} role="group" aria-label="Dashboard controls">
       <label className="controlLabel" htmlFor="hotelSelector">
@@ -66,7 +70,7 @@ export default function HotelSelector({
         aria-label="Hotel selector"
       >
         <option value="">{fetchingHotels ? 'Loading hotels...' : 'Select Hotel'}</option>
-        {hotels.map((hotel) => (
+        {scopedHotels.map((hotel) => (
           <option key={hotel.id} value={hotel.id}>
             {hotel.hotel_name} ({hotel.city})
           </option>

@@ -1,0 +1,4 @@
+ALTER TABLE market_hotels
+  ADD COLUMN IF NOT EXISTS website TEXT,
+  ADD COLUMN IF NOT EXISTS phone TEXT,
+  ADD COLUMN IF NOT EXISTS google_maps_url TEXT;

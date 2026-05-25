@@ -20,6 +20,7 @@ import { listAuditLogs } from '../repositories/auditRepository.js';
 import { getCalibrationRows, upsertCalibrationSetting } from '../repositories/calibrationRepository.js';
 import { listUpcomingEventsByCity, upsertCityEvent } from '../repositories/eventRepository.js';
 import { assertCityInScope } from '../config/productScope.js';
+import { getBlockedEventReason, validateEvent } from '../utils/eventValidation.js';
 import { hashPassword } from '../services/authService.js';
 import { recalculateDashboard } from '../services/dashboardService.js';
 import {
@@ -175,7 +176,7 @@ export async function patchHotelProfile(req, res, next) {
       const requestedCityId = String(req.body?.city_id || '').trim();
       const error = new Error(
         requestedCityId
-          ? 'Selected city is outside current product scope. Only Goa and Mumbai are enabled.'
+          ? 'Selected city is outside current product scope. Only Goa, Mumbai, and Jaipur are enabled.'
           : 'Hotel not found.',
       );
       error.status = requestedCityId ? 400 : 404;
@@ -351,18 +352,23 @@ export async function postManualSignalEvent(req, res, next) {
     const startDate = parseIsoDate(payload.start_date || payload.startDate, 'start_date');
     const endDate = parseIsoDate(payload.end_date || payload.endDate || startDate, 'end_date');
 
-    if (!eventName) {
-      const error = new Error('event_name is required.');
-      error.status = 400;
-      throw error;
-    }
-    if (!startDate) {
-      const error = new Error('start_date is required.');
+    if (!validateEvent({ name: eventName, start_date: startDate })) {
+      const error = new Error('event_name and start_date are required.');
       error.status = 400;
       throw error;
     }
     if (endDate < startDate) {
       const error = new Error('end_date cannot be earlier than start_date.');
+      error.status = 400;
+      throw error;
+    }
+
+    const blockedReason = getBlockedEventReason({
+      category: payload.category || 'general',
+      startDate,
+    });
+    if (blockedReason) {
+      const error = new Error(`Signal blocked: ${blockedReason}.`);
       error.status = 400;
       throw error;
     }

@@ -9,7 +9,7 @@ Set these on VPS before starting PM2:
 - `JWT_SECRET=<strong-random-secret>`
 - `AUTH_PEPPER=<strong-random-secret>`
 - `TOKEN_TTL_MINUTES=720`
-- `CORS_ORIGINS=https://<frontend-domain>`
+- `CORS_ORIGINS=https://revenue.hotelradar.in`
 - `LOG_LEVEL=info`
 - `LOG_DIR=logs`
 - `ENABLE_CONSOLE_LOGS=false`
@@ -33,7 +33,7 @@ Set these on VPS before starting PM2:
    - `npm --prefix frontend ci`
    - `npm --prefix frontend run build`
 8. Start services with PM2:
-   - `pm2 start ecosystem.config.js --env production`
+   - `pm2 start ecosystem.config.cjs --env production`
    - `pm2 save`
 
 ## 3) Deployment Process
@@ -51,6 +51,14 @@ Deploy flow:
 - build frontend
 - reload PM2
 
+## 3.1) Revenue Subdomain Setup
+For `revenue.hotelradar.in`, keep the frontend and API on the same origin:
+- point DNS for `revenue.hotelradar.in` to the VPS
+- terminate HTTPS at the reverse proxy
+- proxy all app traffic to the Node process on `127.0.0.1:3000`
+- serve `frontend/dist` through the backend or the reverse proxy
+- keep SPA fallback enabled so `/dashboard`, `/admin`, `/leadradar`, and `/legal/*` open correctly on refresh
+
 If tests fail, deployment stops automatically.
 
 ## 4) Migration Safety
@@ -66,7 +74,7 @@ If tests fail, deployment stops automatically.
    - `npm ci`
    - `npm --prefix frontend ci`
    - `npm --prefix frontend run build`
-   - `pm2 startOrReload ecosystem.config.js --env production`
+   - `pm2 startOrReload ecosystem.config.cjs --env production`
 
 ## 6) Monitoring Recommendations
 - Use `/health` for liveness checks.

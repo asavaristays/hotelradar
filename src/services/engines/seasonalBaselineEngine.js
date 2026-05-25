@@ -7,6 +7,12 @@ function goaSeasonScore(month) {
   return 30;
 }
 
+function jaipurSeasonScore(month) {
+  if ([9, 10, 11, 0, 1, 2].includes(month)) return 78;
+  if ([3, 8].includes(month)) return 58;
+  return 38;
+}
+
 export async function runSeasonalBaselineEngine(city, now = new Date()) {
   const month = now.getUTCMonth();
   let score = 55;
@@ -21,6 +27,13 @@ export async function runSeasonalBaselineEngine(city, now = new Date()) {
     const events = await getUpcomingEvents(city);
     eventAdjustment = events.reduce((acc, event) => acc + Number(event.impact_score || 0), 0);
     score = clamp(score + Math.min(20, eventAdjustment), 0, 100);
+  }
+
+  if (city === 'Jaipur') {
+    score = jaipurSeasonScore(month);
+    const events = await getUpcomingEvents(city);
+    eventAdjustment = events.reduce((acc, event) => acc + Number(event.impact_score || 0), 0);
+    score = clamp(score + Math.min(18, eventAdjustment), 0, 100);
   }
 
   return {

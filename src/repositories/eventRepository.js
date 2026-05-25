@@ -1,5 +1,6 @@
 import { pool } from '../db/pool.js';
 import { focusCityKeys } from '../config/productScope.js';
+import { isPhysicalEventRecord } from '../utils/eventVisibility.js';
 
 export async function upsertCityEvent(input) {
   const payload = {
@@ -116,5 +117,5 @@ export async function listUpcomingEventsByCity(city, options = {}) {
      ORDER BY start_date ASC, event_name ASC`,
     [city, focusCityKeys, horizonDays],
   );
-  return rows;
+  return rows.filter((row) => isPhysicalEventRecord(row));
 }

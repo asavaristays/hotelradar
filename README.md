@@ -66,7 +66,7 @@ RECALC_QUEUE_POLL_MS=2000
 RECALC_QUEUE_MAX_ATTEMPTS=3
 RECALC_QUEUE_RETRY_BASE_SECONDS=20
 RECALC_QUEUE_RETRY_MAX_SECONDS=300
-FOCUS_CITIES=Goa,Mumbai
+FOCUS_CITIES=Goa,Mumbai,Jaipur
 ```
 
 ## Setup
@@ -88,7 +88,7 @@ cd /Users/manishpurohit/Documents/radar_light
 npm run dev
 ```
 
-Queue worker (recommended for beta scale):
+Queue worker (recommended for live production scope):
 
 ```bash
 cd /Users/manishpurohit/Documents/radar_light
@@ -102,7 +102,7 @@ cd /Users/manishpurohit/Documents/radar_light
 npm run ingestion:ota
 ```
 
-Event ingestion (city events, Goa/Mumbai):
+Event ingestion (city events, Goa/Mumbai/Jaipur):
 
 ```bash
 cd /Users/manishpurohit/Documents/radar_light
@@ -118,6 +118,9 @@ npm run ingestion:events:collect
 
 Production notes:
 
+- `hotelradar.in` is the marketing site.
+- `revenue.hotelradar.in` is the production application.
+- For `revenue.hotelradar.in`, serve the built frontend and API behind the same origin so the React app can use relative `/api/...` requests without extra client-side config.
 - Set `ALLOW_MOCK_COMPETITOR_FALLBACK=false` to prevent synthetic competitor rates in live environments.
 - Set `ALLOW_ESTIMATED_OTA_PARITY=false` to avoid market-estimated OTA rows when channel-scraped data is unavailable.
 - Set `OTA_SNAPSHOT_FILE=/opt/radar_light/shared/ota_snapshots/latest.json` (or keep default path).
@@ -127,8 +130,116 @@ Production notes:
 - LinkedIn public URLs can also be added through `EVENT_SOURCE_URLS` with source label `linkedin-public` (parsed via safe HTML fallback when JSON-LD is unavailable).
 - Set `EVENT_COLLECT_TIMEOUT_MS=15000` (or higher) so slow source pages cannot hang collection.
 - Set `ENABLE_WEDDING_SIGNAL_GENERATOR=true` for Goa weekend wedding-window signals.
-- Set `FOCUS_CITIES=Goa,Mumbai` to keep product scope limited to these operating cities.
+- Set `FOCUS_CITIES=Goa,Mumbai,Jaipur` to keep product scope limited to these operating cities.
 - Scheduler script: `scripts/run_rate_cycle.sh` (ingest first, then recalculate active hotels).
+
+## Infrastructure & Development Guide
+
+### Production Flow
+
+Production request flow:
+
+User Browser
+↓
+Cloudflare DNS
+↓
+Cloudflare Proxy / SSL
+↓
+VPS Public IP
+↓
+NGINX Reverse Proxy
+↓
+Frontend Application
+↓
+Backend/API Services
+
+### Critical Rule
+
+Never guess infrastructure state.
+
+Always verify each layer independently before changing code:
+
+- DNS
+- Cloudflare
+- NGINX
+- application routing
+- backend/API behavior
+
+### Production Domains
+
+- `hotelradar.in`
+- `pms.hotelradar.in`
+- `audit.hotelradar.in`
+- `asavari.hotelradar.in`
+- `revenue.hotelradar.in`
+
+### Domain Responsibilities
+
+- `hotelradar.in` serves the marketing site.
+- `pms.hotelradar.in` serves the PMS surface.
+- `audit.hotelradar.in` serves the audit surface.
+- `asavari.hotelradar.in` serves the Asavari surface.
+- `revenue.hotelradar.in` serves the SaaS revenue dashboard and API.
+
+### Verification Rules
+
+Always verify:
+
+- the A record points to the correct VPS IP
+- DNS propagation has completed
+- there are no duplicate or conflicting records
+- the Cloudflare proxy mode is correct
+- the hostname spelling is correct
+- the Cloudflare SSL/TLS mode is correct
+- edge certificates are active
+- cache rules, redirect rules, WAF rules, and authentication rules are not blocking the site
+- the NGINX `server_name` is correct
+- the upstream port is correct
+- reverse proxy path forwarding is correct
+- websocket support is present where needed
+- SPA fallback routing is correct
+- SSL certificates are valid
+- there are no default server conflicts
+
+### Troubleshooting Rule
+
+If `/health` works but `/` returns `401`, or if `/hotels` fails, check the infrastructure layer first:
+
+- Cloudflare Access
+- edge authentication
+- cache rules
+- hostname routing
+- origin protection
+
+Do not assume the application code is broken until these layers are verified.
+
+### Required Production NGINX Block
+
+```nginx
+server {
+    listen 80;
+    server_name revenue.hotelradar.in;
+
+    location / {
+        proxy_pass http://localhost:3000;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Operating Rule
+
+Use the simplest safe change first.
+
+- Verify each layer independently.
+- Avoid random debugging.
+- Avoid repeating the same failed fix.
+- Do not rewrite working configuration unnecessarily.
+- Keep production behavior stable with minimal safe changes.
 
 Snapshot JSON format (`rows` also accepted as wrapper key):
 
@@ -226,13 +337,13 @@ Enable pre-commit checks:
 npm run hooks:install
 ```
 
-## Seeded login users
+## Seeded local login users
 
-- `super_admin@radar.ai` / `Admin@123`
-- `admin@radar.ai` / `Admin@123`
-- `rohet@radar.ai` / `Hotel@123`
-- `mayagarh@radar.ai` / `Hotel@123`
-- `jwild@radar.ai` / `Hotel@123`
+These are development/demo seeds only. Rotate production passwords before any live hotel access.
+
+- `super_admin@radar.ai`
+- `admin@radar.ai`
+- hotel users created by seed/admin flows
 
 ## API endpoints
 
@@ -254,7 +365,6 @@ Hotel intelligence:
 - `GET /hotel/:id/alerts`
 - `POST /hotel/:id/recalculate`
 - `POST /webhook/hotel/:id/recalculate`
-- `GET /api/executiveInsights`
 - `POST /intelligence/normalize-rates`
 - `POST /intelligence/market-confidence`
 - `POST /intelligence/position-analysis`
@@ -622,60 +732,6 @@ Run migration once before using data health endpoint:
 ```bash
 cd /Users/manishpurohit/Documents/radar_light
 DATABASE_URL=postgresql:///radar_light npm run db:migrate
-```
-
-API usage:
-
-```bash
-curl -G "http://localhost:3000/api/executiveInsights" \
-  -H "Authorization: Bearer <TOKEN>" \
-  --data-urlencode "positionPercent=-12.5" \
-  --data-urlencode "confidenceScore=84" \
-  --data-urlencode "demandScore=68" \
-  --data-urlencode "volatilityScore=31" \
-  --data-urlencode "compressionScore=72" \
-  --data-urlencode "currentADR=9200" \
-  --data-urlencode "competitorMedian=9800" \
-  --data-urlencode "demand7=70" \
-  --data-urlencode "demand14=65" \
-  --data-urlencode "demand30=58" \
-  --data-urlencode "roomNights=120"
-```
-
-Response shape:
-
-```json
-{
-  "spiScore": 77.28,
-  "spiCategory": "Strong Advantage",
-  "revenueScenarios": [
-    {
-      "scenario": "Maintain price",
-      "projectedADR": 9200,
-      "projectedRevenue": 818114.94,
-      "volatilityAdjustment": 0.957
-    },
-    {
-      "scenario": "+2% price",
-      "projectedADR": 9384,
-      "projectedRevenue": 815410.12,
-      "volatilityAdjustment": 0.957
-    },
-    {
-      "scenario": "-2% price",
-      "projectedADR": 9016,
-      "projectedRevenue": 814422.56,
-      "volatilityAdjustment": 0.957
-    }
-  ],
-  "forecastAccuracy": {
-    "forecastPeriod": "rolling_30d",
-    "accuracyPercentage": 66.67,
-    "averageError": 13.5,
-    "forecastHitRate": 66.67,
-    "forecastErrorMargin": 13.5
-  }
-}
 ```
 
 ## Tests

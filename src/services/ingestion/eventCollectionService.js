@@ -3,13 +3,23 @@ import path from 'path';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { focusCityKeys } from '../../config/productScope.js';
+import { getBlockedEventReason } from '../../utils/eventValidation.js';
+import { isPhysicalEventRecord } from '../../utils/eventVisibility.js';
 import { addDays, dateToKey, isWeekend, toDateOnly } from '../../utils/date.js';
 
 const DEFAULT_SOURCES = [
   { city: 'Goa', source: 'insider.in', url: 'https://insider.in/goa/all-events' },
   { city: 'Mumbai', source: 'insider.in', url: 'https://insider.in/mumbai/all-events' },
+  { city: 'Jaipur', source: 'insider.in', url: 'https://insider.in/jaipur/all-events' },
   { city: 'Goa', source: 'bookmyshow.com', url: 'https://in.bookmyshow.com/explore/events-goa' },
   { city: 'Mumbai', source: 'bookmyshow.com', url: 'https://in.bookmyshow.com/explore/events-mumbai' },
+  { city: 'Jaipur', source: 'bookmyshow.com', url: 'https://in.bookmyshow.com/explore/events-jaipur' },
+  { city: 'Jaipur', source: 'allevents.in', url: 'https://allevents.in/jaipur/all' },
+  {
+    city: 'Jaipur',
+    source: 'eventbrite.com',
+    url: 'https://www.eventbrite.com/d/india--jaipur/events/',
+  },
 ];
 
 const DEFAULT_OUTPUT_PATH = '/opt/radar_light/shared/event_snapshots/latest.json';
@@ -54,6 +64,7 @@ const defaultDeps = {
   writeFile: fs.writeFile,
   mkdir: fs.mkdir,
 };
+const BOOKMYSHOW_DEBUG_SAMPLE_LIMIT = 20000;
 
 function normalizeText(value = '') {
   return String(value || '').trim();
@@ -61,8 +72,11 @@ function normalizeText(value = '') {
 
 function canonicalCity(raw = '') {
   const value = normalizeText(raw).toLowerCase();
+  if (value.includes('gurugram') || value.includes('gurgaon')) return 'Gurugram';
+  if (value.includes('delhi') || value.includes('new delhi') || value.includes('ncr')) return 'Delhi';
   if (value.includes('goa')) return 'Goa';
   if (value.includes('mumbai') || value.includes('bombay')) return 'Mumbai';
+  if (value.includes('jaipur')) return 'Jaipur';
   return '';
 }
 
@@ -203,6 +217,17 @@ function eventFromJsonLd(node, sourceDef, nowIso) {
 
   if (!name || !city || !startDate || !endDate) return null;
 
+   const attendanceMode = normalizeText(
+    node.eventAttendanceMode ||
+      node?.eventAttendanceMode?.['@id'] ||
+      node?.eventAttendanceMode?.name ||
+      '',
+  ).toLowerCase();
+  const locationType = normalizeText(node?.location?.['@type'] || '').toLowerCase();
+  if (attendanceMode.includes('online') || locationType === 'virtuallocation') {
+    return null;
+  }
+
   const attendance = Number(node.maximumAttendeeCapacity || node.attendeeCount || 0) || null;
   const category = classifyCategory({ name, description });
   const scale = inferScale({ name, description, attendance, category });
@@ -232,6 +257,23 @@ function eventFromJsonLd(node, sourceDef, nowIso) {
   };
 }
 
+function extractBookMyShowVenue(html = '') {
+  const patterns = [
+    /"venue"\s*:\s*"([^"]+)"/i,
+    /"venueName"\s*:\s*"([^"]+)"/i,
+    /"location"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"/i,
+    /<meta[^>]+property=["']og:description["'][^>]+content=["'][^"']*?\bat\s+([^"|,]+)[^"']*["']/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(String(html || ''));
+    const value = normalizeText(match?.[1] || '').replace(/\\u0026/g, '&');
+    if (value) return value;
+  }
+
+  return '';
+}
+
 function eventFromHtmlFallback(html = '', sourceDef = {}, nowIso) {
   const city = canonicalCity(sourceDef.city);
   if (!city) return null;
@@ -246,11 +288,28 @@ function eventFromHtmlFallback(html = '', sourceDef = {}, nowIso) {
 
   const category = classifyCategory({ name: title, description: textWindow });
   const scale = inferScale({ name: title, description: textWindow, category });
+  const venue = sourceDef.source === 'bookmyshow.com'
+    ? extractBookMyShowVenue(html)
+    : normalizeText(sourceDef.city) || city;
+
+  if (sourceDef.source === 'bookmyshow.com' && !venue) {
+    return null;
+  }
+
+  if (
+    !isPhysicalEventRecord({
+      event_name: title,
+      venue,
+      category,
+    })
+  ) {
+    return null;
+  }
 
   return {
     name: title,
     city,
-    venue: normalizeText(sourceDef.city) || city,
+    venue,
     start_date: startDate,
     end_date: startDate,
     category,
@@ -263,6 +322,16 @@ function eventFromHtmlFallback(html = '', sourceDef = {}, nowIso) {
     impact_score: impactScoreFor(city, category, scale),
     scraped_at: nowIso,
   };
+}
+
+function filterPhysicalRows(rows = []) {
+  return rows.filter((row) =>
+    isPhysicalEventRecord({
+      event_name: row?.name,
+      venue: row?.venue,
+      category: row?.category,
+    }),
+  );
 }
 
 function dedupeEvents(rows) {
@@ -371,6 +440,50 @@ function resolveOutputPath(overridePath) {
   return DEFAULT_OUTPUT_PATH;
 }
 
+function sanitizeFileToken(value = '') {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'unknown';
+}
+
+function buildBookMyShowDebugBasePath(outputPath) {
+  const outputDir = path.dirname(outputPath);
+  return path.join(outputDir, 'debug-bookmyshow');
+}
+
+async function writeBookMyShowDebugCapture({ html = '', sourceDef = {}, outputPath = '', deps, reason = '' }) {
+  const debugBasePath = buildBookMyShowDebugBasePath(outputPath);
+  await deps.mkdir(debugBasePath, { recursive: true });
+
+  const cityToken = sanitizeFileToken(sourceDef.city);
+  const htmlPath = path.join(debugBasePath, `${cityToken}.html`);
+  const metaPath = path.join(debugBasePath, `${cityToken}.json`);
+  const htmlSample = String(html || '').slice(0, BOOKMYSHOW_DEBUG_SAMPLE_LIMIT);
+  const metadata = {
+    captured_at: new Date().toISOString(),
+    city: sourceDef.city,
+    source: sourceDef.source,
+    url: sourceDef.url,
+    reason,
+    html_length: String(html || '').length,
+    title: extractTitle(html),
+    first_date_token: extractFirstDateToken(html),
+    extracted_venue: extractBookMyShowVenue(html),
+  };
+
+  await deps.writeFile(htmlPath, htmlSample, 'utf8');
+  await deps.writeFile(metaPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+
+  logger.warn('event_collection_bookmyshow_debug_written', {
+    city: sourceDef.city,
+    url: sourceDef.url,
+    htmlPath,
+    metaPath,
+    reason,
+  });
+}
+
 async function fetchWithTimeout(fetchImpl, url, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
   const safeTimeoutMs = Number.isFinite(Number(timeoutMs))
     ? Math.max(1000, Number(timeoutMs))
@@ -412,8 +525,11 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
     rowsCollected: 0,
     rowsAfterDedup: 0,
     rowsWritten: 0,
+    rowsBlocked: 0,
     weddingSignalsAdded: 0,
     linkedinHintsAdded: 0,
+    bookmyshowDebugWritten: 0,
+    sourceResults: [],
     durationMs: 0,
   };
 
@@ -435,18 +551,42 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
       const html = await response.text();
       const blocks = extractJsonLdBlocks(html);
       const eventNodes = blocks.flatMap((block) => collectEventNodes(block, []));
-      const events = eventNodes
+      const events = filterPhysicalRows(eventNodes
         .map((node) => eventFromJsonLd(node, sourceDef, nowIso))
-        .filter(Boolean);
+        .filter(Boolean));
       if (!events.length) {
         const fallback = eventFromHtmlFallback(html, sourceDef, nowIso);
         if (fallback) events.push(fallback);
       }
+      if (!events.length && sourceDef.source === 'bookmyshow.com') {
+        await writeBookMyShowDebugCapture({
+          html,
+          sourceDef,
+          outputPath,
+          deps,
+          reason: 'no_events_parsed',
+        });
+        summary.bookmyshowDebugWritten += 1;
+      }
 
       collectedRows.push(...events);
       summary.sourceSuccess += 1;
+      summary.sourceResults.push({
+        city: sourceDef.city,
+        source: sourceDef.source,
+        url: sourceDef.url,
+        status: 'success',
+        rowsCollected: events.length,
+      });
     } catch (error) {
       summary.sourceFailed += 1;
+      summary.sourceResults.push({
+        city: sourceDef.city,
+        source: sourceDef.source,
+        url: sourceDef.url,
+        status: 'failed',
+        error: error.message,
+      });
       logger.warn('event_collection_source_failed', {
         city: sourceDef.city,
         source: sourceDef.source,
@@ -469,8 +609,29 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
   collectedRows.push(...linkedinRows);
   summary.linkedinHintsAdded = linkedinRows.length;
 
+  const filteredRows = [];
+  for (const row of collectedRows) {
+    const blockedReason = getBlockedEventReason({
+      category: row.category,
+      startDate: row.start_date,
+    });
+    if (blockedReason) {
+      summary.rowsBlocked += 1;
+      logger.warn('event_collection_row_blocked', {
+        city: row.city,
+        eventName: row.name,
+        startDate: row.start_date,
+        category: row.category,
+        source: row.source,
+        blockedReason,
+      });
+      continue;
+    }
+    filteredRows.push(row);
+  }
+
   summary.rowsCollected = collectedRows.length;
-  const deduped = dedupeEvents(collectedRows);
+  const deduped = dedupeEvents(filteredRows);
   summary.rowsAfterDedup = deduped.length;
 
   const outputDir = path.dirname(outputPath);
@@ -492,4 +653,6 @@ export {
   generateGoaWeddingSignals,
   impactScoreFor,
   parseSourceSpec,
+  eventFromHtmlFallback,
+  extractBookMyShowVenue,
 };

@@ -91,5 +91,56 @@ describe('otaIngestionService', () => {
     expect(summary.rowsRead).toBe(0);
     expect(summary.competitorRowsIngested).toBe(0);
   });
-});
 
+  test('maps Jaipur hotel rows when snapshot hotel name includes city suffix', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ota-ingestion-'));
+    const snapshotPath = path.join(tmpDir, 'latest.json');
+
+    await fs.writeFile(
+      snapshotPath,
+      JSON.stringify([
+        {
+          hotel_name: 'Royal Heritage Haveli Jaipur',
+          competitor_name: 'Shahpura House Jaipur',
+          checkin_date: '2026-04-17',
+          rate: 7280,
+          source: 'google-hotels',
+        },
+      ]),
+      'utf8',
+    );
+
+    const { deps, competitorRates } = buildDeps();
+    const summary = await runOtaIngestionCycle({ snapshotPath }, deps);
+
+    expect(summary.competitorRowsIngested).toBe(1);
+    expect(summary.skippedUnknownHotel).toBe(0);
+    expect(competitorRates[0].hotelId).toBe('hotel-1');
+  });
+
+  test('reuses existing Jaipur competitor when snapshot omits city suffix', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ota-ingestion-'));
+    const snapshotPath = path.join(tmpDir, 'latest.json');
+
+    await fs.writeFile(
+      snapshotPath,
+      JSON.stringify([
+        {
+          hotel_name: 'Royal Heritage Haveli Jaipur',
+          competitor_name: 'Alsisar Haveli',
+          checkin_date: '2026-04-18',
+          rate: 7510,
+          source: 'google-hotels',
+        },
+      ]),
+      'utf8',
+    );
+
+    const { deps, competitors, competitorRates } = buildDeps();
+    const summary = await runOtaIngestionCycle({ snapshotPath }, deps);
+
+    expect(summary.competitorRowsIngested).toBe(1);
+    expect(competitors.size).toBe(2);
+    expect(competitorRates[0].competitorId).toBe('comp-1');
+  });
+});

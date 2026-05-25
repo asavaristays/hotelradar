@@ -3,6 +3,7 @@ import path from 'path';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { upsertCityEvent } from '../../repositories/eventRepository.js';
+import { getBlockedEventReason } from '../../utils/eventValidation.js';
 
 const DEFAULT_EVENT_SNAPSHOT_PATHS = [
   '/opt/radar_light/shared/event_snapshots/latest.json',
@@ -31,8 +32,11 @@ function normalizeText(value = '') {
 
 function canonicalCity(raw = '') {
   const value = normalizeText(raw).toLowerCase();
+  if (value.includes('gurugram') || value.includes('gurgaon')) return 'Gurugram';
+  if (value.includes('delhi') || value.includes('new delhi') || value.includes('ncr')) return 'Delhi';
   if (value.includes('goa')) return 'Goa';
   if (value.includes('mumbai') || value.includes('bombay')) return 'Mumbai';
+  if (value.includes('jaipur')) return 'Jaipur';
   return '';
 }
 
@@ -161,6 +165,7 @@ export async function runEventIngestionCycle(options = {}, deps = defaultDeps) {
     rowsUpserted: 0,
     skippedRows: 0,
     skippedInvalidRow: 0,
+    skippedBlockedRow: 0,
     missingSnapshot: false,
     durationMs: 0,
   };
@@ -182,6 +187,21 @@ export async function runEventIngestionCycle(options = {}, deps = defaultDeps) {
     if (!payload) {
       summary.skippedRows += 1;
       summary.skippedInvalidRow += 1;
+      continue;
+    }
+
+    const blockedReason = getBlockedEventReason(payload);
+    if (blockedReason) {
+      summary.skippedRows += 1;
+      summary.skippedBlockedRow += 1;
+      logger.warn('event_ingestion_row_blocked', {
+        city: payload.city,
+        eventName: payload.eventName,
+        startDate: payload.startDate,
+        category: payload.category,
+        source: payload.source,
+        blockedReason,
+      });
       continue;
     }
 

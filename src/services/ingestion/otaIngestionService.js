@@ -34,7 +34,34 @@ function todayPlus(days) {
 }
 
 function normalizeName(value = '') {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function buildNameAliases(value = '', city = '') {
+  const aliases = new Set();
+  const normalized = normalizeName(value);
+  if (!normalized) return aliases;
+
+  aliases.add(normalized);
+
+  const cityToken = normalizeName(city);
+  if (cityToken && normalized.endsWith(` ${cityToken}`)) {
+    aliases.add(normalized.slice(0, -(` ${cityToken}`).length).trim());
+  } else if (cityToken) {
+    aliases.add(`${normalized} ${cityToken}`.trim());
+  }
+
+  for (const suffix of [' hotel', ' resort', ' palace', ' haveli']) {
+    if (normalized.endsWith(suffix)) {
+      aliases.add(normalized.slice(0, -suffix.length).trim());
+    }
+  }
+
+  return aliases;
 }
 
 function normalizeCompSet(raw = []) {
@@ -75,19 +102,32 @@ function toCheckinDate(rawDate) {
 function buildHotelIndex(hotels = []) {
   const byId = new Map();
   const byName = new Map();
+  const byCity = new Map();
   for (const hotel of hotels) {
     byId.set(String(hotel.id), hotel);
-    byName.set(normalizeName(hotel.hotel_name), hotel);
+    for (const alias of buildNameAliases(hotel.hotel_name, hotel.city)) {
+      byName.set(alias, hotel);
+    }
+    const cityKey = normalizeName(hotel.city);
+    if (!byCity.has(cityKey)) byCity.set(cityKey, []);
+    byCity.get(cityKey).push(hotel);
   }
-  return { byId, byName };
+  return { byId, byName, byCity };
 }
 
 function resolveHotel(row, index) {
   const hotelId = String(row.hotel_id || '').trim();
   if (hotelId && index.byId.has(hotelId)) return index.byId.get(hotelId);
 
-  const hotelName = normalizeName(row.hotel_name);
-  if (hotelName && index.byName.has(hotelName)) return index.byName.get(hotelName);
+  for (const alias of buildNameAliases(row.hotel_name, row.city)) {
+    if (index.byName.has(alias)) return index.byName.get(alias);
+  }
+
+  const cityKey = normalizeName(row.city);
+  if (cityKey && index.byCity.has(cityKey) && index.byCity.get(cityKey).length === 1) {
+    return index.byCity.get(cityKey)[0];
+  }
+
   return null;
 }
 
@@ -133,11 +173,13 @@ async function loadSnapshotRows(snapshotPathOrCandidates, deps) {
   return { rows: [], path: null };
 }
 
-async function ensureCompetitorForHotel(hotelId, competitorName, websiteUrl, deps) {
-  const existing = await deps.getCompetitorByHotelAndName(hotelId, competitorName);
-  if (existing) return existing;
+async function ensureCompetitorForHotel(hotel, competitorName, websiteUrl, deps) {
+  for (const alias of buildNameAliases(competitorName, hotel.city)) {
+    const existing = await deps.getCompetitorByHotelAndName(hotel.id, alias);
+    if (existing) return existing;
+  }
   return deps.insertCompetitor({
-    hotelId,
+    hotelId: hotel.id,
     competitorName,
     websiteUrl: websiteUrl || null,
   });
@@ -200,7 +242,7 @@ export async function runOtaIngestionCycle(options = {}, deps = defaultDeps) {
   for (const hotel of hotels) {
     const compSet = normalizeCompSet(hotel.comp_set_json);
     for (const name of compSet) {
-      await ensureCompetitorForHotel(hotel.id, name, null, deps);
+      await ensureCompetitorForHotel(hotel, name, null, deps);
     }
   }
 
@@ -255,7 +297,7 @@ export async function runOtaIngestionCycle(options = {}, deps = defaultDeps) {
     }
 
     const competitor = await ensureCompetitorForHotel(
-      hotel.id,
+      hotel,
       competitorName,
       rawRow.website_url || rawRow.url || null,
       deps,
@@ -285,4 +327,3 @@ export async function runOtaIngestionCycle(options = {}, deps = defaultDeps) {
   logger.info('ota_ingestion_completed', summary);
   return summary;
 }
-

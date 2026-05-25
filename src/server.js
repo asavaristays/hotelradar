@@ -35,6 +35,7 @@ async function start() {
 }
 
 process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
   logger.error('unhandled_rejection', {
     reason: reason instanceof Error ? reason.message : String(reason),
   });

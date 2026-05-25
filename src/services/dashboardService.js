@@ -43,6 +43,7 @@ import { evaluateAlerts } from './alertService.js';
 import { computeMarketPosition } from './marketPositionService.js';
 import { computeOtaParity } from './otaParityService.js';
 import { computeDataHealthSnapshot } from './dataHealthService.js';
+import { buildSignalDiagnostics } from './signalDiagnosticsService.js';
 import { splitRateRows } from './rateSourceService.js';
 import { simulateRevenueImpact } from './revenueImpactSimulator.js';
 import { average, clamp, round } from '../utils/math.js';
@@ -75,6 +76,7 @@ const defaultDeps = {
   logAuditTrail,
   getCanaryOverride,
   getModelVersionById,
+  getSignalDiagnostics: buildSignalDiagnostics,
 };
 
 function normalizeWeights(city, dbWeights, calibration, overrideWeights = null) {
@@ -1219,6 +1221,17 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     allowEstimateFallback: env.allowEstimatedOtaParity,
   });
   const lastEventSync = deriveLastEventSync(events);
+  const pipelineDiagnostics = deps.getSignalDiagnostics
+    ? await deps.getSignalDiagnostics(
+        hotel,
+        {
+          events,
+          lastScrapedAt: marketScope.lastScrapedAt,
+          lastEventSync,
+        },
+      )
+    : null;
+
   const dataHealth = await computeDataHealthSnapshot(
     {
       hotelId: hotel.id,
@@ -1235,6 +1248,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
       confidence: derived.confidence,
       marketStability: derived.marketStability,
       performanceSummary,
+      pipelineDiagnostics,
     },
     {
       upsertDataHealthIssue: deps.upsertDataHealthIssue,

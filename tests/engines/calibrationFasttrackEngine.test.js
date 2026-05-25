@@ -22,6 +22,8 @@ const mockListOperationalCities = jest.fn();
 const mockUpsertAlertFeedback = jest.fn();
 const mockUpsertCalibrationSetting = jest.fn();
 const mockGetCalibration = jest.fn();
+const mockListOutcomeBootstrapTargets = jest.fn();
+const mockInsertOutcomeBootstrapRows = jest.fn();
 
 jest.unstable_mockModule('../../src/repositories/calibrationFasttrackRepository.js', () => ({
   createModelVersion: mockCreateModelVersion,
@@ -38,8 +40,10 @@ jest.unstable_mockModule('../../src/repositories/calibrationFasttrackRepository.
   listCalibrationRuns: mockListCalibrationRuns,
   listCanaryOverrides: mockListCanaryOverrides,
   listEnabledCanaryHotelsByCity: mockListEnabledCanaryHotelsByCity,
+  listOutcomeBootstrapTargets: mockListOutcomeBootstrapTargets,
   listOperationalCities: mockListOperationalCities,
   setCanaryOverride: mockSetCanaryOverride,
+  insertOutcomeBootstrapRows: mockInsertOutcomeBootstrapRows,
   updateModelVersionAccuracy: mockUpdateModelVersionAccuracy,
   updateModelVersionStatus: mockUpdateModelVersionStatus,
   upsertAlertFeedback: mockUpsertAlertFeedback,
@@ -54,7 +58,7 @@ jest.unstable_mockModule('../../src/config/calibration.js', () => ({
   getCalibration: mockGetCalibration,
 }));
 
-const { ingestOutcomeCsv, runCityCalibration } = await import(
+const { ingestOutcomeCsv, runCityCalibration, runDailyOutcomeBootstrap } = await import(
   '../../src/services/intelligence-engine/calibrationFasttrackEngine.js'
 );
 
@@ -92,6 +96,8 @@ describe('calibrationFasttrackEngine', () => {
         revertAccuracyDropThreshold: 0.05,
       },
     });
+    mockListOutcomeBootstrapTargets.mockResolvedValue([]);
+    mockInsertOutcomeBootstrapRows.mockResolvedValue([]);
   });
 
   test('ingestOutcomeCsv parses CSV rows and upserts outcome data', async () => {
@@ -215,6 +221,65 @@ describe('calibrationFasttrackEngine', () => {
         status: 'insufficient_data',
         versionCreated: false,
       }),
+    );
+  });
+
+  test('runDailyOutcomeBootstrap inserts only missing rows for focus-city hotels', async () => {
+    mockListOutcomeBootstrapTargets.mockResolvedValue([
+      {
+        id: 'h1',
+        hotel_name: 'Hotel Taj Goa',
+        city: 'Goa',
+        room_count: 42,
+        base_price_min: 9000,
+        base_price_max: 12000,
+        latest_price: 11500,
+        latest_suggested_base: 11300,
+      },
+      {
+        id: 'h2',
+        hotel_name: 'The Oberoi Mumbai',
+        city: 'Mumbai',
+        room_count: 58,
+        base_price_min: 15000,
+        base_price_max: 22000,
+        latest_price: null,
+        latest_suggested_base: 17800,
+      },
+    ]);
+    mockInsertOutcomeBootstrapRows.mockResolvedValue([
+      { hotel_id: 'h1', outcome_date: '2026-03-07' },
+      { hotel_id: 'h2', outcome_date: '2026-03-07' },
+    ]);
+
+    const result = await runDailyOutcomeBootstrap({
+      daysAhead: 1,
+      occupancyPct: 73,
+      pickupRooms: 5,
+      source: 'system_bootstrap',
+    });
+
+    expect(result.hotels).toBe(2);
+    expect(result.attemptedRows).toBe(2);
+    expect(result.insertedRows).toBe(2);
+    expect(mockInsertOutcomeBootstrapRows).toHaveBeenCalledTimes(1);
+    expect(mockInsertOutcomeBootstrapRows).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hotelId: 'h1',
+          actualAdr: 11500,
+          occupancyPct: 73,
+          pickupRooms: 5,
+          source: 'system_bootstrap',
+        }),
+        expect.objectContaining({
+          hotelId: 'h2',
+          actualAdr: 17800,
+          occupancyPct: 73,
+          pickupRooms: 5,
+          source: 'system_bootstrap',
+        }),
+      ]),
     );
   });
 });

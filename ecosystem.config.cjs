@@ -3,7 +3,8 @@ module.exports = {
     {
       name: 'radar-light-api',
       script: 'src/server.js',
-      cwd: '.',
+      cwd: '/opt/radar_light',
+      env_file: '/opt/radar_light/shared/.env',
       instances: 'max',
       exec_mode: 'cluster',
       autorestart: true,
@@ -17,6 +18,8 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         PORT: 3000,
+        NODE_OPTIONS: '--require dotenv/config',
+        DOTENV_CONFIG_PATH: '/opt/radar_light/.env',
       },
       error_file: 'logs/pm2-api-error.log',
       out_file: 'logs/pm2-api-out.log',
@@ -26,7 +29,8 @@ module.exports = {
     {
       name: 'radar-light-recalc-worker',
       script: 'src/scripts/runRecalcWorker.js',
-      cwd: '.',
+      cwd: '/opt/radar_light',
+      env_file: '/opt/radar_light/shared/.env',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -38,6 +42,8 @@ module.exports = {
       },
       env_production: {
         NODE_ENV: 'production',
+        NODE_OPTIONS: '--require dotenv/config',
+        DOTENV_CONFIG_PATH: '/opt/radar_light/.env',
       },
       error_file: 'logs/pm2-worker-error.log',
       out_file: 'logs/pm2-worker-out.log',

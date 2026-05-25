@@ -9,9 +9,11 @@ import {
   getCityWeightsForUpdate,
   getLatestActiveOrCanaryModelVersionForCity,
   getPreviousModelVersionForCity,
+  insertOutcomeBootstrapRows,
   insertCalibrationRun,
   linkModelVersionToRun,
   listActiveHotelsByCity,
+  listOutcomeBootstrapTargets,
   listCalibrationRuns,
   listCanaryOverrides,
   listEnabledCanaryHotelsByCity,
@@ -290,6 +292,26 @@ function computeMetrics(dataset) {
     overPredictionRate: round(overPredictionRate, 2),
     mape: round(mape, 4),
   };
+}
+
+function resolveBootstrapAdr(target, fallbackAdr) {
+  const latestPrice = Number(target.latest_price || 0);
+  if (Number.isFinite(latestPrice) && latestPrice > 0) return Math.round(latestPrice);
+
+  const latestSuggestedBase = Number(target.latest_suggested_base || 0);
+  if (Number.isFinite(latestSuggestedBase) && latestSuggestedBase > 0) {
+    return Math.round(latestSuggestedBase);
+  }
+
+  const baseMin = Number(target.base_price_min || 0);
+  const baseMax = Number(target.base_price_max || 0);
+  if (Number.isFinite(baseMin) && Number.isFinite(baseMax) && baseMin > 0 && baseMax > 0) {
+    return Math.round((baseMin + baseMax) / 2);
+  }
+  if (Number.isFinite(baseMax) && baseMax > 0) return Math.round(baseMax);
+  if (Number.isFinite(baseMin) && baseMin > 0) return Math.round(baseMin);
+
+  return Math.round(fallbackAdr);
 }
 
 function filterDatasetByHotelIds(dataset, hotelIds) {
@@ -930,5 +952,63 @@ export async function runNightlyCalibration({
     total: results.length,
     success: results.filter((row) => row.status === 'ok').length,
     failed: results.filter((row) => row.status === 'error').length,
+  };
+}
+
+/**
+ * Insert synthetic daily outcomes for focus-city hotels only when a date has no recorded outcome.
+ * This keeps calibration moving without overwriting manually uploaded ground-truth rows.
+ */
+export async function runDailyOutcomeBootstrap({
+  daysAhead = 1,
+  occupancyPct = 72,
+  pickupRooms = 6,
+  fallbackAdr = 5000,
+  source = 'system_bootstrap',
+  uploadedBy = null,
+} = {}) {
+  const horizonDays = Math.max(1, Math.min(30, Number(daysAhead || 1)));
+  const safeOccupancy = clamp(Number(occupancyPct || 72), 1, 100);
+  const safePickup = Math.max(0, Math.round(Number(pickupRooms || 6)));
+  const safeFallbackAdr = Math.max(500, Number(fallbackAdr || 5000));
+
+  const targets = await listOutcomeBootstrapTargets();
+  if (!targets.length) {
+    return {
+      hotels: 0,
+      attemptedRows: 0,
+      insertedRows: 0,
+      daysAhead: horizonDays,
+      source,
+    };
+  }
+
+  const today = new Date();
+  const rows = [];
+
+  for (const target of targets) {
+    const adr = resolveBootstrapAdr(target, safeFallbackAdr);
+    for (let offset = 0; offset < horizonDays; offset += 1) {
+      const date = new Date(today);
+      date.setUTCDate(date.getUTCDate() + offset);
+      rows.push({
+        hotelId: target.id,
+        outcomeDate: date.toISOString().slice(0, 10),
+        actualAdr: adr,
+        occupancyPct: safeOccupancy,
+        pickupRooms: safePickup,
+        source,
+        uploadedBy,
+      });
+    }
+  }
+
+  const inserted = await insertOutcomeBootstrapRows(rows);
+  return {
+    hotels: targets.length,
+    attemptedRows: rows.length,
+    insertedRows: inserted.length,
+    daysAhead: horizonDays,
+    source,
   };
 }

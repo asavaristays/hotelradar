@@ -13,12 +13,15 @@ export const DEFAULT_CALIBRATION = {
     dataHealth: {
       staleScrapeHours: 12,
       minCompetitorRows: 2,
+      minOtaLiveRowsForAction: 2,
+      minEventRowsFocusCity: 1,
       minAirfarePoints: 7,
       minConfidenceScore: 65,
       minSampleForAccuracy: 7,
       minForecastAccuracy: 60,
       maxVolatilityError: 25,
       resolvedWindowDays: 7,
+      forceProductUnlock: false,
     },
     confidence: {
       ceiling: 95,

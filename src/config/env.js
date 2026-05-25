@@ -1,6 +1,16 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+const envFileCandidates = [
+  process.env.RADAR_LIGHT_ENV_FILE,
+  '/opt/radar_light/.env',
+  '/opt/radar_light/shared/.env',
+  '.env',
+].filter(Boolean);
+
+for (const envFile of envFileCandidates) {
+  const result = dotenv.config({ path: envFile, override: true });
+  if (result.parsed) break;
+}
 
 function parseBoolean(value, fallback = false) {
   if (value == null) return fallback;
@@ -119,7 +129,49 @@ const env = {
     process.env.ON_DEMAND_OTA_REFRESH_COOLDOWN_SEC,
     180,
   ),
-  focusCities: parseCsv(process.env.FOCUS_CITIES, ['Goa', 'Mumbai']),
+  googleMapsApiKey: readOptionalString('GOOGLE_MAPS_API_KEY', ''),
+  googleSearchApiKey: readOptionalString('GOOGLE_SEARCH_API_KEY', ''),
+  googleSearchEngineId: readOptionalString('GOOGLE_SEARCH_ENGINE_ID', ''),
+  googleSearchResultCount: parseNumber(process.env.GOOGLE_SEARCH_RESULT_COUNT, 5),
+  googleSearchLanguage: readOptionalString('GOOGLE_SEARCH_LANGUAGE', 'lang_en'),
+  enableGoogleTrendsLive: parseBoolean(process.env.ENABLE_GOOGLE_TRENDS_LIVE, true),
+  googleTrendsTimeframe: readOptionalString('GOOGLE_TRENDS_TIMEFRAME', 'now 7-d'),
+  googleTrendsSnapshotFile: readOptionalString('GOOGLE_TRENDS_SNAPSHOT_FILE', ''),
+  marketHotelBatchSize: parseNumber(process.env.MARKET_HOTEL_BATCH_SIZE, 50),
+  marketHotelCollectTimeoutMs: parseNumber(process.env.MARKET_HOTEL_COLLECT_TIMEOUT_MS, 15000),
+  marketHotelCollectMinDelayMs: parseNumber(process.env.MARKET_HOTEL_COLLECT_MIN_DELAY_MS, 1200),
+  marketHotelGridRadiusMeters: parseNumber(process.env.MARKET_HOTEL_GRID_RADIUS_METERS, 2500),
+  marketHotelGridStepMeters: parseNumber(process.env.MARKET_HOTEL_GRID_STEP_METERS, 2200),
+  marketHotelNearbyResultCount: parseNumber(process.env.MARKET_HOTEL_NEARBY_RESULT_COUNT, 20),
+  marketHotelNeighborInsertBatchSize: parseNumber(
+    process.env.MARKET_HOTEL_NEIGHBOR_INSERT_BATCH_SIZE,
+    500,
+  ),
+  marketHotelNeighborProcessingBatchSize: parseNumber(
+    process.env.MARKET_HOTEL_NEIGHBOR_PROCESSING_BATCH_SIZE,
+    100,
+  ),
+  marketHotelNeighborMaxDistanceKm: parseNumber(
+    process.env.MARKET_HOTEL_NEIGHBOR_MAX_DISTANCE_KM,
+    5,
+  ),
+  marketHotelNeighborMaxCount: parseNumber(
+    process.env.MARKET_HOTEL_NEIGHBOR_MAX_COUNT,
+    20,
+  ),
+  marketHotelSignalBatchSize: parseNumber(
+    process.env.MARKET_HOTEL_SIGNAL_BATCH_SIZE,
+    500,
+  ),
+  marketHotelHighReviewRatioThreshold: parseNumber(
+    process.env.MARKET_HOTEL_HIGH_REVIEW_RATIO_THRESHOLD,
+    2,
+  ),
+  marketHotelReputationWeakRatingThreshold: parseNumber(
+    process.env.MARKET_HOTEL_REPUTATION_WEAK_RATING_THRESHOLD,
+    4,
+  ),
+  focusCities: parseCsv(process.env.FOCUS_CITIES, ['Goa', 'Mumbai', 'Jaipur']),
 
   migrationBaselineExisting: parseBoolean(process.env.MIGRATION_BASELINE_EXISTING, true),
   schemaCheckStrict: parseBoolean(process.env.SCHEMA_CHECK_STRICT, runtimeDefaults.schemaCheckStrict),

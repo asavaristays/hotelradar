@@ -15,7 +15,7 @@ function sha256(content) {
 export async function listMigrationFiles() {
   const entries = await fs.readdir(MIGRATIONS_DIR, { withFileTypes: true });
   return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql') && !entry.name.startsWith('._'))
     .map((entry) => entry.name)
     .sort();
 }

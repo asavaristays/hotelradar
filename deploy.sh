@@ -35,7 +35,7 @@ echo "[deploy] Building frontend"
 npm --prefix frontend run build
 
 echo "[deploy] Reloading PM2"
-pm2 startOrReload ecosystem.config.js --env production
+pm2 startOrReload ecosystem.config.cjs --env production
 pm2 save
 
 echo "[deploy] Completed successfully"

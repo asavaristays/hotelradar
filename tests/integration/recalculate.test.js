@@ -59,9 +59,18 @@ describe('recalculateDashboard integration', () => {
       ],
       evaluateAlerts,
       getMockCompetitorRates: async () => [],
+      getSignalDiagnostics: async () => ({
+        ota: { snapshotRows: 4, matchedChannelRows: 1 },
+        events: { cityRows: 2, ingestedRows: 1 },
+        freshness: { competitorScrapeAt: '2026-03-10T00:00:00.000Z' },
+      }),
     };
 
-    const dashboard = await recalculateDashboard('11111111-1111-4111-8111-111111111111', {}, deps);
+    const dashboard = await recalculateDashboard(
+      '11111111-1111-4111-8111-111111111111',
+      { user_role: 'admin' },
+      deps,
+    );
 
     expect(dashboard).toHaveProperty('hotelId');
     expect(dashboard).toHaveProperty('city');
@@ -81,6 +90,7 @@ describe('recalculateDashboard integration', () => {
     expect(dashboard).toHaveProperty('narrative');
     expect(dashboard).toHaveProperty('otaParity');
     expect(dashboard).toHaveProperty('dataHealth');
+    expect(dashboard.dataHealth?.diagnostics).toHaveProperty('pipeline');
     expect(dashboard).toHaveProperty('performanceSummary');
     expect(dashboard).toHaveProperty('revenueImpact');
     expect(dashboard.suggestedPricing).toHaveProperty('base');
@@ -115,6 +125,15 @@ describe('recalculateDashboard integration', () => {
         roomNights: expect.any(Number),
         baselineOccupancy: expect.any(Number),
         adrUsed: expect.any(Number),
+      }),
+    );
+    expect(dashboard.dataHealth.diagnostics.pipeline).toEqual(
+      expect.objectContaining({
+        ota: expect.objectContaining({ snapshotRows: 4, matchedChannelRows: 1 }),
+        events: expect.objectContaining({ cityRows: 2, ingestedRows: 1 }),
+        freshness: expect.objectContaining({
+          competitorScrapeAt: '2026-03-10T00:00:00.000Z',
+        }),
       }),
     );
     expect(evaluateAlerts).toHaveBeenCalledTimes(1);

@@ -8,6 +8,10 @@ export function round(value, precision = 2) {
   return Math.round(value * multiplier) / multiplier;
 }
 
+export function round2(value) {
+  return round(value, 2);
+}
+
 export function percentChange(current, baseline) {
   if (baseline === 0 || baseline == null || current == null) return 0;
   return ((current - baseline) / baseline) * 100;
