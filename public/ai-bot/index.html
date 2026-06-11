@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Bot for Hotels | HotelRADAR</title>
+    <meta
+      name="description"
+      content="Power website conversations for hotels, villas, and resorts with AI Bot that answers questions, qualifies guests, and hands off booking-ready leads."
+    />
+    <meta name="robots" content="index,follow" />
+    <link rel="canonical" href="https://hotelradar.in/ai-bot/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/marketing.css?v=20260611p" />
+    <style>
+      .whatsapp-hero-visual {
+        display: grid;
+        gap: 14px;
+        justify-items: center;
+      }
+
+      .whatsapp-phone {
+        width: min(100%, 430px);
+        padding: 14px;
+        border-radius: 36px;
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 28px 60px rgba(15, 23, 42, 0.08);
+      }
+
+      .whatsapp-phone-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #77808f;
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .whatsapp-phone-top .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.1);
+      }
+
+      .whatsapp-phone-top .time {
+        margin-left: auto;
+      }
+
+      .whatsapp-phone-top .battery {
+        width: 18px;
+        height: 10px;
+        border: 1px solid rgba(15, 23, 42, 0.35);
+        border-radius: 3px;
+        position: relative;
+      }
+
+      .whatsapp-phone-top .battery::after {
+        content: '';
+        position: absolute;
+        inset: 2px;
+        border-radius: 2px;
+        background: linear-gradient(90deg, #22c55e, #0ea5e9);
+      }
+
+      .whatsapp-screen {
+        margin-top: 12px;
+        padding: 16px;
+        border-radius: 28px;
+        background: #ffffff;
+        color: #111827;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.8),
+          0 10px 24px rgba(15, 23, 42, 0.04);
+      }
+
+      .whatsapp-screen,
+      .whatsapp-head,
+      .whatsapp-feed,
+      .whatsapp-actions,
+      .whatsapp-summary {
+        transition:
+          opacity 220ms ease,
+          transform 220ms ease;
+      }
+
+      .whatsapp-screen.is-switching .whatsapp-feed,
+      .whatsapp-screen.is-switching .whatsapp-actions,
+      .whatsapp-screen.is-switching .whatsapp-summary {
+        opacity: 0.45;
+        transform: translateY(4px);
+      }
+
+      .whatsapp-head {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding-bottom: 14px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      }
+
+      .whatsapp-avatar {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        color: #fff;
+        font-size: 0.88rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+      }
+
+      .whatsapp-head strong {
+        display: block;
+        font-size: 0.95rem;
+        color: #0f172a;
+      }
+
+      .whatsapp-head span {
+        display: block;
+        margin-top: 4px;
+        color: #475569;
+        font-size: 0.8rem;
+      }
+
+      .whatsapp-mode-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .whatsapp-mode-tab {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(255, 255, 255, 0.92);
+        color: #334155;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .whatsapp-mode-tab.active {
+        border-color: rgba(34, 197, 94, 0.2);
+        background: rgba(34, 197, 94, 0.1);
+        color: #166534;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+      }
+
+      .whatsapp-status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(34, 197, 94, 0.18);
+        background: rgba(34, 197, 94, 0.11);
+        color: #166534;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .whatsapp-feed {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .whatsapp-bubble {
+        display: grid;
+        gap: 6px;
+        max-width: 86%;
+        padding: 12px 13px;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        box-shadow: 0 10px 18px rgba(15, 23, 42, 0.05);
+      }
+
+      .whatsapp-bubble span {
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #475569;
+      }
+
+      .whatsapp-bubble p {
+        margin: 0;
+        font-size: 0.88rem;
+        line-height: 1.55;
+        color: #0f172a;
+      }
+
+      .whatsapp-bubble.left {
+        justify-self: start;
+        background: #fbfdff;
+      }
+
+      .whatsapp-bubble.right {
+        justify-self: end;
+        background: linear-gradient(135deg, #eefdf2 0%, #f7fbff 100%);
+        color: #0f172a;
+        border-color: rgba(34, 197, 94, 0.22);
+      }
+
+      .whatsapp-bubble.highlight {
+        border-color: rgba(34, 197, 94, 0.24);
+        box-shadow:
+          0 14px 26px rgba(15, 23, 42, 0.08),
+          0 0 0 1px rgba(34, 197, 94, 0.08);
+      }
+
+      .whatsapp-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .whatsapp-actions button {
+        min-height: 34px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .whatsapp-summary {
+        width: min(100%, 430px);
+        display: grid;
+        gap: 8px;
+      }
+
+      .whatsapp-summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 18px;
+        background: #ffffff;
+        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.04);
+      }
+
+      .whatsapp-summary-row span {
+        color: var(--soft);
+        font-size: 0.82rem;
+      }
+
+      .whatsapp-summary-row strong {
+        text-align: right;
+        font-size: 0.88rem;
+        color: #0f172a;
+      }
+
+      .comparison-section {
+        width: min(1220px, calc(100% - 34px));
+        margin: 32px auto 0;
+        padding: 12px 0 0;
+      }
+
+      .comparison-section h2 {
+        margin: 0;
+        font-size: clamp(1.7rem, 3vw, 2.45rem);
+        letter-spacing: -0.04em;
+      }
+
+      .comparison-section p {
+        margin: 12px 0 0;
+        max-width: 68ch;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .comparison-note {
+        display: inline-flex;
+        align-items: center;
+        min-height: 38px;
+        padding: 0 14px;
+        margin-top: 18px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--soft);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .comparison-shell {
+        margin-top: 18px;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow-soft);
+      }
+
+      .comparison-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+
+      .comparison-table thead th {
+        padding: 18px;
+        text-align: left;
+        background: linear-gradient(180deg, rgba(34, 197, 94, 0.06), rgba(255, 255, 255, 0.72));
+        color: #16a34a;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .comparison-table thead th:first-child {
+        width: 28%;
+      }
+
+      .comparison-table tbody tr {
+        border-bottom: 1px solid var(--border);
+      }
+
+      .comparison-table tbody tr:last-child {
+        border-bottom: 0;
+      }
+
+      .comparison-table tbody td {
+        padding: 18px;
+        vertical-align: top;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .comparison-table tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.02);
+      }
+
+      .comparison-table .feature-name {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .comparison-table .comparison-value strong {
+        color: #166534;
+      }
+
+      .comparison-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 900;
+        border: 1px solid transparent;
+      }
+
+      .comparison-status-yes {
+        color: #16a34a;
+        border-color: rgba(34, 197, 94, 0.24);
+        background: rgba(34, 197, 94, 0.12);
+      }
+
+      .comparison-status-no {
+        color: #dc2626;
+        border-color: rgba(220, 38, 38, 0.18);
+        background: rgba(220, 38, 38, 0.08);
+      }
+
+      .whatsapp-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .whatsapp-metrics article {
+        padding: 16px 18px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow-soft);
+      }
+
+      .whatsapp-metrics strong {
+        display: block;
+        font-size: 1.06rem;
+      }
+
+      .whatsapp-metrics span {
+        display: block;
+        margin-top: 6px;
+        color: var(--soft);
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      @media (max-width: 980px) {
+        .whatsapp-metrics {
+          grid-template-columns: 1fr;
+        }
+
+        .whatsapp-hero-visual,
+        .whatsapp-summary {
+          width: 100%;
+        }
+
+        .comparison-table,
+        .comparison-table tbody,
+        .comparison-table tr,
+        .comparison-table td,
+        .comparison-table th {
+          display: block;
+          width: 100%;
+        }
+
+        .comparison-table thead {
+          display: none;
+        }
+
+        .comparison-table tbody tr {
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+          padding: 4px 0;
+        }
+
+        .comparison-table tbody tr:last-child {
+          border-bottom: 0;
+        }
+
+        .comparison-table tbody td {
+          padding: 12px 18px;
+        }
+
+        .comparison-table tbody td::before {
+          display: block;
+          margin-bottom: 6px;
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: #16a34a;
+        }
+
+        .comparison-table tbody td:nth-child(1)::before {
+          content: 'Point';
+        }
+
+        .comparison-table tbody td:nth-child(2)::before {
+          content: 'AI Bot';
+        }
+
+        .comparison-table tbody td:nth-child(3)::before {
+          content: 'WhatsApp API Bot';
+        }
+      }
+
+      @media (max-width: 760px) {
+        .whatsapp-actions {
+          grid-template-columns: 1fr;
+        }
+
+        .whatsapp-bubble {
+          max-width: 92%;
+        }
+      }
+    </style>
+  </head>
+  <body class="tech-page">
+    <div class="page-shell">
+      <header class="site-header">
+        <div class="nav-wrap">
+          <a class="brand-lockup" href="/">
+            <span class="brand-name">Hotel<span>RADAR</span></span>
+            <div class="brand-tagline">AI-DRIVEN HOTEL INTELLIGENCE</div>
+          </a>
+          <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" data-menu-toggle>&#9776;</button>
+          <div class="nav-main" data-nav-main>
+            <nav class="nav-links" aria-label="Primary">
+              <a class="nav-link active" href="/">Home</a>
+              <details class="nav-group">
+                <summary class="nav-link nav-group-trigger">
+                  <span>AI Products</span>
+                  <svg class="nav-caret" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path d="M5.5 7.75 10 12.25l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </summary>
+                <div class="nav-submenu" aria-label="AI Products submenu">
+                  <a class="nav-submenu-link" href="/whatsapp-automation/">WhatsApp API Bot</a>
+                  <a class="nav-submenu-link" href="/ai-bot/">AI Bot</a>
+                  <a class="nav-submenu-link" href="/voice-agent/">Voice Agent</a>
+                </div>
+              </details>
+              <details class="nav-group">
+              <summary class="nav-link nav-group-trigger">
+                <span>AI Solutions</span>
+                <svg class="nav-caret" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <path d="M5.5 7.75 10 12.25l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </summary>
+              <div class="nav-submenu" aria-label="AI Solutions submenu">
+                <a class="nav-submenu-link" href="/lead/">Lead Explorer</a>
+                <a class="nav-submenu-link" href="/demand-explorer/">Demand Explorer</a>
+                <a class="nav-submenu-link" href="/leakage-explorer/">Leakage Explorer</a>
+                <a class="nav-submenu-link" href="/vps-cloud-infra/">VPS and Cloud Infra</a>
+                <a class="nav-submenu-link" href="/ai-consulting-training/">AI Consulting & Training</a>
+              </div>
+            </details>
+              <a class="nav-link" href="/hotel-ai-automation/">AI Automation</a>
+            <a class="nav-link" href="https://pms.hotelradar.in" target="_blank" rel="noreferrer">PMS/CM/BE</a>
+              <a class="nav-link" href="/pricing/">Pricing</a>
+            </nav>
+            <div class="nav-actions">
+              <a class="nav-cta" href="/login.html">Login</a>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="home-hero whatsapp-hero" id="top">
+        <section class="home-hero-shell">
+            <div class="home-hero-copy">
+            <div class="home-hero-label">HotelRADAR • AI Bot</div>
+            <h1><span class="home-hero-green">AI Bot</span> that turns website visits into direct booking opportunities</h1>
+            <p class="home-hero-subtext">
+              The same premium HotelRADAR system, now focused on website conversations, instant answers, room guidance,
+              and lead capture across your hotel website using AI Bot.
+            </p>
+            <div class="home-hero-actions">
+              <button class="btn btn-primary home-hero-btn-primary" type="button" data-demo-open>Book demo</button>
+              <a class="btn btn-secondary" href="/whatsapp-automation/#comparison">See WhatsApp API Bot</a>
+            </div>
+
+            <div class="whatsapp-metrics" aria-label="AI Bot benefits">
+              <article>
+                <strong>24/7</strong>
+                <span>Always-on replies for website visitors.</span>
+              </article>
+              <article>
+                <strong>Instant</strong>
+                <span>Fast response with room and policy context.</span>
+              </article>
+              <article>
+                <strong>1 handoff</strong>
+                <span>Ready-to-book lead passed to your team.</span>
+              </article>
+            </div>
+          </div>
+
+          <div class="home-hero-visual whatsapp-hero-visual">
+            <div class="whatsapp-phone" aria-label="AI Bot mockup">
+              <div class="whatsapp-phone-top" aria-hidden="true">
+                <span class="dot"></span>
+                <span>Live</span>
+                <span class="time">9:41</span>
+                <span class="battery"></span>
+              </div>
+
+              <div class="whatsapp-screen">
+                <div class="whatsapp-head">
+                  <div class="whatsapp-avatar">HR</div>
+                  <div>
+                    <strong data-ai-bot-title>HotelRADAR AI Bot</strong>
+                    <span data-ai-bot-subtitle>Warm concierge assistant</span>
+                  </div>
+                  <span class="whatsapp-status" data-ai-bot-status>Online</span>
+                </div>
+
+                <div class="whatsapp-mode-tabs" role="tablist" aria-label="AI Bot conversation states">
+                  <button type="button" class="whatsapp-mode-tab active" aria-pressed="true" data-ai-bot-state="welcome">Welcome</button>
+                  <button type="button" class="whatsapp-mode-tab" aria-pressed="false" data-ai-bot-state="availability">Availability</button>
+                  <button type="button" class="whatsapp-mode-tab" aria-pressed="false" data-ai-bot-state="upsell">Upsell</button>
+                  <button type="button" class="whatsapp-mode-tab" aria-pressed="false" data-ai-bot-state="handoff">Handoff</button>
+                </div>
+
+                <div class="whatsapp-feed" data-ai-bot-feed>
+                  <div class="whatsapp-bubble left">
+                    <span>Guest</span>
+                    <p>Need a Goa room for Friday.</p>
+                  </div>
+                  <div class="whatsapp-bubble right highlight">
+                    <span>HotelRADAR AI Bot</span>
+                    <p>I can check live availability, share the best direct rate, and suggest the best room.</p>
+                  </div>
+                  <div class="whatsapp-bubble left">
+                    <span>Guest</span>
+                    <p>Can it include breakfast?</p>
+                  </div>
+                  <div class="whatsapp-bubble right">
+                    <span>HotelRADAR AI Bot</span>
+                    <p>Yes. I’d suggest a Family Room with breakfast and late checkout.</p>
+                  </div>
+                </div>
+
+                <div class="whatsapp-actions" data-ai-bot-actions>
+                  <button type="button" data-target-state="availability">See best rate</button>
+                  <button type="button" data-target-state="upsell">Add breakfast</button>
+                  <button type="button" data-target-state="upsell">Upgrade room</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="whatsapp-summary" aria-label="AI Bot summary">
+              <div class="whatsapp-summary-row">
+                <span>Response speed</span>
+                <strong data-ai-bot-summary="speed">Instant</strong>
+              </div>
+              <div class="whatsapp-summary-row">
+                <span>Guest context</span>
+                <strong data-ai-bot-summary="context">Captured before handoff</strong>
+              </div>
+              <div class="whatsapp-summary-row">
+                <span>Best use case</span>
+                <strong data-ai-bot-summary="usecase">Website booking conversations</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <section class="comparison-section" id="comparison">
+        <h2>AI Bot vs WhatsApp API Bot</h2>
+        <p>
+          A clear side-by-side comparison so teams can see where each product fits. AI Bot is best for website and
+          multi-channel guest assistance. WhatsApp API Bot is built for fast guest conversations inside WhatsApp.
+        </p>
+
+        <div class="comparison-note">Feature comparison</div>
+        <table class="comparison-shell comparison-table" aria-label="AI Bot and WhatsApp API Bot comparison">
+          <thead>
+            <tr>
+              <th>Comparison point</th>
+              <th>AI Bot</th>
+              <th>WhatsApp API Bot</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="feature-name">Primary channel</td>
+              <td class="comparison-value">Website chat and support flows</td>
+              <td class="comparison-value"><strong>WhatsApp</strong> guest conversations</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Best use case</td>
+              <td class="comparison-value">Answer questions and guide website visitors</td>
+              <td class="comparison-value">Convert inbound enquiries into bookings</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Guest entry point</td>
+              <td class="comparison-value">Website, landing page, or app entry points</td>
+              <td class="comparison-value">WhatsApp number or click-to-chat</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Conversation style</td>
+              <td class="comparison-value">Helpful website assistant with broader support coverage</td>
+              <td class="comparison-value">Short, conversion-focused, guest-led message flow</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Lead capture</td>
+              <td class="comparison-value">Captures enquiry details and stores the lead centrally</td>
+              <td class="comparison-value">Captures stay dates, room type, and booking intent fast</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Lead tracking</td>
+              <td class="comparison-value">Keeps enquiry logs visible for the sales or reservations team</td>
+              <td class="comparison-value">Keeps chat history inside the WhatsApp thread</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Speed expectation</td>
+              <td class="comparison-value">Instant website replies with room and policy context</td>
+              <td class="comparison-value"><strong>Under 15 seconds</strong> guest-first replies</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Booking handoff</td>
+              <td class="comparison-value">Handoffs qualified leads to the reservations team</td>
+              <td class="comparison-value">Handoffs with chat history inside WhatsApp</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Best for teams</td>
+              <td class="comparison-value">Hotels that need a website concierge and support automation</td>
+              <td class="comparison-value">Hotels that want direct booking automation in guest messaging</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Commercial goal</td>
+              <td class="comparison-value">Improve website conversion and reduce missed enquiries</td>
+              <td class="comparison-value">Increase direct bookings and reduce OTA dependency</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <script>
+        (function () {
+          const root = document.querySelector('.whatsapp-phone');
+          if (!root) return;
+
+          const screen = root.querySelector('.whatsapp-screen');
+          const subtitle = root.querySelector('[data-ai-bot-subtitle]');
+          const status = root.querySelector('[data-ai-bot-status]');
+          const feed = root.querySelector('[data-ai-bot-feed]');
+          const tabs = root.querySelectorAll('[data-ai-bot-state]');
+          const actions = root.querySelectorAll('[data-ai-bot-actions] button');
+          const summary = {
+            speed: root.querySelector('[data-ai-bot-summary="speed"]'),
+            context: root.querySelector('[data-ai-bot-summary="context"]'),
+            usecase: root.querySelector('[data-ai-bot-summary="usecase"]'),
+          };
+
+          const states = {
+            welcome: {
+              subtitle: 'Warm concierge assistant',
+              status: 'Online',
+              bubbles: [
+                { side: 'left', speaker: 'Guest', text: 'Need a Goa room for Friday.' },
+                {
+                  side: 'right highlight',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'I can check live availability, share the best direct rate, and suggest the best room.',
+                },
+                { side: 'left', speaker: 'Guest', text: 'Can it include breakfast?' },
+                {
+                  side: 'right',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'Yes. I’d suggest a Family Room with breakfast and late checkout.',
+                },
+              ],
+              actions: [
+                { label: 'See best rate', target: 'availability' },
+                { label: 'Add breakfast', target: 'upsell' },
+                { label: 'Upgrade room', target: 'upsell' },
+              ],
+              summary: ['Instant', 'Captured before handoff', 'Website booking conversations'],
+            },
+            availability: {
+              subtitle: 'Availability check',
+              status: 'Live room search',
+              bubbles: [
+                { side: 'left', speaker: 'Guest', text: 'Best room for 2 adults and 1 child?' },
+                {
+                  side: 'right highlight',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'I’d recommend the Deluxe Family Room. It keeps the stay easy and protects direct booking value.',
+                },
+                { side: 'left', speaker: 'Guest', text: 'Can you hold that rate?' },
+                {
+                  side: 'right',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'Yes. I can keep the booking context ready for your team.',
+                },
+              ],
+              actions: [
+                { label: 'Add breakfast', target: 'upsell' },
+                { label: 'Upgrade room', target: 'upsell' },
+                { label: 'Send to team', target: 'handoff' },
+              ],
+              summary: ['Instant', 'Room context saved', 'Better direct rate suggestion'],
+            },
+            upsell: {
+              subtitle: 'Upsell guidance',
+              status: 'Offer mode',
+              bubbles: [
+                { side: 'left', speaker: 'Guest', text: 'What would make the stay better?' },
+                {
+                  side: 'right highlight',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'For a better stay, I’d suggest breakfast, late checkout, and an upgraded room.',
+                },
+                { side: 'left', speaker: 'Guest', text: 'What’s the direct benefit?' },
+                {
+                  side: 'right',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'You get a cleaner booking path, better stay value, and a warmer guest experience.',
+                },
+              ],
+              actions: [
+                { label: 'Confirm upgrade', target: 'handoff' },
+                { label: 'Add breakfast', target: 'handoff' },
+                { label: 'Back to welcome', target: 'welcome' },
+              ],
+              summary: ['Increased stay value', 'Upsell prompted naturally', 'Guest stays engaged'],
+            },
+            handoff: {
+              subtitle: 'Booking handoff',
+              status: 'Ready for team',
+              bubbles: [
+                { side: 'left', speaker: 'Guest', text: 'Please send it to the team.' },
+                {
+                  side: 'right highlight',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'Done. I’m passing the room choice, add-ons, and booking intent to your team.',
+                },
+                { side: 'left', speaker: 'Guest', text: 'Great, thanks.' },
+                {
+                  side: 'right',
+                  speaker: 'HotelRADAR AI Bot',
+                  text: 'You’re welcome. I’ll keep the conversation warm until your team takes over.',
+                },
+              ],
+              actions: [
+                { label: 'Back to welcome', target: 'welcome' },
+                { label: 'See best rate', target: 'availability' },
+                { label: 'Add breakfast', target: 'upsell' },
+              ],
+              summary: ['Team ready', 'Context captured', 'Handoff completed'],
+            },
+          };
+
+          let currentState = 'welcome';
+          let timer = null;
+
+          function setState(stateName) {
+            const state = states[stateName];
+            if (!state) return;
+
+            currentState = stateName;
+            tabs.forEach((tab) => {
+              const active = tab.dataset.aiBotState === stateName;
+              tab.classList.toggle('active', active);
+              tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+
+            screen.classList.add('is-switching');
+            clearTimeout(timer);
+
+            timer = setTimeout(() => {
+              subtitle.textContent = state.subtitle;
+              status.textContent = state.status;
+
+              feed.innerHTML = state.bubbles
+                .map(
+                  (bubble) =>
+                    `<div class="whatsapp-bubble ${bubble.side}"><span>${bubble.speaker}</span><p>${bubble.text}</p></div>`
+                )
+                .join('');
+
+              summary.speed.textContent = state.summary[0];
+              summary.context.textContent = state.summary[1];
+              summary.usecase.textContent = state.summary[2];
+
+              actions.forEach((button, index) => {
+                const action = state.actions[index] || state.actions[0];
+                button.textContent = action.label;
+                button.dataset.targetState = action.target;
+              });
+
+              screen.classList.remove('is-switching');
+            }, 180);
+          }
+
+          tabs.forEach((tab) => {
+            tab.addEventListener('click', () => setState(tab.dataset.aiBotState));
+          });
+
+          actions.forEach((button) => {
+            button.addEventListener('click', () => {
+              setState(button.dataset.targetState || 'welcome');
+            });
+          });
+
+          setState(currentState);
+        })();
+      </script>
+
+      <footer class="footer">
+        <div class="footer-shell">
+          <div class="footer-grid">
+            <div class="footer-brand">
+              <span class="brand-wordmark">Hotel<span>RADAR</span></span>
+              <div class="brand-tagline">AI-DRIVEN HOTEL INTELLIGENCE</div>
+              <div class="footer-address">
+                <div class="footer-address-line footer-address-company">HotelRADAR AI Agency</div>
+                <div class="footer-address-line">H.No 746 - TF, New Wada, Morjim, Goa 403512</div>
+                <div class="footer-address-line footer-address-contacts">
+                  <span class="footer-address-label">Mobile</span>
+                  <span class="footer-address-value">+91-9828981000</span>
+                  <span class="footer-address-value">+91-8800507181</span>
+                </div>
+                <div class="footer-address-line footer-address-contacts">
+                  <span class="footer-address-label">E-Mail</span>
+                  <a class="footer-address-value" href="/cdn-cgi/l/email-protection#04477174746b7670446c6b70616876656065762a6d6a"><span class="__cf_email__" data-cfemail="4e7d7b7e7e617c7a4e66617a6b627c6f6a6f7c206760">[email&#160;protected]</span></a>
+                </div>
+              </div>
+            </div>
+
+            <div class="footer-group">
+              <h4>Products</h4>
+              <a href="/ai-bot/">WhatsApp &amp; AI Bot</a><a href="/lead/">Lead Explorer</a><a href="/whatsapp-api-setup/">WhatsApp API Setup</a>
+            </div>
+
+            <div class="footer-group">
+              <h4>Company</h4>
+              <a href="/about/">About <span class="brand-wordmark">Hotel<span>RADAR</span></span></a><a href="https://pms.hotelradar.in/founder">Founder</a><a href="/contact/">Contact</a><a href="/login.html">Login</a><a href="/leakage-explorer/">Leakage Explorer</a>
+            </div>
+
+            <div class="footer-group">
+              <h4>Resources</h4>
+              <a href="/resources/">Resources</a><a href="/blog/">Blog</a><a href="/pricing/">Pricing</a><a href="/privacy-policy/">Privacy Policy</a><a href="/terms-of-service/">Terms of Service</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <div>© 2026 <span class="brand-wordmark">Hotel<span>RADAR</span></span>. AI-DRIVEN HOTEL INTELLIGENCE</div>
+            <div><a href="https://hotelradar.in" target="_blank" rel="noreferrer">Powered by HotelRADAR</a></div>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <script src="/assets/marketing.js?v=20260611f"></script>
+  </body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>HotelRADAR Login</title>
+  <meta name="description" content="Unified HotelRADAR access surface for admin sign-in and launching AI Bot, LeadOS, and support resources." />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="canonical" href="https://hotelradar.in/login.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="HotelRADAR Login" />
+  <meta property="og:description" content="Unified HotelRADAR access surface for admin sign-in and launching AI Bot, LeadOS, and support resources." />
+  <meta property="og:url" content="https://hotelradar.in/login.html" />
+  <meta property="og:site_name" content="HotelRADAR" />
+  <meta property="og:image" content="https://hotelradar.in/hotelradar.jpg?v=20260423wa2" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="HotelRADAR Login" />
+  <meta name="twitter:description" content="Unified HotelRADAR access surface for admin sign-in and launching AI Bot, LeadOS, and support resources." />
+  <meta name="twitter:image" content="https://hotelradar.in/hotelradar.jpg?v=20260423wa2" />
+  <link rel="shortcut icon" href="/fevicon.jpg?v=20260415c" />
+  <link rel="icon" href="/fevicon.jpg?v=20260415c" type="image/jpeg" />
+  <link rel="apple-touch-icon" href="/fevicon.jpg?v=20260415c" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/marketing.css?v=20260603p" />
+  <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-1015019068"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'AW-1015019068');
+</script>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="radar-field" aria-hidden="true">
+      <div class="radar-core"></div>
+      <div class="radar-sweep"></div>
+      <div class="radar-line"></div>
+      <div class="radar-dot gold" style="top:18%;left:68%"></div>
+      <div class="radar-dot cyan" style="top:28%;left:86%"></div>
+      <div class="radar-dot blue" style="top:56%;left:78%"></div>
+      <div class="radar-dot cyan" style="top:74%;left:62%"></div>
+      <div class="radar-dot gold" style="top:80%;left:48%"></div>
+    </div>
+    <main class="container login-shell">
+      <section class="login-panel">
+        <div class="login-brand">
+          <div class="login-brand-lockup"><span class="brand-wordmark">Hotel<span>RADAR</span></span></div>
+          <div class="login-brand-tag">AI-Driven Hotel Intelligence</div>
+        </div>
+        <div class="login-title login-title-green">Login</div>
+        <p class="login-subtitle">One centered access screen for HotelRADAR admin and hotel users. Choose the workspace you want to manage after sign-in.</p>
+        <div class="login-umbrella">
+          <span class="login-umbrella-dot"></span>
+          <span>Unified Access Hub</span>
+        </div>
+        <div class="login-launcher" data-login-launcher>
+          <div class="launcher-grid launcher-grid-primary" data-login-launch-grid-primary></div>
+          <div class="launcher-grid launcher-grid-secondary" data-login-launch-grid-secondary></div>
+          <div class="login-note" data-launcher-note>Select a workspace first, then sign in to open it.</div>
+        </div>
+        <div class="login-role-switch">
+          <button class="role-pill active" type="button" data-login-scope="hotel">Hotel Admin</button>
+          <button class="role-pill" type="button" data-login-scope="super">Super Admin</button>
+        </div>
+        <form class="login-form" data-login-form>
+          <label>
+            <span>Email</span>
+            <input type="email" name="email" autocomplete="email" placeholder="admin@hotelradar.in" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="current-password" placeholder="Your password" required />
+          </label>
+          <button class="btn btn-primary login-submit" type="submit">Enter HotelRADAR →</button>
+          <div class="login-status" data-login-status></div>
+        </form>
+        <div class="login-support">Need access? Contact <a href="mailto:support@hotelradar.in">support@hotelradar.in</a>.</div>
+        <div class="login-footer-note">Admin keeps onboarding, product access, and admin controls in one place.</div>
+      </section>
+    </main>
+  </div>
+  <script>
+    (async function () {
+      const form = document.querySelector('[data-login-form]');
+      const status = document.querySelector('[data-login-status]');
+      const scopeButtons = Array.from(document.querySelectorAll('[data-login-scope]'));
+      const launcher = document.querySelector('[data-login-launcher]');
+      const launcherNote = document.querySelector('[data-launcher-note]');
+      const launcherGridPrimary = document.querySelector('[data-login-launch-grid-primary]');
+      const launcherGridSecondary = document.querySelector('[data-login-launch-grid-secondary]');
+      const loginSupport = document.querySelector('.login-support');
+      const loginRoleSwitch = document.querySelector('.login-role-switch');
+      const loginFooterNote = document.querySelector('.login-footer-note');
+      const url = new URL(window.location.href);
+      const workspaces = [
+  {
+    "key": "admin",
+    "label": "Admin",
+    "subtitle": "Onboarding",
+    "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4l-3 2-3-2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v12h4.62L12 19.58 14.38 18H19V6H5Zm2 2h10v2H7V8Zm0 4h6v2H7v-2Z\"/></svg>",
+    "target": "/admin/"
+  },
+  {
+    "key": "leados",
+    "label": "LeadOS",
+    "subtitle": "Leads",
+    "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 4h16v16H4V4Zm3 3v2h10V7H7Zm0 4v2h10v-2H7Zm0 4v2h6v-2H7Z\"/></svg>",
+    "target": "https://hotelradar.in/api/auth/leados-sso?returnTo=/dashboard"
+  }
+];
+      const workspaceMap = Object.fromEntries(workspaces.map((item) => [item.key, item]));
+      const primaryKeys = ['admin', 'leados'];
+      const secondaryKeys = [];
+      const storageKey = 'hotelradar.lastWorkspace';
+      if (url.searchParams.get('logout') === '1') {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+          });
+        } catch (err) {}
+        localStorage.removeItem(storageKey);
+        url.searchParams.delete('logout');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      }
+      let selectedWorkspace = localStorage.getItem(storageKey) || 'admin';
+      let isAuthenticated = false;
+
+      const setWorkspace = (key) => {
+        if (!workspaceMap[key]) return;
+        selectedWorkspace = key;
+        localStorage.setItem(storageKey, key);
+        const cards = Array.from(document.querySelectorAll('[data-workspace-key]'));
+        cards.forEach((card) => card.classList.toggle('active', card.getAttribute('data-workspace-key') === key));
+      };
+
+      const renderLauncher = (message) => {
+        if (!launcher || !launcherGridPrimary || !launcherGridSecondary) return;
+        if (launcherNote && message) launcherNote.textContent = message;
+        launcher.hidden = false;
+        launcherGridPrimary.innerHTML = primaryKeys.map((key) => {
+          const item = workspaceMap[key];
+          return '<button type="button" class="launcher-card' + (isAuthenticated ? '' : ' locked') + '" data-workspace-key="' + item.key + '" data-workspace-target="' + item.target + '">' +
+            '<span class="launcher-icon">' + item.icon + '</span>' +
+            '<strong>' + item.label + '</strong>' +
+            '<span>' + item.subtitle + '</span>' +
+          '</button>';
+        }).join('');
+        launcherGridSecondary.innerHTML = secondaryKeys.map((key) => {
+          const item = workspaceMap[key];
+          return '<button type="button" class="launcher-card secondary' + (isAuthenticated ? '' : ' locked') + '" data-workspace-key="' + item.key + '" data-workspace-target="' + item.target + '">' +
+            '<span class="launcher-icon">' + item.icon + '</span>' +
+            '<strong>' + item.label + '</strong>' +
+            '<span>' + item.subtitle + '</span>' +
+          '</button>';
+        }).join('');
+        launcherGridSecondary.hidden = secondaryKeys.length === 0;
+        Array.from(launcher.querySelectorAll('[data-workspace-key]')).forEach((card) => {
+          card.addEventListener('click', () => {
+            const key = card.getAttribute('data-workspace-key') || 'admin';
+            const target = card.getAttribute('data-workspace-target') || '/admin/';
+            setWorkspace(key);
+            if (!isAuthenticated) {
+              if (status) status.textContent = 'Select ' + workspaceMap[key].label + ' and sign in to open it.';
+              return;
+            }
+            window.location.assign(target);
+          });
+        });
+        setWorkspace(selectedWorkspace);
+      };
+
+      renderLauncher('Select Admin or LeadOS, then sign in to continue.');
+      scopeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          scopeButtons.forEach((item) => item.classList.toggle('active', item === button));
+        });
+      });
+      const mePromise = fetch('/api/auth/me', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        status.textContent = 'Signing in...';
+        const data = Object.fromEntries(new FormData(form).entries());
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(data),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            status.textContent = payload.error || 'Unable to sign in. Please check your credentials.';
+            return;
+          }
+          status.textContent = 'Signed in.';
+          isAuthenticated = true;
+          const chosen = workspaceMap[selectedWorkspace] || workspaceMap.admin;
+          renderLauncher('Signed in. Opening ' + chosen.label + '...');
+          window.location.assign(chosen.target);
+        } catch (error) {
+          status.textContent = 'Unable to reach the sign-in service right now.';
+        }
+      });
+      mePromise.then((me) => {
+        if (me && me.authenticated) {
+          isAuthenticated = true;
+          renderLauncher('Signed in as ' + ((me && me.email) || 'HotelRADAR admin') + '. Select a workspace to open it.');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
