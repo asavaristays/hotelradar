@@ -9939,6 +9939,174 @@ textarea::placeholder {
   background: rgba(15, 157, 138, 0.045);
 }
 
+.riEnterprisePanel {
+  min-height: auto;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(15, 157, 138, 0.11), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
+}
+
+.riEnterpriseIntro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.riEnterpriseIntro > div {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+}
+
+.riEnterpriseIntro span,
+.riEnterpriseGrid span,
+.riEnterpriseContract span {
+  display: block;
+  color: #607085;
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.riEnterpriseIntro h2 {
+  margin: 0;
+  color: #202a36;
+  font-size: 1.18rem;
+  line-height: 1.28;
+  font-weight: 500;
+}
+
+.riEnterpriseIntro p,
+.riEnterpriseGrid p,
+.riEnterpriseContract p {
+  margin: 0;
+  color: #5d6f84;
+  font-size: 0.8rem;
+  line-height: 1.46;
+}
+
+.riEnterpriseIntro article {
+  display: grid;
+  align-content: center;
+  border: 1px solid rgba(15, 157, 138, 0.2);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(15, 157, 138, 0.06);
+}
+
+.riEnterpriseIntro strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f7a5d;
+  font-size: 1.72rem;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.riEnterpriseIntro small {
+  margin-top: 7px;
+  color: #607085;
+  font-size: 0.68rem;
+}
+
+.riEnterpriseGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.riEnterpriseGrid article {
+  min-height: 112px;
+  border: 1px solid #e0e8ef;
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: #ffffff;
+}
+
+.riEnterpriseGrid p {
+  margin-top: 8px;
+}
+
+.riEnterpriseContract {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 0.75fr)) minmax(260px, 1.4fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.riEnterpriseContract article {
+  border: 1px solid #e0e8ef;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #f9fbfd;
+}
+
+.riEnterpriseContract strong {
+  display: block;
+  margin-top: 7px;
+  color: #202a36;
+  font-size: 1.08rem;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.riEnterpriseContract p {
+  margin-top: 6px;
+  font-size: 0.74rem;
+}
+
+.riEnterpriseDates {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.riEnterpriseDate {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #e0e8ef;
+  border-left: 3px solid #cbd5df;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #ffffff;
+}
+
+.riEnterpriseDate.riDate-high {
+  border-left-color: #e95d5d;
+  background: rgba(233, 93, 93, 0.045);
+}
+
+.riEnterpriseDate.riDate-watch {
+  border-left-color: #0f9d8a;
+  background: rgba(15, 157, 138, 0.045);
+}
+
+.riEnterpriseDate em {
+  color: #607085;
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.riEnterpriseDate strong {
+  color: #202a36;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.riEnterpriseDate span,
+.riEnterpriseDate small {
+  color: #5d6f84;
+  font-size: 0.72rem;
+  line-height: 1.36;
+}
+
+.riEnterpriseDate small {
+  color: #758397;
+}
+
 .riBetaReadinessPanel {
   min-height: auto;
   padding: 20px;
@@ -10105,6 +10273,15 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .riEnterpriseGrid,
+  .riEnterpriseDates {
+    grid-template-columns: 1fr;
+  }
+
+  .riEnterpriseContract {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .riBetaPillars {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -10123,6 +10300,8 @@ textarea::placeholder {
   .riHeader,
   .riHeaderMeta,
   .riCommandHero,
+  .riEnterpriseIntro,
+  .riEnterpriseContract,
   .riKpiGrid,
   .riBetaReadinessIntro,
   .riBetaPillars,

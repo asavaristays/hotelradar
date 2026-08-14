@@ -838,6 +838,77 @@ function EvidenceMixPanel({ signals }) {
   );
 }
 
+function EnterpriseBriefPanel({ model }) {
+  const brief = model?.enterpriseBrief;
+  if (!brief) return null;
+  const contract = brief.proofContract || {};
+  const priorityDates = Array.isArray(brief.priorityDates) ? brief.priorityDates : [];
+  const nextDates = Array.isArray(brief.next15Days) ? brief.next15Days : [];
+  const visibleDates = priorityDates.length ? priorityDates : nextDates.slice(0, 5);
+
+  return (
+    <section className="riPanel riEnterprisePanel" aria-label="Enterprise Revenue Intelligence brief">
+      <div className="riEnterpriseIntro">
+        <div>
+          <span>Enterprise Revenue Intelligence</span>
+          <h2>{brief.decisionPosture || 'Watch-only until proof is complete'}</h2>
+          <p>{brief.presentationPromise}</p>
+        </div>
+        <article>
+          <span>15-day score</span>
+          <strong>{Number(brief.enterpriseScore || 0).toFixed(1)}</strong>
+          <small>{brief.horizonDays || 15} day operating horizon</small>
+        </article>
+      </div>
+
+      <div className="riEnterpriseGrid">
+        <article>
+          <span>Market read</span>
+          <p>{brief.marketRead}</p>
+        </article>
+        <article>
+          <span>Hotel gap</span>
+          <p>{brief.hotelGap}</p>
+        </article>
+        <article>
+          <span>Commercial focus</span>
+          <p>{brief.commercialFocus}</p>
+        </article>
+      </div>
+
+      <div className="riEnterpriseContract">
+        <article>
+          <span>Required proof</span>
+          <strong>{Number(contract.requiredReady || 0)}/{Number(contract.requiredTotal || 0)}</strong>
+        </article>
+        <article>
+          <span>Supporting signals</span>
+          <strong>{Number(contract.supportingActive || 0)}</strong>
+        </article>
+        <article>
+          <span>Critical gaps</span>
+          <strong>{Number(contract.missingCritical || 0)}</strong>
+        </article>
+        <article>
+          <span>Cadence</span>
+          <p>{brief.morningCadence}</p>
+        </article>
+      </div>
+
+      <div className="riEnterpriseDates">
+        {visibleDates.map((date) => (
+          <article key={`${date.date}-${date.primarySignal}`} className={`riEnterpriseDate riDate-${date.tone}`}>
+            <em>{date.displayDate || formatDate(date.date, { weekday: undefined })}</em>
+            <strong>{date.pressure}</strong>
+            <span>{date.primarySignal}</span>
+            <small>{date.recommendedAction}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function WorkingModelPanel({ model }) {
   if (!model?.executiveSummary) return null;
   const evidence = Array.isArray(model.evidence) ? model.evidence : [];
@@ -1060,6 +1131,8 @@ export default function Dashboard({ dashboard, loading, error }) {
           market={market}
           selectedDate={selectedDate}
         />
+
+        <EnterpriseBriefPanel model={model} />
 
         <BetaReadinessPanel model={model} />
 

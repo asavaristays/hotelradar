@@ -9,6 +9,8 @@ function positiveNumber(value) {
   return parsed !== null && parsed > 0;
 }
 
+const ENTERPRISE_HORIZON_DAYS = 15;
+
 function formatCurrency(value) {
   const amount = numericOrNull(value);
   if (amount === null || amount <= 0) return 'Not captured';
@@ -21,6 +23,30 @@ function formatCurrency(value) {
 
 function selectedStayDate(dashboard = {}) {
   return String(dashboard?.marketContext?.checkinDate || '').slice(0, 10) || null;
+}
+
+function currentDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(dateString, days) {
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ''))
+    ? new Date(`${dateString}T00:00:00Z`)
+    : new Date();
+  base.setUTCDate(base.getUTCDate() + Number(days || 0));
+  return base.toISOString().slice(0, 10);
+}
+
+function formatDisplayDate(dateString) {
+  const raw = String(dateString || '').slice(0, 10);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw || 'selected date';
+  return parsed.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
 }
 
 function rows(dashboard = {}) {
@@ -370,6 +396,111 @@ function buildMorningBrief({ dashboard, evidence, score, action, opportunities }
   };
 }
 
+function normalizeImportantDate(entry = {}) {
+  const date = String(entry.date || '').slice(0, 10);
+  if (!date) return null;
+  return {
+    date,
+    endDate: String(entry.endDate || entry.end_date || entry.date || '').slice(0, 10),
+    label: entry.label || entry.name || 'Market pressure date',
+    driver: entry.type || entry.source || entry.driver || 'Market signal',
+    confidence: String(entry.confidence || entry.priority || '').toLowerCase(),
+  };
+}
+
+function pressureForDate(date, importantDates = []) {
+  const match = importantDates.find((entry) => date >= entry.date && date <= (entry.endDate || entry.date));
+  if (!match) {
+    return {
+      level: 'Proof pending',
+      tone: 'missing',
+      signal: 'No verified pressure signal captured for this stay date yet.',
+      driver: 'Awaiting live rate, OTA, competitor, and demand observations.',
+    };
+  }
+  const high = match.confidence.includes('high') || /independence|long weekend|compression|festival/i.test(match.label);
+  return {
+    level: high ? 'High watch' : 'Watch',
+    tone: high ? 'high' : 'watch',
+    signal: match.label,
+    driver: match.driver,
+  };
+}
+
+function actionForEnterpriseDate({ pressure, requiredReady, score }) {
+  if (!requiredReady) {
+    return 'Do not issue strong pricing action; complete rate proof first.';
+  }
+  if (pressure.tone === 'high' && score >= 75) {
+    return 'Review increase, discount closure, and minimum-stay controls.';
+  }
+  if (pressure.tone === 'watch') {
+    return 'Hold rate and monitor pickup, parity, and comp-set movement.';
+  }
+  return 'Keep watch; no pressure-led action until evidence changes.';
+}
+
+function buildEnterpriseBrief({ dashboard, evidence, score, action, trust, opportunities, missingDataActions }) {
+  const stayDate = selectedStayDate(dashboard) || currentDateKey();
+  const importantDates = Array.isArray(dashboard?.marketContext?.importantDates)
+    ? dashboard.marketContext.importantDates.map(normalizeImportantDate).filter(Boolean)
+    : [];
+  const required = evidence.filter((item) => item.requiredForStrongAction);
+  const requiredReadyCount = required.filter((item) => item.status === 'ready').length;
+  const supportingActive = evidence.filter((item) => !item.requiredForStrongAction && item.status !== 'missing').length;
+  const requiredReady = required.length > 0 && requiredReadyCount === required.length;
+  const missingCritical = missingRequired(evidence);
+
+  const next15Days = Array.from({ length: ENTERPRISE_HORIZON_DAYS }, (_, index) => {
+    const date = addDays(stayDate, index);
+    const pressure = pressureForDate(date, importantDates);
+    return {
+      date,
+      displayDate: formatDisplayDate(date),
+      pressure: pressure.level,
+      tone: pressure.tone,
+      primarySignal: pressure.signal,
+      driver: pressure.driver,
+      evidenceStatus: requiredReady ? 'Ready for controlled review' : 'Rate proof pending',
+      recommendedAction: actionForEnterpriseDate({ pressure, requiredReady, score }),
+      owner: pressure.tone === 'high' ? 'GM + Revenue' : pressure.tone === 'watch' ? 'Revenue + Sales' : 'Revenue analyst',
+    };
+  });
+
+  const priorityDates = next15Days.filter((day) => day.tone !== 'missing').slice(0, 5);
+  const missingLabels = missingCritical.map((item) => item.label.toLowerCase());
+
+  return {
+    version: 'enterprise-revenue-intelligence-v1',
+    horizonDays: ENTERPRISE_HORIZON_DAYS,
+    decisionPosture: trust === 'actionable'
+      ? 'Actionable with controls'
+      : trust === 'needs_data'
+        ? 'Evidence required'
+        : 'Watch-only until proof is complete',
+    enterpriseScore: Math.round((score / 10) * 10) / 10,
+    morningCadence: 'Every morning: capture sources, verify freshness, recalculate 15-day outlook, deliver GM action brief.',
+    marketRead: priorityDates.length
+      ? `${priorityDates.length} pressure date${priorityDates.length === 1 ? '' : 's'} need commercial attention in the next ${ENTERPRISE_HORIZON_DAYS} days.`
+      : `No verified market-pressure date is ready in the next ${ENTERPRISE_HORIZON_DAYS} days; keep capture running and avoid speculative pricing.`,
+    hotelGap: missingLabels.length
+      ? `Strong action is blocked by missing ${missingLabels.join(', ')}.`
+      : 'Required pricing evidence is ready; use demand pressure to guide controlled action.',
+    commercialFocus: opportunities[0]?.opportunity || 'Complete verified data capture before presenting strong recommendations.',
+    proofContract: {
+      requiredReady: requiredReadyCount,
+      requiredTotal: required.length,
+      supportingActive,
+      missingCritical: missingCritical.length,
+      missingDataActions: missingDataActions.length,
+    },
+    next15Days,
+    priorityDates,
+    presentationPromise:
+      'HotelRADAR does not sell a mystery score. It gives a traceable daily Revenue Intelligence view: what is happening, what proof exists, what is missing, and what the hotel team should do next.',
+  };
+}
+
 function buildBetaReadiness({ evidence, opportunities, missingDataActions, score, trust }) {
   const required = evidence.filter((item) => item.requiredForStrongAction);
   const supportingSignals = evidence.filter((item) => !item.requiredForStrongAction);
@@ -458,6 +589,15 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
   const opportunities = buildOpportunityRows(dashboard, evidence, pricingAction);
   const missingDataActions = buildMissingDataActions(evidence);
   const trust = trustStatus(pricingAction, score, evidence);
+  const enterpriseBrief = buildEnterpriseBrief({
+    dashboard,
+    evidence,
+    score,
+    action: pricingAction,
+    trust,
+    opportunities,
+    missingDataActions,
+  });
   const betaReadiness = buildBetaReadiness({
     evidence,
     opportunities,
@@ -482,6 +622,7 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
         : 'Revenue Intelligence can guide the story, but strong pricing action remains guarded until required evidence is ready.',
     },
     evidence,
+    enterpriseBrief,
     betaReadiness,
     opportunityRows: opportunities,
     missingDataActions,

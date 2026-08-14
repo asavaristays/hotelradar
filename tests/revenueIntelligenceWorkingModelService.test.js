@@ -56,6 +56,21 @@ describe('revenueIntelligenceWorkingModelService', () => {
       'automation_loop',
     ]);
     expect(model.betaReadiness.nextToReachTen.join(' ')).toMatch(/PMS|OTA|Digital asset/i);
+    expect(model.enterpriseBrief).toEqual(
+      expect.objectContaining({
+        version: 'enterprise-revenue-intelligence-v1',
+        horizonDays: 15,
+        next15Days: expect.any(Array),
+        proofContract: expect.any(Object),
+      }),
+    );
+    expect(model.enterpriseBrief.next15Days).toHaveLength(15);
+    expect(model.enterpriseBrief.priorityDates[0]).toEqual(
+      expect.objectContaining({
+        date: '2026-08-15',
+        pressure: expect.stringMatching(/High/i),
+      }),
+    );
   });
 
   test('keeps missing official rate as not captured and blocks strong action', () => {
@@ -95,5 +110,14 @@ describe('revenueIntelligenceWorkingModelService', () => {
     expect(marketPrice.value).toBeNull();
     expect(model.executiveSummary.pricingAction).toBe('Need More Data');
     expect(model.executiveSummary.trustStatus).toBe('needs_data');
+    expect(model.enterpriseBrief.next15Days).toHaveLength(15);
+    expect(model.enterpriseBrief.decisionPosture).toBe('Evidence required');
+    expect(model.enterpriseBrief.next15Days[0]).toEqual(
+      expect.objectContaining({
+        evidenceStatus: 'Rate proof pending',
+        recommendedAction: expect.stringMatching(/complete rate proof/i),
+      }),
+    );
+    expect(model.enterpriseBrief.hotelGap).toMatch(/official rate/i);
   });
 });
