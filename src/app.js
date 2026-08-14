@@ -20,7 +20,7 @@ const frontendDistDir = path.resolve(process.cwd(), 'frontend', 'dist');
 const frontendIndexFile = path.join(frontendDistDir, 'index.html');
 const frontendAvailable = fs.existsSync(frontendIndexFile);
 
-const spaExactPaths = new Set(['/', '/dashboard', '/admin', '/leadradar', '/legal/privacy', '/legal/terms', '/legal/disclaimer']);
+const spaExactPaths = new Set(['/', '/dashboard', '/admin', '/leadradar', '/research', '/legal/privacy', '/legal/terms', '/legal/disclaimer']);
 
 export function shouldServeFrontendShell(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {

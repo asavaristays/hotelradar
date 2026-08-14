@@ -6,6 +6,12 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toNullableNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normalizeDeltaPayload(payload = {}) {
   return {
     todayTotal: toNumber(payload?.today_total, 0),
@@ -24,14 +30,13 @@ export function normalizeRadarScoreCardPayload(payload = {}, fallbackData = {}) 
           fallbackData?.marketStatus ||
           'Market Watch',
       ).trim() || 'Market Watch',
-    recommendedPrice: toNumber(
-      payload?.recommended_price,
-      toNumber(fallbackData?.recommendedPrice, 0),
-    ),
-    positionVsMarket: toNumber(
-      payload?.position_vs_market,
-      toNumber(payload?.position_percent, toNumber(fallbackData?.positionVsMarket, 0)),
-    ),
+    recommendedPrice:
+      toNullableNumber(payload?.recommended_price) ??
+      toNullableNumber(fallbackData?.recommendedPrice),
+    positionVsMarket:
+      toNullableNumber(payload?.position_vs_market) ??
+      toNullableNumber(payload?.position_percent) ??
+      toNullableNumber(fallbackData?.positionVsMarket),
     generatedAt: String(payload?.generated_at || fallbackData?.generatedAt || '').trim(),
   };
 }
@@ -353,23 +358,29 @@ export async function getDemandForecast(token, hotelId) {
 
 function normalizeDemandDay(entry = {}, index = 0) {
   const drivers = Array.isArray(entry?.top_drivers) ? entry.top_drivers : [];
+  const nullableNumber = (value) => (value == null || value === '' ? null : toNumber(value, null));
   return {
     id: String(entry?.stay_date || '').trim() || `market-demand-${index}`,
     stayDate: String(entry?.stay_date || '').trim(),
     demandScore: toNumber(entry?.demand_score, 0),
     confidenceScore: toNumber(entry?.confidence_score, 0),
     demandLevel: String(entry?.demand_level || 'Normal').trim() || 'Normal',
-    pricingAction: String(entry?.pricing_action || 'Review Only').trim() || 'Review Only',
+    pricingAction: String(entry?.pricing_action || 'Need More Data').trim() || 'Need More Data',
     priceAdjustmentPct: toNumber(entry?.price_adjustment_pct, 0),
     trustStatus: String(entry?.trust_status || 'review_only').trim() || 'review_only',
-    marketAvgPrice: toNumber(entry?.market_avg_price, 0),
-    hotelAvgPrice: toNumber(entry?.hotel_avg_price, 0),
+    marketAvgPrice: nullableNumber(entry?.market_avg_price),
+    hotelAvgPrice: nullableNumber(entry?.hotel_avg_price),
     competitorCount: toNumber(entry?.competitor_count, 0),
     competitorRateRows: toNumber(entry?.competitor_rate_rows, 0),
-    rateChangePct: toNumber(entry?.rate_change_pct, 0),
-    hotelVsMarketPct: toNumber(entry?.hotel_vs_market_pct, 0),
+    rateChangePct: nullableNumber(entry?.rate_change_pct),
+    hotelVsMarketPct: nullableNumber(entry?.hotel_vs_market_pct),
     computedAt: String(entry?.computed_at || '').trim(),
     freshness: entry?.freshness && typeof entry.freshness === 'object' ? entry.freshness : {},
+    productLock: entry?.product_lock && typeof entry.product_lock === 'object' ? entry.product_lock : {},
+    missingEvidence: Array.isArray(entry?.missing_evidence) ? entry.missing_evidence : [],
+    contradictorySignals: Array.isArray(entry?.contradictory_signals) ? entry.contradictory_signals : [],
+    moduleScores: entry?.module_scores && typeof entry.module_scores === 'object' ? entry.module_scores : {},
+    sourceProof: entry?.source_proof && typeof entry.source_proof === 'object' ? entry.source_proof : {},
     topDrivers: drivers.map((driverEntry, driverIndex) => ({
       id:
         String(driverEntry?.type || '').trim() ||

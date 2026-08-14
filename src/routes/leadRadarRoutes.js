@@ -15,6 +15,16 @@ import {
   validateLeadRadarQuery,
   validateLeadRadarRefresh,
 } from '../middleware/leadRadarValidation.js';
+import {
+  createResearch,
+  getResearch,
+  listResearch,
+} from '../controllers/propertyResearchController.js';
+import {
+  validateCreatePropertyResearch,
+  validateListPropertyResearch,
+  validatePropertyResearchJobId,
+} from '../middleware/propertyResearchValidation.js';
 
 export const leadRadarRouter = express.Router();
 
@@ -26,3 +36,6 @@ leadRadarRouter.get('/opportunities', validateLeadRadarOpportunities, getOpportu
 leadRadarRouter.get('/summary', getSummary);
 leadRadarRouter.get('/hotel/:hotelId', validateLeadRadarHotelId, getHotel);
 leadRadarRouter.post('/refresh', validateLeadRadarRefresh, refreshLeadData);
+leadRadarRouter.post('/research', validateCreatePropertyResearch, createResearch);
+leadRadarRouter.get('/research', validateListPropertyResearch, listResearch);
+leadRadarRouter.get('/research/:jobId', validatePropertyResearchJobId, getResearch);

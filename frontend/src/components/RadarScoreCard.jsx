@@ -17,14 +17,25 @@ function scoreTone(score) {
 }
 
 function positionTone(position) {
-  const safePosition = Number(position || 0);
+  if (!hasNumber(position)) return 'balanced';
+  const safePosition = Number(position);
   if (safePosition <= -5) return 'opportunity';
   if (safePosition >= 5) return 'premium';
   return 'balanced';
 }
 
+function hasNumber(value) {
+  if (value === null || value === undefined || value === '') return false;
+  return Number.isFinite(Number(value));
+}
+
+function formatMarketPosition(value) {
+  return hasNumber(value) ? `${formatPercent(Number(value), 0)} vs Market` : 'Not captured';
+}
+
 function formatRupees(value) {
-  return `₹${formatCurrency(value)}`;
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) && amount > 0 ? `₹${formatCurrency(amount)}` : 'Not captured';
 }
 
 export default function RadarScoreCard({ token = '', hotelId = '', fallbackData = null }) {
@@ -85,6 +96,7 @@ export default function RadarScoreCard({ token = '', hotelId = '', fallbackData 
   );
   const tone = scoreTone(score);
   const marketPositionTone = positionTone(payload?.positionVsMarket);
+  const hasPosition = hasNumber(payload?.positionVsMarket);
 
   return (
     <motion.section
@@ -168,8 +180,8 @@ export default function RadarScoreCard({ token = '', hotelId = '', fallbackData 
                 </article>
                 <article className="radarScoreHeroMetric">
                   <span>Market Position</span>
-                  <strong className={`radarScoreHeroPosition radarScoreHeroPosition-${marketPositionTone}`}>
-                    {formatPercent(payload.positionVsMarket, 0)} vs Market
+                  <strong className={`radarScoreHeroPosition radarScoreHeroPosition-${hasPosition ? marketPositionTone : 'pending'}`}>
+                    {formatMarketPosition(payload.positionVsMarket)}
                   </strong>
                 </article>
               </div>

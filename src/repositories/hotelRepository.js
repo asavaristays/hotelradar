@@ -13,6 +13,7 @@ export async function listHotels() {
      FROM hotels h
      LEFT JOIN cities c ON c.id = h.city_id
      WHERE LOWER(COALESCE(c.name, h.city)) = ANY($1::text[])
+       AND COALESCE(h.subscription_status, 'active') = 'active'
      ORDER BY hotel_name ASC`,
     [focusCityKeys],
   );
@@ -31,6 +32,7 @@ export async function listHotelsByCity(city) {
      LEFT JOIN cities c ON c.id = h.city_id
      WHERE LOWER(COALESCE(c.name, h.city)) = LOWER($1)
        AND LOWER(COALESCE(c.name, h.city)) = ANY($2::text[])
+       AND COALESCE(h.subscription_status, 'active') = 'active'
      ORDER BY hotel_name ASC`,
     [String(city || '').trim(), focusCityKeys],
   );
@@ -50,6 +52,7 @@ export async function listHotelsForUser(userId) {
      LEFT JOIN cities c ON c.id = h.city_id
      WHERE hu.user_id = $1
        AND LOWER(COALESCE(c.name, h.city)) = ANY($2::text[])
+       AND COALESCE(h.subscription_status, 'active') = 'active'
      ORDER BY h.hotel_name ASC`,
     [userId, focusCityKeys],
   );

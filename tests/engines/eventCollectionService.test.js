@@ -7,6 +7,7 @@ import {
   eventFromHtmlFallback,
   extractBookMyShowVenue,
   extractJsonLdBlocks,
+  generateAugustImportantDateSignals,
   generateGoaWeddingSignals,
   parseSourceSpec,
   runEventCollectionCycle,
@@ -118,6 +119,7 @@ describe('eventCollectionService', () => {
       {
         outputPath,
         includeWeddingSignals: false,
+        includeAugustImportantDates: false,
         linkedinHintsFile: missingHintsPath,
         sources: [
           {
@@ -292,6 +294,7 @@ describe('eventCollectionService', () => {
       {
         outputPath,
         includeWeddingSignals: false,
+        includeAugustImportantDates: false,
         linkedinHintsFile,
         sources: [],
       },
@@ -314,5 +317,26 @@ describe('eventCollectionService', () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((row) => row.city === 'Goa')).toBe(true);
     expect(rows.every((row) => row.category === 'wedding_season')).toBe(true);
+  });
+
+  test('generates August 2026 Independence Day and Rakhi demand windows', () => {
+    const rows = generateAugustImportantDateSignals(45, new Date('2026-08-02T00:00:00Z'));
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          city: 'Goa',
+          name: 'Independence Day Weekend Demand Window',
+          start_date: '2026-08-15',
+          source: 'verified-august-calendar',
+        }),
+        expect.objectContaining({
+          city: 'Goa',
+          name: 'Rakhi Long Weekend Family Travel Window',
+          start_date: '2026-08-28',
+          end_date: '2026-08-30',
+          source: 'verified-august-calendar',
+        }),
+      ]),
+    );
   });
 });

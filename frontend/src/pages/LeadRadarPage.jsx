@@ -7,6 +7,7 @@ import {
   getOpportunityFeed,
 } from '../services/intelligenceApi.js';
 import { getOpportunityScoreTone, normalizeOpportunityScore } from '../utils/leadRadarScore.js';
+import hotelradarLogo from '../assets/hotelradar-logo.png';
 
 const SUPPORTED_CITIES = ['Goa', 'Jaipur', 'Mumbai', 'Delhi', 'Gurugram'];
 const SELECT_CITY = '';
@@ -908,6 +909,7 @@ export default function LeadRadarPage({ session, onLogout, onNavigate }) {
     return (
       <>
         <button type="button" className="premiumNavItem" onClick={() => onNavigate('/admin')}>Admin</button>
+        <button type="button" className="premiumNavItem" onClick={() => onNavigate('/research')}>Property Research</button>
         <button type="button" className="premiumNavItem" onClick={() => onNavigate('/')}>HotelRADAR</button>
         <button type="button" className="premiumNavItem active">LeadRADAR</button>
         <button type="button" className="premiumNavItem" onClick={() => openDashboardWorkspace('admin-control')}>
@@ -926,7 +928,7 @@ export default function LeadRadarPage({ session, onLogout, onNavigate }) {
       {!isCompactViewport ? (
         <aside className="premiumSidebar" aria-label="Primary navigation">
           <div className="premiumBrand">
-            <h1>HotelRADAR</h1>
+            <img className="premiumBrandLogo" src={hotelradarLogo} alt="HotelRADAR AI Agency Goa" width="740" height="158" />
             <p>Revenue Intelligence Cockpit</p>
           </div>
           <nav className="premiumNav">{renderNavigationButtons()}</nav>
@@ -939,7 +941,7 @@ export default function LeadRadarPage({ session, onLogout, onNavigate }) {
           {isCompactViewport ? (
             <div className="premiumMobileMenuBar">
               <div className="premiumMobileBrand" aria-label="HotelRADAR beta">
-                <strong>HotelRADAR Beta</strong>
+                <img className="premiumMobileBrandLogo" src={hotelradarLogo} alt="HotelRADAR AI Agency Goa" width="740" height="158" />
               </div>
               <button
                 type="button"

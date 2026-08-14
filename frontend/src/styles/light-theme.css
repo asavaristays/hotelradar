@@ -1,0 +1,597 @@
+/*
+ * Final light-theme compatibility layer.
+ * Keep hard-coded legacy component surfaces here until each feature stylesheet
+ * has been migrated fully to the shared variables in theme.css.
+ */
+
+html,
+body,
+#root,
+.authShell,
+.shell,
+.premiumShell,
+.premiumMain,
+.premiumContent,
+.adminDashboardPage,
+.hotelDashboardPage,
+.leadRadarPage,
+.researchShell,
+.researchMain,
+.legalShell {
+  color: var(--text-primary);
+  background: var(--bg-main);
+}
+
+.authShell {
+  background:
+    radial-gradient(circle at top, rgba(29, 111, 235, 0.08), transparent 32%),
+    var(--bg-main);
+}
+
+.loginShell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.loginCard {
+  width: min(440px, 100%);
+  margin: auto;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.loginCard h1 {
+  color: var(--text-primary);
+}
+
+.authCard,
+.panel,
+.researchPanel,
+.adminChartPanel,
+.adminStatusPanel,
+.adminTablePanel,
+.hotelRadarFocusPanel,
+.leadRadarCitySelectorPanel,
+.leadRadarHeroPanel,
+.leadRadarPulsePanel,
+.leadRadarTrendingPanel,
+.leadRadarLiveDriversPanel,
+.leadRadarSummaryCard,
+.leadRadarLiveDriverCard,
+.premiumMobileControlPanel,
+.premiumMobileNavPanel,
+.legalCard,
+.leadRadarWeaknessRadarMetric,
+.leadRadarTopOpportunityCard,
+.leadSegmentOpportunityCard,
+.leadPromptSuggestion,
+.leadOpportunityBlock,
+.leadOpportunityDrawer,
+.leadOpportunityDrawerHeader,
+.leadOpportunityContextList,
+.leadRadarFilterBanner,
+.metricCard,
+.marketDemandCockpit,
+.opportunityFeedShell,
+.signalsFeedShell,
+.signalCard,
+.dashboardSkeletonCard,
+.dashboardSkeletonChart,
+.demandForecastHero,
+.notificationsPanelShell,
+.notificationCard,
+.radarMapShell,
+.radarMapLayerPanel {
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.appHeader,
+.premiumSidebar,
+.premiumTopbar,
+.researchSidebar,
+.premiumMobileNav,
+.legalHeader {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.97);
+  border-color: var(--border);
+}
+
+input,
+textarea,
+select,
+.researchForm input,
+.researchForm select {
+  color: var(--text-primary);
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8b98aa;
+}
+
+button:disabled,
+button[aria-disabled='true'] {
+  opacity: 1;
+  color: #64748b;
+  background: #eef2f7;
+  border-color: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.premiumTopbarActions button:not(:disabled),
+.topbarDateSearch button:not(:disabled),
+.topbarSelector button:not(:disabled) {
+  color: #175fb8;
+  background: #ffffff;
+  border-color: #b9c8da;
+  box-shadow: 0 4px 12px rgba(23, 32, 51, 0.06);
+}
+
+.premiumTopbarActions button:hover:not(:disabled),
+.topbarDateSearch button:hover:not(:disabled),
+.topbarSelector button:hover:not(:disabled) {
+  color: #ffffff;
+  background: #1976d2;
+  border-color: #1976d2;
+  box-shadow: 0 8px 18px rgba(25, 118, 210, 0.22);
+}
+
+table,
+thead,
+tbody,
+tr,
+th,
+td,
+.adminOverviewTable,
+.adminTableWrap {
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+thead,
+th {
+  background: var(--surface-muted);
+}
+
+tbody tr:hover {
+  background: #f7f9fc;
+}
+
+.premiumNavItem,
+.researchHistoryList article,
+.researchEvidenceList article,
+.researchCompetitorList article,
+.researchEvidenceMetrics span,
+.forwardChartWrap,
+.positionOverlayPill,
+.snapshotList div,
+.urgencyGrid,
+.bandCard,
+.radialInner,
+.adminOverviewTable,
+.leadTable,
+.gridTable,
+.radarMapLayerList {
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+
+.demandForecastTooltip,
+.adminChartTooltip,
+.radarMapLayerToggleButton,
+.topbarDateSearch input[type='date'],
+.hotelDashboardSelector select {
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+
+.radarMapLayerToggleButton {
+  color: #175fb8;
+}
+
+.hotelDashboardHero,
+.adminDashboardHero,
+.radarScoreHero {
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at top left, rgba(29, 111, 235, 0.07), transparent 34%),
+    var(--card-bg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.hotelDashboardHero h1,
+.hotelDashboardSectionHeader h2,
+.adminDashboardHero h1,
+.adminPanelHeader h2,
+.adminMetricCard strong,
+.radarScoreHeroHeader h2,
+.radarScoreHeroMetric strong,
+.radarScoreHeroGaugeValue strong,
+.signalCardTop h3,
+.signalCardStats strong,
+.signalCardAction p {
+  color: var(--text-primary);
+}
+
+.hotelDashboardHeroEyebrow,
+.hotelDashboardSectionEyebrow,
+.workspaceEyebrow,
+.adminMetricLabel,
+.radarScoreHeroEyebrow,
+.radarScoreHeroKicker {
+  color: #1976d2;
+}
+
+.radarScoreHeroMuted,
+.radarScoreHeroTimestamp,
+.radarScoreHeroMetric span,
+.radarScoreHeroGaugeValue small,
+.signalCardType,
+.signalCardMeta,
+.signalCardDescription,
+.signalCardStats span,
+.signalCardAction span {
+  color: var(--text-secondary);
+}
+
+.hotelDashboardRailItem,
+.sectionIndicatorItem {
+  color: var(--text-secondary);
+}
+
+.sectionIndicatorItem.is-active {
+  color: #1976d2;
+}
+
+.radarScoreHeroMetric,
+.demandForecastSummary,
+.demandForecastChartFrame,
+.marketDemandSummaryGrid article,
+.marketDemandPolicy,
+.marketDemandActionCard,
+.signalCardStats div,
+.signalCardAction {
+  color: var(--text-primary);
+  background: var(--surface-muted);
+  border-color: var(--border);
+}
+
+.demandForecastSummary strong,
+.demandForecastTooltip strong,
+.notificationCardTop h3,
+.radarMapLayerPanelHeader strong,
+.adminOverviewTable td {
+  color: var(--text-primary);
+}
+
+.demandForecastSummaryLabel,
+.demandForecastSummary span,
+.demandForecastPeakNote,
+.demandForecastTooltip span,
+.demandForecastTooltip p,
+.notificationCardMessage,
+.notificationCardFooter,
+.radarMapFallbackCard span {
+  color: var(--text-secondary);
+}
+
+.radarMapCanvasWrap {
+  border-color: var(--border);
+  background: var(--surface-muted);
+}
+
+.radarMapCanvas .mapboxgl-ctrl-group button {
+  background: var(--card-bg);
+}
+
+.radarMapCanvas .mapboxgl-popup-tip {
+  border-top-color: var(--card-bg);
+}
+
+.marketDemandCockpit::before {
+  opacity: 0.25;
+}
+
+.marketDemandFilterBar {
+  border-bottom-color: var(--border);
+}
+
+.marketDemandFilters .controlLabel {
+  min-width: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.marketDemandFilters select {
+  min-height: 42px;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border-color: #cbd5e1;
+}
+
+.marketDemandFilterCount {
+  background: var(--surface-muted);
+  border-color: var(--border);
+}
+
+.marketDemandSummaryGrid {
+  margin: 0.85rem 0;
+  gap: 0.65rem;
+}
+
+.marketDemandSummaryGrid article {
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+}
+
+.marketDemandPolicy {
+  padding: 0.75rem 0.9rem;
+  border-radius: 14px;
+}
+
+.marketDemandTable {
+  color: var(--text-primary);
+  background: var(--card-bg);
+}
+
+.marketDemandTable th,
+.marketDemandTable td {
+  border-color: var(--border);
+}
+
+.marketDemandTable th {
+  background: var(--surface-muted);
+}
+
+.premiumNavItem:hover:not(:disabled),
+.premiumNavItemActive,
+.premiumNavItem.active {
+  color: #0f5fc4;
+  background: #eaf3ff;
+  border-color: #b9d6fb;
+}
+
+.metaLabel,
+.controlLabel,
+.researchPanelHeader > span,
+.researchSectionTitle span,
+.researchForm > label,
+.researchFormRow label {
+  color: var(--text-secondary);
+}
+
+.ghostButton,
+.secondaryButton,
+.linkButton,
+.researchRemove,
+.leadBookmarkButton,
+.leadDrawerCloseButton,
+.topbarActionButton,
+.adminActionRow button,
+.tableActionCell button,
+.adminPagination button,
+.toastActions button,
+.headerActions button,
+.topbarSelector button,
+.betaModalActions button {
+  color: #175fb8;
+  background: transparent;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.ghostButton:hover:not(:disabled),
+.secondaryButton:hover:not(:disabled),
+.linkButton:hover:not(:disabled),
+.leadBookmarkButton:hover:not(:disabled),
+.leadDrawerCloseButton:hover:not(:disabled),
+.topbarActionButton:hover:not(:disabled),
+.adminActionRow button:hover:not(:disabled),
+.tableActionCell button:hover:not(:disabled),
+.adminPagination button:hover:not(:disabled),
+.toastActions button:hover:not(:disabled),
+.headerActions button:hover:not(:disabled),
+.topbarSelector button:hover:not(:disabled),
+.betaModalActions button:hover:not(:disabled),
+.sidebarLegalLinks .linkButton:hover:not(:disabled),
+.legalLinks .linkButton:hover:not(:disabled) {
+  color: #0f5fc4;
+  background: #eaf3ff;
+  border-color: #b9d6fb;
+}
+
+.researchEvidenceList a {
+  color: #175fb8;
+}
+
+.researchConfidence-high {
+  color: #087443;
+  background: #e8f8f0;
+}
+
+.researchConfidence-medium {
+  color: #8a5a00;
+  background: #fff7df;
+}
+
+.researchConfidence-low {
+  color: #b42318;
+  background: #fff0ee;
+}
+
+/* Premium Goa property intelligence */
+.researchAnchorCard {
+  width: min(360px, 100%);
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.researchAnchorCard strong,
+.researchAnchorCard p {
+  display: block;
+}
+
+.researchAnchorCard strong {
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+}
+
+.researchAnchorCard p {
+  margin: 5px 0 14px;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
+.researchAnchorCard button {
+  width: 100%;
+}
+
+.researchMetricStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.researchMetricStrip article {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.06);
+}
+
+.researchMetricStrip span,
+.researchMetricStrip strong,
+.researchMetricStrip small {
+  display: block;
+}
+
+.researchMetricStrip span {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.researchMetricStrip strong {
+  margin-top: 7px;
+  color: var(--text-primary);
+  font-size: 1.45rem;
+}
+
+.researchMetricStrip small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.researchIndexPanel {
+  align-content: start;
+}
+
+.researchIndexSearch {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 12px;
+  padding: 0 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+}
+
+.researchIndexRow {
+  width: 100%;
+  min-height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 13px;
+  color: var(--text-primary);
+  text-align: left;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.researchIndexRow:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: #eaf3ff;
+  border-color: #b9d6fb;
+  box-shadow: none;
+}
+
+.researchIndexRow strong,
+.researchIndexRow span {
+  display: block;
+}
+
+.researchIndexRow div span {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.researchIndexStatus {
+  flex: 0 0 auto;
+  color: #175fb8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.researchIndexFootnote {
+  margin-top: 14px;
+  padding-top: 12px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.researchRunStatus {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.researchResults {
+  scroll-margin-top: 20px;
+}
+
+@media (max-width: 980px) {
+  .researchMetricStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .researchMetricStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .researchIndexRow {
+    align-items: flex-start;
+  }
+}

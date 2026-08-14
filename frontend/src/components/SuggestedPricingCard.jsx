@@ -72,19 +72,26 @@ export default function SuggestedPricingCard({
   const showBasis = showProjection && Number(revenue?.basis?.roomNights || 0) > 0;
 
   if (lockEnabled) {
+    const action = String(suggestedPricing?.action || 'maintain').toLowerCase();
+    const intelligenceSignal = action.includes('increase')
+      ? 'Increase Watch'
+      : action.includes('reduce')
+        ? 'Reduce Watch'
+        : 'Hold / Watch';
     return (
       <section className="panel pricingCard pricingCardLocked" aria-label="Suggested pricing card">
         <header className="panelHeader">
-          <h2>Suggested Price</h2>
-          <span className="metricBadge metric-risk">LOCKED</span>
+          <h2>Intelligence Signal</h2>
+          <span className="metricBadge metric-info">CALIBRATING</span>
         </header>
-        <p className="priceValue">Locked</p>
+        <p className="priceValue">{intelligenceSignal}</p>
         <p className="strategyLine">
-          {productLock?.reason || 'Pricing output is locked until signal quality is actionable.'}
+          {productLock?.reason || 'Use this as an advisory signal until market evidence is actionable.'}
         </p>
         <p className="metaLabel">{productLock?.unlockCriteria}</p>
         <p className="metaLabel">
-          Current hotel price reference: <strong>₹{formatCurrency(hotelPrice)}</strong>
+          Current hotel price reference:{' '}
+          <strong>{hotelPrice > 0 ? `₹${formatCurrency(hotelPrice)}` : 'Not captured'}</strong>
         </p>
       </section>
     );

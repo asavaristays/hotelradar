@@ -34,11 +34,12 @@ describe('marketDemandService', () => {
 
     expect(day.demand_score).toBeGreaterThan(45);
     expect(day.trust_status).toBe('insufficient_data');
-    expect(day.pricing_action).toBe('Review Only');
+    expect(day.pricing_action).toBe('Need More Data');
     expect(day.price_adjustment_pct).toBe(0);
+    expect(day.missing_evidence).toContain('Fresh competitor rows are not captured for this stay date.');
   });
 
-  test('returns increase when fresh competitor evidence supports price movement', () => {
+  test('returns increase watch when competitor evidence supports movement but OTA coverage is missing', () => {
     const [day] = scoreMarketDemandEvidence([
       {
         stay_date: '2026-05-26',
@@ -69,9 +70,10 @@ describe('marketDemandService', () => {
       },
     ]);
 
-    expect(day.trust_status).toBe('actionable');
-    expect(['Increase', 'Strong Increase']).toContain(day.pricing_action);
-    expect(day.price_adjustment_pct).toBeGreaterThan(0);
+    expect(day.trust_status).toBe('review_only');
+    expect(day.pricing_action).toBe('Increase Watch');
+    expect(day.price_adjustment_pct).toBe(0);
+    expect(day.product_lock.missing_requirements).toContain('2 OTA sources');
   });
 
   test('returns scoped payload and documents removed datasets', async () => {
@@ -95,6 +97,7 @@ describe('marketDemandService', () => {
 
     expect(payload.city).toBe('Goa');
     expect(payload.days).toHaveLength(1);
+    expect(payload.intelligence_schema_version).toBe('central-intelligence-v1');
     expect(payload.removed_from_price_action).toContain('Lead/prospecting signals');
   });
 });

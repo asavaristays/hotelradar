@@ -128,9 +128,10 @@ export default function ForwardDemandChart({
   const baselinePoint = chart.points[0] || activePoint;
   const baselineRate = Number(baselinePoint?.indicativeRate || 0);
   const activeRate = Number(activePoint?.indicativeRate || 0);
-  const revenueDeltaPerRoom = activeRate > 0 && baselineRate > 0 ? activeRate - baselineRate : 0;
+  const hasIndicativeRate = activeRate > 0 && baselineRate > 0;
+  const revenueDeltaPerRoom = hasIndicativeRate ? activeRate - baselineRate : null;
   const revenueDeltaPct =
-    activeRate > 0 && baselineRate > 0 ? ((activeRate - baselineRate) / baselineRate) * 100 : 0;
+    hasIndicativeRate ? ((activeRate - baselineRate) / baselineRate) * 100 : null;
   const status = dateStatus(activePoint?.score);
 
   useEffect(() => {
@@ -141,8 +142,8 @@ export default function ForwardDemandChart({
       score: Number(activePoint.score || 0),
       demandLabel: activePoint.label || demandBucket(Number(activePoint.score || 0)),
       indicativeRate: activeRate || null,
-      revenueDeltaPerRoom: revenueDeltaPerRoom || 0,
-      revenueDeltaPct: revenueDeltaPct || 0,
+      revenueDeltaPerRoom,
+      revenueDeltaPct,
       statusLabel: status.label,
       statusTone: status.tone,
     });
@@ -202,10 +203,14 @@ export default function ForwardDemandChart({
         <div>
           <span>Date status</span>
           <strong className={`curveStatus curveStatus-${status.tone}`}>{status.label}</strong>
-          <small className="curveRevenueDelta">
-            {revenueDeltaPerRoom >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(revenueDeltaPerRoom))} / room ({revenueDeltaPct >= 0 ? '+' : ''}
-            {revenueDeltaPct.toFixed(1)}%)
-          </small>
+          {hasIndicativeRate ? (
+            <small className="curveRevenueDelta">
+              {revenueDeltaPerRoom >= 0 ? '+' : '-'}₹{formatCurrency(Math.abs(revenueDeltaPerRoom))} / room ({revenueDeltaPct >= 0 ? '+' : ''}
+              {revenueDeltaPct.toFixed(1)}%)
+            </small>
+          ) : (
+            <small className="curveRevenueDelta">Rate impact unavailable until live rates are captured</small>
+          )}
         </div>
       </div>
 

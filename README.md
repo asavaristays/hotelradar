@@ -175,11 +175,18 @@ Always verify each layer independently before changing code:
 
 ### Domain Responsibilities
 
-- `hotelradar.in` serves the marketing site.
+- `hotelradar.in` serves the marketing site (`public/index.html`, `public/assets/marketing.css`). See `docs/MARKETING_PHASE1_DEPLOY.md`.
 - `pms.hotelradar.in` serves the PMS surface.
 - `audit.hotelradar.in` serves the audit surface.
 - `asavari.hotelradar.in` serves the Asavari surface.
 - `revenue.hotelradar.in` serves the SaaS revenue dashboard and API.
+
+### Marketing Typography Rule
+
+- Primary marketing hero H1 headings use `57px` on desktop.
+- No marketing heading should exceed `57px`.
+- Mobile hero headings must stay responsive and smaller than desktop.
+- Keep this rule in `public/assets/marketing.css`; do not add page-specific heading sizes above `57px`.
 
 ### Verification Rules
 

@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
-import { focusCityKeys } from '../../config/productScope.js';
+import { focusCities, focusCityKeys } from '../../config/productScope.js';
 import { getBlockedEventReason } from '../../utils/eventValidation.js';
 import { isPhysicalEventRecord } from '../../utils/eventVisibility.js';
 import { addDays, dateToKey, isWeekend, toDateOnly } from '../../utils/date.js';
@@ -382,6 +382,80 @@ function generateGoaWeddingSignals(horizonDays, nowDate = new Date()) {
   return rows;
 }
 
+function withinHorizon(dateKey, horizonDays, nowDate) {
+  const today = toDateOnly(nowDate);
+  const target = new Date(`${dateKey}T00:00:00Z`);
+  if (Number.isNaN(target.getTime())) return false;
+  const diffDays = Math.floor((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  return diffDays >= 0 && diffDays <= horizonDays;
+}
+
+function generateAugustImportantDateSignals(horizonDays, nowDate = new Date()) {
+  const year = nowDate.getUTCFullYear();
+  const windowsByYear = {
+    2026: [
+      {
+        name: 'Independence Day Weekend Demand Window',
+        start_date: '2026-08-15',
+        end_date: '2026-08-16',
+        category: 'public_holiday',
+        scale: 'large',
+        impactScale: 'large',
+        confidence: 'confirmed',
+        event_url: 'https://www.incredibleindia.gov.in/en/festivals-and-events/independence-day',
+      },
+      {
+        name: 'Rakhi Long Weekend Family Travel Window',
+        start_date: '2026-08-28',
+        end_date: '2026-08-30',
+        category: 'cultural_festival',
+        scale: 'large',
+        impactScale: 'large',
+        confidence: 'confirmed',
+        event_url: 'https://www.incredibleindia.gov.in/en/festivals-and-events/rakshabandhan',
+      },
+      {
+        name: 'Milad-un-Nabi Midweek Holiday Watch',
+        start_date: '2026-08-26',
+        end_date: '2026-08-26',
+        category: 'public_holiday',
+        scale: 'medium',
+        impactScale: 'medium',
+        confidence: 'confirmed',
+        event_url: null,
+      },
+    ],
+  };
+
+  const windows = windowsByYear[year] || [];
+  const nowIso = new Date().toISOString();
+  const rows = [];
+
+  for (const window of windows) {
+    if (!withinHorizon(window.start_date, horizonDays, nowDate)) continue;
+    for (const city of focusCities) {
+      rows.push({
+        name: window.name,
+        city,
+        venue: `${city} market-wide demand window`,
+        start_date: window.start_date,
+        end_date: window.end_date,
+        category: window.category,
+        scale: window.scale,
+        estimated_attendance: null,
+        radius_impact_km: city === 'Mumbai' ? 12 : 30,
+        source: 'verified-august-calendar',
+        confidence: window.confidence,
+        event_url: window.event_url,
+        impact_score: impactScoreFor(city, window.category, window.impactScale),
+        scraped_at: nowIso,
+      });
+    }
+  }
+
+  return rows;
+}
+
 async function loadLinkedInHints(filePath, deps) {
   const pathValue = normalizeText(filePath);
   if (!pathValue) return [];
@@ -527,6 +601,7 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
     rowsWritten: 0,
     rowsBlocked: 0,
     weddingSignalsAdded: 0,
+    augustImportantDateSignalsAdded: 0,
     linkedinHintsAdded: 0,
     bookmyshowDebugWritten: 0,
     sourceResults: [],
@@ -602,6 +677,12 @@ export async function runEventCollectionCycle(options = {}, deps = defaultDeps) 
     summary.weddingSignalsAdded = weddingSignals.length;
   }
 
+  if (options.includeAugustImportantDates ?? env.enableAugustImportantDateGenerator) {
+    const augustSignals = generateAugustImportantDateSignals(horizonDays, new Date());
+    collectedRows.push(...augustSignals);
+    summary.augustImportantDateSignalsAdded = augustSignals.length;
+  }
+
   const linkedinRows = await loadLinkedInHints(
     options.linkedinHintsFile || env.eventLinkedinHintsFile,
     deps,
@@ -651,6 +732,7 @@ export {
   eventFromJsonLd,
   extractJsonLdBlocks,
   generateGoaWeddingSignals,
+  generateAugustImportantDateSignals,
   impactScoreFor,
   parseSourceSpec,
   eventFromHtmlFallback,

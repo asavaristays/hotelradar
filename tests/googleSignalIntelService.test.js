@@ -62,6 +62,22 @@ describe('googleSignalIntelService', () => {
         }),
       ]),
     );
+    expect(payload.signals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          city: 'Jaipur',
+          signalType: 'CORPORATE_EVENT_CLUSTER',
+          source: 'linkedin_public_search',
+        }),
+        expect.objectContaining({
+          city: 'Jaipur',
+          signalType: 'WEDDING_DEMAND_ZONE',
+          source: 'linkedin_public_search',
+        }),
+      ]),
+    );
+    const searchedQueries = fetchImpl.mock.calls.map(([url]) => url.searchParams.get('q'));
+    expect(searchedQueries.some((query) => query.includes('site:linkedin.com'))).toBe(true);
     expect(fetchImpl).toHaveBeenCalled();
   });
 

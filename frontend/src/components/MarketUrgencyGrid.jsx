@@ -33,12 +33,17 @@ export default function MarketUrgencyGrid({
   confidenceScore,
   calibrationMode = false,
 }) {
-  const riskScore = riskLevel === 'High' ? 100 : riskLevel === 'Medium' ? 65 : 30;
+  const riskScore = riskLevel === 'Not assessed' ? 0 : riskLevel === 'High' ? 100 : riskLevel === 'Medium' ? 65 : 30;
   const confidenceFlags = calibrationMode ? [true, false, false, false] : makeScale(confidenceScore, 100);
   const rows = [
     { key: 'demand', label: 'Demand', flags: makeScale(demandScore, 100), value: Number(demandScore || 0).toFixed(1) },
     { key: 'heat', label: 'Heat', flags: makeScale(marketHeat, 5), value: `${Math.max(1, Math.min(5, Number(marketHeat || 1)))}/5` },
-    { key: 'risk', label: 'Risk', flags: makeScale(riskScore, 100), value: riskLevel || 'Low' },
+    {
+      key: 'risk',
+      label: 'Risk',
+      flags: riskLevel === 'Not assessed' ? [false, false, false, false] : makeScale(riskScore, 100),
+      value: riskLevel || 'Low',
+    },
     {
       key: 'confidence',
       label: 'Confidence',

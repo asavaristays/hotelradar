@@ -56,11 +56,6 @@ export async function getLatestHotelPrice(hotelId, options = {}) {
          ORDER BY hrs.captured_at DESC
          LIMIT 1
        ),
-       (
-         SELECT ROUND((h.base_price_min + h.base_price_max) / 2.0)::float8
-         FROM hotels h
-         WHERE h.id = $1
-       ),
        0
      ) AS hotel_price`,
     [hotelId, checkinDate],

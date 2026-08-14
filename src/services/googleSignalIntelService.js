@@ -32,6 +32,24 @@ const QUERY_TEMPLATES = [
       'Review event-zone pricing and late-booking restrictions.',
   },
   {
+    key: 'linkedin-mice',
+    signalType: 'CORPORATE_EVENT_CLUSTER',
+    source: 'linkedin_public_search',
+    query: (city) => `site:linkedin.com/events OR site:linkedin.com/posts ${city} MICE conference corporate event hotel`,
+    title: (city) => `LinkedIn MICE demand signals visible in ${city}`,
+    recommendedAction:
+      'Validate corporate-event demand against weekday OTA and comp-set movement before price action.',
+  },
+  {
+    key: 'linkedin-wedding',
+    signalType: 'WEDDING_DEMAND_ZONE',
+    source: 'linkedin_public_search',
+    query: (city) => `site:linkedin.com/events OR site:linkedin.com/posts ${city} destination wedding hotel resort`,
+    title: (city) => `LinkedIn wedding demand signals visible in ${city}`,
+    recommendedAction:
+      'Validate wedding-led demand against room availability, OTA rates, and premium package pickup.',
+  },
+  {
     key: 'travel',
     signalType: 'TOURISM_SPIKE',
     query: (city) => `${city} tourism travel things to do`,
@@ -241,7 +259,7 @@ async function queryGoogleCustomSearch(city, template, deps) {
   return {
     id: `google-search:${city}:${template.key}`,
     city,
-    source: 'google_custom_search',
+    source: template.source || 'google_custom_search',
     signalType: template.signalType,
     title: template.title(city),
     description: buildDescription(items),

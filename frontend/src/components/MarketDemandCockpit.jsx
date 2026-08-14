@@ -16,7 +16,7 @@ function formatDate(value) {
 }
 
 function formatRupees(value) {
-  const amount = Number(value || 0);
+  const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) return 'Not captured';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -26,14 +26,26 @@ function formatRupees(value) {
 }
 
 function formatPct(value, suffix = '%') {
-  const amount = Number(value || 0);
+  if (value == null || value === '') return 'Not captured';
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 'Not captured';
   const sign = amount > 0 ? '+' : '';
   return `${sign}${amount.toFixed(1)}${suffix}`;
+}
+
+function formatAdjustment(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount === 0) return 'No rate change';
+  const sign = amount > 0 ? '+' : '';
+  return `${sign}${amount.toFixed(1)}% suggested movement`;
 }
 
 function actionTone(action = '', trustStatus = '') {
   const actionKey = String(action || '').toLowerCase();
   const trustKey = String(trustStatus || '').toLowerCase();
+  if (actionKey.includes('need more data')) return 'review';
+  if (actionKey.includes('increase watch')) return 'watch';
+  if (actionKey.includes('reduce watch')) return 'watch';
   if (trustKey !== 'actionable') return 'review';
   if (actionKey.includes('strong')) return 'strong';
   if (actionKey === 'increase') return 'increase';
@@ -50,21 +62,31 @@ function trustLabel(value = '') {
 
 function pickHeadline(days = []) {
   const actionable = days.filter((day) => day.trustStatus === 'actionable');
-  const strong = actionable.find((day) => day.pricingAction === 'Strong Increase');
-  if (strong) return `${formatDate(strong.stayDate)} has the clearest strong increase signal.`;
   const increase = actionable.find((day) => day.pricingAction === 'Increase');
   if (increase) return `${formatDate(increase.stayDate)} is ready for a controlled increase.`;
   const reduce = actionable.find((day) => day.pricingAction === 'Reduce');
   if (reduce) return `${formatDate(reduce.stayDate)} needs a tactical rate reduction.`;
-  if (!actionable.length) return 'No date has enough fresh competitor evidence for automatic action yet.';
+  const watch = days.find((day) => ['Increase Watch', 'Reduce Watch', 'Watch'].includes(day.pricingAction));
+  if (watch) return `${formatDate(watch.stayDate)} needs review; product lock is protecting the final action.`;
+  if (!actionable.length) return 'No date has enough complete evidence for final revenue action yet.';
   return 'Market is mostly hold/watch; review top drivers before changing rates.';
 }
 
-export default function MarketDemandCockpit({ token = '', compact = false }) {
+export default function MarketDemandCockpit({ token = '', compact = false, selectedDate = '' }) {
   const [city, setCity] = useState('Goa');
+  const [viewFilter, setViewFilter] = useState('selected');
+  const [matrixDate, setMatrixDate] = useState(selectedDate);
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setMatrixDate(selectedDate);
+      setViewFilter('selected');
+    }
+  }, [selectedDate]);
 
   useEffect(() => {
     let active = true;
@@ -73,9 +95,19 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
       setLoading(true);
       setError('');
       try {
-        const nextPayload = await getMarketDemand(token, city, compact ? 14 : 30);
+        const baseHorizon = compact ? 14 : 30;
+        const today = new Date();
+        const requested = matrixDate ? new Date(`${matrixDate}T00:00:00`) : null;
+        const requestedOffset = requested && !Number.isNaN(requested.getTime())
+          ? Math.ceil((requested.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000) + 1
+          : 0;
+        const horizonDays = Math.max(baseHorizon, Math.min(60, requestedOffset));
+        const nextPayload = await getMarketDemand(token, city, horizonDays);
         if (!active) return;
         setPayload(nextPayload);
+        if (!matrixDate && nextPayload?.days?.[0]?.stayDate) {
+          setMatrixDate(nextPayload.days[0].stayDate);
+        }
       } catch (loadError) {
         if (!active) return;
         setPayload(null);
@@ -89,7 +121,12 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
     return () => {
       active = false;
     };
-  }, [city, compact, token]);
+  }, [city, compact, token, refreshKey, matrixDate]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setRefreshKey((value) => value + 1), 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const cities = useMemo(() => {
     const markets = Array.isArray(payload?.markets) && payload.markets.length ? payload.markets : DEFAULT_CITIES;
@@ -97,22 +134,31 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
   }, [payload]);
 
   const days = Array.isArray(payload?.days) ? payload.days : [];
-  const headline = pickHeadline(days);
-  const nextActionDays = days.filter((day) =>
-    ['Strong Increase', 'Increase', 'Reduce'].includes(day.pricingAction),
+  const filteredDays = useMemo(() => {
+    if (viewFilter === 'selected') {
+      return days.filter((day) => day.stayDate === matrixDate);
+    }
+    if (viewFilter === 'actionable') {
+      return days.filter((day) => day.trustStatus === 'actionable');
+    }
+    if (viewFilter === 'review') {
+      return days.filter((day) => day.trustStatus !== 'actionable');
+    }
+    return days;
+  }, [days, matrixDate, viewFilter]);
+  const headline = pickHeadline(filteredDays.length ? filteredDays : days);
+  const nextActionDays = filteredDays.filter((day) =>
+    ['Increase', 'Reduce', 'Increase Watch', 'Reduce Watch'].includes(day.pricingAction),
   );
 
   return (
     <section className={`panel marketDemandCockpit ${compact ? 'marketDemandCockpitCompact' : ''}`} aria-label="Market demand cockpit">
-      <header className="panelHeader marketDemandHeader">
-        <div className="gridMetaBlock">
+      <header className="marketDemandFilterBar">
+        <div className="marketDemandFilterTitle">
           <span className="workspaceEyebrow">Decision-grade demand</span>
           <h2>Market Demand Cockpit</h2>
-          <p className="metaLabel">
-            Today-forward demand and price action for Goa, Mumbai, and Jaipur using fresh comp-set evidence.
-          </p>
         </div>
-        <div className="controls marketDemandControls">
+        <div className="marketDemandFilters" aria-label="Market demand filters">
           <label>
             <span className="controlLabel">Market</span>
             <select value={city} onChange={(event) => setCity(event.target.value)}>
@@ -123,6 +169,35 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
               ))}
             </select>
           </label>
+          <label>
+            <span className="controlLabel">Stay date</span>
+            <input
+              type="date"
+              value={matrixDate}
+              min={days[0]?.stayDate || undefined}
+              max={days[days.length - 1]?.stayDate || undefined}
+              onChange={(event) => {
+                setMatrixDate(event.target.value);
+                setViewFilter('selected');
+              }}
+            />
+          </label>
+          <label>
+            <span className="controlLabel">Show</span>
+            <select value={viewFilter} onChange={(event) => setViewFilter(event.target.value)}>
+              <option value="selected">Selected date</option>
+              <option value="all">Full horizon</option>
+              <option value="actionable">Actionable only</option>
+              <option value="review">Review only</option>
+            </select>
+          </label>
+          <div className="marketDemandFilterCount">
+            <span>Visible</span>
+            <strong>{filteredDays.length} / {days.length || 0}</strong>
+          </div>
+          <button type="button" className="secondaryButton" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
+            {loading ? 'Calibrating…' : 'Refresh live matrix'}
+          </button>
         </div>
       </header>
 
@@ -142,7 +217,10 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
             </article>
             <article>
               <span className="metaLabel">Model basis</span>
-              <strong>Fresh rates first</strong>
+              <strong>Live evidence calibration</strong>
+              <span className="metaLabel">
+                {payload?.generatedAt ? `Updated ${new Date(payload.generatedAt).toLocaleTimeString('en-IN')}` : 'Refreshing every 5 minutes'}
+              </span>
             </article>
           </div>
 
@@ -161,7 +239,7 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
                 <article key={`action-${day.id}`} className={`marketDemandActionCard marketDemand-${actionTone(day.pricingAction, day.trustStatus)}`}>
                   <span>{formatDate(day.stayDate)}</span>
                   <strong>{day.pricingAction}</strong>
-                  <p>{formatPct(day.priceAdjustmentPct)} suggested movement</p>
+                  <p>{formatAdjustment(day.priceAdjustmentPct)}</p>
                 </article>
               ))}
             </div>
@@ -175,12 +253,13 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
                   <th>Demand</th>
                   <th>Action</th>
                   <th>Confidence</th>
+                  <th>Hotel rate</th>
                   <th>Market price</th>
                   <th>Top reason</th>
                 </tr>
               </thead>
               <tbody>
-                {days.map((day) => {
+                {filteredDays.map((day) => {
                   const topDriver = day.topDrivers?.[0];
                   const tone = actionTone(day.pricingAction, day.trustStatus);
                   return (
@@ -197,23 +276,34 @@ export default function MarketDemandCockpit({ token = '', compact = false }) {
                         <span className={`marketDemandBadge marketDemand-${tone}`}>
                           {day.pricingAction}
                         </span>
-                        <span>{formatPct(day.priceAdjustmentPct)}</span>
+                        <span>{formatAdjustment(day.priceAdjustmentPct)}</span>
                       </td>
                       <td>
                         <strong>{day.confidenceScore.toFixed(1)}%</strong>
-                        <span>{day.competitorCount} competitors</span>
+                        <span>{day.competitorCount > 0 ? `${day.competitorCount} competitors` : 'Competitors not captured'}</span>
+                      </td>
+                      <td>
+                        <strong>{formatRupees(day.hotelAvgPrice)}</strong>
+                        <span>{Number(day.hotelAvgPrice) > 0 ? 'Observed stay-date rate' : 'Awaiting property rate'}</span>
                       </td>
                       <td>
                         <strong>{formatRupees(day.marketAvgPrice)}</strong>
-                        <span>{formatPct(day.rateChangePct)} vs 48h</span>
+                        <span>{day.rateChangePct == null ? '48h movement not captured' : `${formatPct(day.rateChangePct)} vs 48h`}</span>
                       </td>
                       <td>
                         <strong>{topDriver?.label || 'Evidence pending'}</strong>
-                        <span>{topDriver?.evidence || 'Fresh competitor data is required before action.'}</span>
+                        <span>{topDriver?.evidence || day.missingEvidence?.[0] || 'Fresh competitor data is required before action.'}</span>
                       </td>
                     </tr>
                   );
                 })}
+                {filteredDays.length === 0 ? (
+                  <tr>
+                    <td className="marketDemandEmpty" colSpan="7">
+                      No calibrated evidence is available for this stay date. Select another date or open “Full horizon”.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

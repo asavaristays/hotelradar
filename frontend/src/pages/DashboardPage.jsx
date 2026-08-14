@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import AdminManagementPanel from '../components/AdminManagementPanel.jsx';
+import { useEffect, useRef, useState } from 'react';
 import AlertsPanel from '../components/AlertsPanel.jsx';
 import BetaAcceptanceModal from '../components/BetaAcceptanceModal.jsx';
 import CompressionAlert from '../components/CompressionAlert.jsx';
@@ -9,12 +8,13 @@ import DemandForecast from '../components/DemandForecast.jsx';
 import HotelSelector from '../components/HotelSelector.jsx';
 import MarketDemandCockpit from '../components/MarketDemandCockpit.jsx';
 import MorningBrief from '../components/MorningBrief.jsx';
+import OpportunityPanel from '../components/OpportunityPanel.jsx';
 import PositionMeter from '../components/PositionMeter.jsx';
+import PropertyOnboardingPanel from '../components/PropertyOnboardingPanel.jsx';
 import RadarScore from '../components/RadarScore.jsx';
 import RevenueAdviceCard from '../components/RevenueAdviceCard.jsx';
-import SystemStatusBanner from '../components/SystemStatusBanner.jsx';
+import SignalInputPanel from '../components/SignalInputPanel.jsx';
 import SystemUpdatesPanel from '../components/SystemUpdatesPanel.jsx';
-import { downloadDashboardPdf } from '../components/dashboardPdf.js';
 import { getSystemStatus } from '../services/intelligenceApi.js';
 import { parseServerError as parseHttpServerError, readResponseBody } from '../http.js';
 
@@ -31,12 +31,58 @@ const ADMIN_INSIGHT_OPTIONS = [
 ];
 const HOTELRADAR_FOCUS_KEY = 'hotelradar_focus_insight';
 const DASHBOARD_WORKSPACE_KEY = 'dashboard_workspace_target';
+const DEFAULT_PROPERTY_ID = '10101010-1010-4010-8010-101010101010';
+
+function currentIndiaStayDate() {
+  return indiaDateOffset(0);
+}
+
+function indiaDateOffset(offsetDays = 0) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const date = new Date(`${values.year}-${values.month}-${values.day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + Number(offsetDays || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function defaultPilotStayDate() {
+  return indiaDateOffset(1);
+}
 
 const WORKSPACE_SECTIONS = [
-  { value: 'hotelradar', label: 'HotelRADAR' },
+  { value: 'hotelradar', label: 'Revenue Intelligence', icon: 'chart' },
+  { value: 'opportunity', label: 'Opportunity', icon: 'opportunity' },
+  { value: 'signal-input', label: 'Signal Input', icon: 'signal', adminOnly: true },
+  { value: 'admin-control', label: 'Add Property', icon: 'property', adminOnly: true },
+  { value: 'system-updates', label: 'System Health', icon: 'health', adminOnly: true },
 ];
 
+const NAV_ICON_PATHS = {
+  chart: 'M4 19h16M7 16V9m5 7V5m5 11v-6',
+  opportunity: 'M12 3v4m0 10v4M5 12H3m18 0h-2M6.3 6.3l2.8 2.8m5.8 5.8 2.8 2.8m0-11.4-2.8 2.8m-5.8 5.8-2.8 2.8',
+  signal: 'M4 18h4l3-12 4 12 2-7h3M4 6h3m10 0h3',
+  property: 'M4 20V9l8-5 8 5v11M9 20v-6h6v6',
+  health: 'M4 13h4l2-6 4 12 2-6h4',
+  logout: 'M10 17l5-5-5-5M15 12H3m9 7h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-6',
+};
+
+function NavIcon({ type }) {
+  return (
+    <span className="premiumNavIcon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d={NAV_ICON_PATHS[type] || NAV_ICON_PATHS.chart} />
+      </svg>
+    </span>
+  );
+}
+
 export default function DashboardPage({ session, onLogout, onNavigate }) {
+  const defaultPropertyLoadStarted = useRef(false);
   const [selectedHotelId, setSelectedHotelId] = useState('');
   const [selectedCheckinDate, setSelectedCheckinDate] = useState('');
   const [dashboard, setDashboard] = useState(null);
@@ -44,7 +90,6 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const [error, setError] = useState('');
   const [hotelListVersion, setHotelListVersion] = useState(0);
   const [toast, setToast] = useState(null);
-  const [exportingPdf, setExportingPdf] = useState(false);
   const [recalcJob, setRecalcJob] = useState(null);
   const [betaModalOpen, setBetaModalOpen] = useState(false);
   const [betaAcceptLoading, setBetaAcceptLoading] = useState(false);
@@ -54,6 +99,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const [showFocusedInsight, setShowFocusedInsight] = useState(false);
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState('hotelradar');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarPinnedOpen, setSidebarPinnedOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= 1024;
@@ -74,7 +120,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     try {
       const nextWorkspace = localStorage.getItem(DASHBOARD_WORKSPACE_KEY);
       const nextFocus = localStorage.getItem(HOTELRADAR_FOCUS_KEY);
-      if (nextWorkspace === 'admin-control' || nextWorkspace === 'system-updates' || nextWorkspace === 'hotelradar') {
+      if (nextWorkspace === 'admin-control' || nextWorkspace === 'system-updates' || nextWorkspace === 'hotelradar' || nextWorkspace === 'opportunity' || nextWorkspace === 'signal-input') {
         setActiveWorkspaceSection(nextWorkspace);
       }
       if (nextFocus) {
@@ -360,6 +406,26 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     loadDashboard(assignedHotels[0]);
   }, [session, selectedHotelId, loading, dashboard]);
 
+  useEffect(() => {
+    const role = String(session?.user?.role || '').trim().toLowerCase();
+    if (role !== 'admin' && role !== 'super_admin') return;
+    if (selectedHotelId || loading || dashboard || defaultPropertyLoadStarted.current) return;
+
+    defaultPropertyLoadStarted.current = true;
+    const stayDate = defaultPilotStayDate();
+    setSelectedHotelId(DEFAULT_PROPERTY_ID);
+    setSelectedCheckinDate(stayDate);
+    loadDashboard(DEFAULT_PROPERTY_ID, stayDate);
+  }, [session, selectedHotelId, loading, dashboard]);
+
+  useEffect(() => {
+    if (!selectedHotelId || !selectedCheckinDate || !dashboard) return undefined;
+    const timer = window.setInterval(() => {
+      loadDashboard(selectedHotelId, selectedCheckinDate);
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [selectedHotelId, selectedCheckinDate, Boolean(dashboard)]);
+
   function handleHotelCreated(payload) {
     const hotelId = payload?.hotelId || '';
     const hotelName = payload?.hotelName || 'New hotel';
@@ -369,6 +435,11 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     if (!hotelId) {
       return;
     }
+    const stayDate = defaultPilotStayDate();
+    setActiveWorkspaceSection('hotelradar');
+    setSelectedHotelId(hotelId);
+    setSelectedCheckinDate(stayDate);
+    loadDashboard(hotelId, stayDate);
     setToast({
       type: 'success',
       message,
@@ -386,23 +457,18 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     setToast(null);
   }
 
-  async function handleDownloadPdf() {
-    if (dashboard?.productLock?.enabled) {
-      setError('PDF export is locked until signal quality is actionable for this market.');
-      return;
-    }
-    try {
-      setExportingPdf(true);
-      const selectedName =
-        dashboard?.competitiveGrid?.[0]?.name ||
-        dashboard?.hotelId ||
-        'Hotel';
-      await downloadDashboardPdf(dashboard, selectedName);
-    } catch (err) {
-      setError(err.message || 'Unable to export PDF.');
-    } finally {
-      setExportingPdf(false);
-    }
+  async function handleSignalSaved(checkinDate = '') {
+    const hotelId = String(selectedHotelId || dashboard?.hotelId || '').trim();
+    if (!hotelId) return;
+    const activeDate = normalizeDateInput(checkinDate || selectedCheckinDate || dashboard?.marketContext?.checkinDate || '');
+    setSelectedCheckinDate(activeDate);
+    await loadDashboard(hotelId, activeDate);
+    await handleRefreshSystemStatus();
+    setToast({
+      type: 'success',
+      message: 'Market signal saved and Revenue Intelligence refreshed.',
+      hotelId,
+    });
   }
 
   async function handleAcceptBeta() {
@@ -446,21 +512,21 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const showAdminPanel = adminRole === 'super_admin' || adminRole === 'admin';
   const scopeLabel =
     adminRole === 'super_admin'
-      ? 'Scope: All hotels'
+      ? 'Revenue Intelligence pilot · The Ten Resort'
       : adminRole === 'admin'
-        ? 'Scope: Managed hotels'
-        : `Scope: ${Array.isArray(session?.user?.hotels) ? session.user.hotels.length : 0} assigned hotel(s)`;
+        ? 'Revenue Intelligence · managed hotels'
+        : `Revenue Intelligence · ${Array.isArray(session?.user?.hotels) ? session.user.hotels.length : 0} assigned hotel(s)`;
 
   const workspaceLabel =
     adminRole === 'super_admin'
-      ? 'Super Admin Workspace'
+      ? 'Revenue Intelligence Desk'
       : adminRole === 'admin'
-        ? 'Admin Workspace'
-        : 'Hotel Workspace';
+        ? 'Revenue Intelligence Desk'
+        : 'Revenue Intelligence Desk';
   const recalcStatus = recalcJob?.status || '';
   const recalcInProgress = recalcStatus === 'queued' || recalcStatus === 'processing';
-  const productLockEnabled = Boolean(dashboard?.productLock?.enabled);
   const intelligenceHotelId = String(selectedHotelId || dashboard?.hotelId || '').trim();
+  const visibleWorkspaceSections = WORKSPACE_SECTIONS.filter((item) => !item.adminOnly || showAdminPanel);
   function renderSidebarFooter(className = '') {
     return (
       <footer className={className}>
@@ -488,7 +554,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   function renderSelectedAdminInsight() {
     switch (selectedInsight) {
       case 'market-demand':
-        return <MarketDemandCockpit token={session.token} compact />;
+        return <MarketDemandCockpit token={session.token} compact selectedDate={selectedCheckinDate} />;
       case 'radar-score':
         return null;
       case 'morning-brief':
@@ -514,41 +580,55 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     switch (activeWorkspaceSection) {
       case 'admin-control':
         return showAdminPanel ? (
-          <section className="row rowWide adminPanelRow">
-            <AdminManagementPanel
-              role={adminRole}
-              token={session.token}
-              onHotelCreated={handleHotelCreated}
-            />
-          </section>
+          <PropertyOnboardingPanel
+            token={session.token}
+            onPropertyReady={handleHotelCreated}
+          />
         ) : null;
       case 'system-updates':
         return showAdminPanel ? (
           <SystemUpdatesPanel
             status={systemStatus}
+            dashboard={dashboard}
             loading={systemStatusLoading}
             error={systemStatusError}
             onRefresh={handleRefreshSystemStatus}
           />
         ) : null;
+      case 'signal-input':
+        return showAdminPanel ? (
+          <SignalInputPanel
+            token={session.token}
+            hotelId={intelligenceHotelId}
+            selectedDate={selectedCheckinDate || dashboard?.marketContext?.checkinDate || ''}
+            onSaved={handleSignalSaved}
+          />
+        ) : null;
+      case 'opportunity':
+        return (
+          <OpportunityPanel
+            dashboard={dashboard}
+            loading={loading}
+            error={error}
+          />
+        );
       case 'hotelradar':
       default:
         return (
           <>
-            <section className="panel hotelRadarWorkspaceIntro" aria-label="HotelRADAR workspace">
-              <header className="panelHeader">
-                <div className="gridMetaBlock">
-                  <h2>HotelRADAR</h2>
-                  <p className="metaLabel">
-                    Critical pricing, demand, and market movement in one place. Shift from last checked is highlighted inside the dashboard.
-                  </p>
-                </div>
-              </header>
-              {!intelligenceHotelId ? (
+            {!intelligenceHotelId ? (
+              <section className="panel hotelRadarWorkspaceIntro" aria-label="HotelRADAR workspace">
+                <header className="panelHeader">
+                  <div className="gridMetaBlock">
+                    <h2>HotelRADAR</h2>
+                    <p className="metaLabel">
+                      Select a hotel from the top bar to open its Revenue Intelligence brief.
+                    </p>
+                  </div>
+                </header>
                 <p className="metaLabel">Select a hotel to load HotelRADAR.</p>
-              ) : null}
-            </section>
-            <MarketDemandCockpit token={session.token} />
+              </section>
+            ) : null}
             {intelligenceHotelId && showFocusedInsight ? (
               <section className="panel hotelRadarFocusPanel" aria-label="Focused HotelRADAR view">
                 <header className="panelHeader">
@@ -583,7 +663,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
       <section className="premiumMobileControlPanel" aria-label="Mobile dashboard controls">
         <div className="premiumMobileControlIntro">
           <span className="workspaceEyebrow">{workspaceLabel}</span>
-          <h2>AI Revenue Optimizer Overview</h2>
+          <h2>Revenue Intelligence Brief</h2>
           <p className="metaLabel headerScope">{scopeLabel}</p>
         </div>
 
@@ -615,7 +695,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
                   onClick={handleApplyDateFilter}
                   disabled={loading || (!selectedHotelId && !dashboard?.hotelId)}
                 >
-                  Apply Date
+                  View Date
                 </button>
               </div>
               <button
@@ -624,15 +704,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
                 onClick={() => handleRecalculate()}
                 disabled={recalcInProgress || loading || (!selectedHotelId && !dashboard?.hotelId)}
               >
-                {recalcInProgress ? 'Recalculating...' : 'Recalculate'}
-              </button>
-              <button
-                type="button"
-                className="secondaryButton"
-                onClick={handleDownloadPdf}
-                disabled={!dashboard || exportingPdf || productLockEnabled}
-              >
-                {productLockEnabled ? 'Export Locked' : exportingPdf ? 'Preparing PDF...' : 'Download PDF'}
+                {recalcInProgress ? 'Refreshing…' : 'Refresh Intelligence'}
               </button>
             </div>
           </details>
@@ -642,44 +714,51 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   }
 
   return (
-    <main className="premiumShell">
+    <main className={`premiumShell ${sidebarPinnedOpen ? 'sidebarPinnedOpen' : 'sidebarCollapsed'}`}>
       {!isCompactViewport ? (
         <aside className="premiumSidebar" aria-label="Primary navigation">
           <div className="premiumBrand">
-            <h1>HotelRADAR</h1>
-            <p>Revenue Intelligence Cockpit</p>
+            <div className="premiumBrandMark" aria-hidden="true">HR</div>
+            <div className="premiumBrandCopy">
+              <strong className="premiumBrandTitle">HotelRADAR</strong>
+              <p>Realtime revenue signals</p>
+            </div>
+            <button
+              type="button"
+              className="premiumSidebarToggle"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                setSidebarPinnedOpen((prev) => !prev);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                setSidebarPinnedOpen((prev) => !prev);
+              }}
+              aria-pressed={sidebarPinnedOpen}
+              aria-label={sidebarPinnedOpen ? 'Collapse sidebar' : 'Pin sidebar open'}
+              title={sidebarPinnedOpen ? 'Collapse sidebar' : 'Pin sidebar open'}
+            >
+              <span />
+            </button>
           </div>
           <nav className="premiumNav">
-            <button type="button" className="premiumNavItem" onClick={() => onNavigate('/admin')}>Admin</button>
-            {WORKSPACE_SECTIONS.map((item) => (
+            {visibleWorkspaceSections.map((item) => (
               <button
                 key={item.value}
                 type="button"
                 className={`premiumNavItem ${activeWorkspaceSection === item.value ? 'active' : ''}`}
                 onClick={() => setActiveWorkspaceSection(item.value)}
+                title={item.label}
               >
-                {item.label}
+                <NavIcon type={item.icon} />
+                <span className="premiumNavLabel">{item.label}</span>
               </button>
             ))}
-            {showAdminPanel ? (
-              <>
-                <button
-                  type="button"
-                className={`premiumNavItem premiumNavItem-admin ${activeWorkspaceSection === 'admin-control' ? 'active' : ''}`}
-                onClick={() => setActiveWorkspaceSection('admin-control')}
-              >
-                  Super Admin Control
-                </button>
-                <button
-                  type="button"
-                  className={`premiumNavItem premiumNavItem-admin ${activeWorkspaceSection === 'system-updates' ? 'active' : ''}`}
-                  onClick={() => setActiveWorkspaceSection('system-updates')}
-                >
-                  System Updates
-                </button>
-              </>
-            ) : null}
-            <button type="button" className="premiumNavItem" onClick={onLogout}>Logout</button>
+            <button type="button" className="premiumNavItem" onClick={onLogout} title="Logout">
+              <NavIcon type="logout" />
+              <span className="premiumNavLabel">Logout</span>
+            </button>
           </nav>
           {!isCompactViewport ? renderSidebarFooter('premiumSidebarFooter') : null}
         </aside>
@@ -690,7 +769,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
           {isCompactViewport ? (
             <div className="premiumMobileMenuBar">
               <div className="premiumMobileBrand" aria-label="HotelRADAR beta">
-                <strong>HotelRADAR Beta</strong>
+                <strong className="premiumMobileBrandTitle">Hotel Revenue Intelligence</strong>
               </div>
               <button
                 type="button"
@@ -710,8 +789,8 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
           ) : null}
           {!isCompactViewport ? (
           <div className="premiumTopbarIntro premiumDesktopOnlyShell">
-            <span className="workspaceEyebrow">{workspaceLabel}</span>
-            <h2>AI Revenue Optimizer Overview</h2>
+            <span className="workspaceEyebrow">HotelRADAR</span>
+            <h2>Realtime revenue signals</h2>
             <p className="metaLabel headerScope">{scopeLabel}</p>
           </div>
           ) : null}
@@ -747,7 +826,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
                 onClick={handleApplyDateFilter}
                 disabled={loading || (!selectedHotelId && !dashboard?.hotelId)}
               >
-                Apply Date
+                View Date
               </button>
             </div>
             <button
@@ -756,15 +835,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
               onClick={() => handleRecalculate()}
               disabled={recalcInProgress || loading || (!selectedHotelId && !dashboard?.hotelId)}
             >
-              {recalcInProgress ? 'Recalculating...' : 'Recalculate'}
-            </button>
-            <button
-              type="button"
-              className="secondaryButton"
-              onClick={handleDownloadPdf}
-              disabled={!dashboard || exportingPdf || productLockEnabled}
-            >
-              {productLockEnabled ? 'Export Locked' : exportingPdf ? 'Preparing PDF...' : 'Download PDF'}
+              {recalcInProgress ? 'Refreshing…' : 'Refresh Intelligence'}
             </button>
           </div>
           ) : null}
@@ -773,39 +844,20 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         {isCompactViewport && mobileNavOpen ? (
           <section id="premium-mobile-nav" className="premiumMobileNavPanel" aria-label="Mobile navigation menu">
             <div className="premiumMobileNav">
-              <button type="button" className="premiumNavItem" onClick={() => onNavigate('/admin')}>
-                Admin
-              </button>
-              {WORKSPACE_SECTIONS.map((item) => (
+              {visibleWorkspaceSections.map((item) => (
                 <button
                   key={item.value}
                   type="button"
                   className={`premiumNavItem ${activeWorkspaceSection === item.value ? 'active' : ''}`}
                   onClick={() => setActiveWorkspaceSection(item.value)}
                 >
-                  {item.label}
+                  <NavIcon type={item.icon} />
+                  <span className="premiumNavLabel">{item.label}</span>
                 </button>
               ))}
-              {showAdminPanel ? (
-                <>
-                  <button
-                    type="button"
-                    className={`premiumNavItem premiumNavItem-admin ${activeWorkspaceSection === 'admin-control' ? 'active' : ''}`}
-                    onClick={() => setActiveWorkspaceSection('admin-control')}
-                  >
-                    Super Admin Control
-                  </button>
-                  <button
-                    type="button"
-                    className={`premiumNavItem premiumNavItem-admin ${activeWorkspaceSection === 'system-updates' ? 'active' : ''}`}
-                    onClick={() => setActiveWorkspaceSection('system-updates')}
-                  >
-                    System Updates
-                  </button>
-                </>
-              ) : null}
               <button type="button" className="premiumNavItem" onClick={onLogout}>
-                Logout
+                <NavIcon type="logout" />
+                <span className="premiumNavLabel">Logout</span>
               </button>
             </div>
           </section>

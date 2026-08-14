@@ -36,6 +36,8 @@ export function riskTone(level) {
       return 'high';
     case 'Medium':
       return 'medium';
+    case 'Not assessed':
+      return 'pending';
     default:
       return 'low';
   }
@@ -51,4 +53,3 @@ export function stabilityTone(status) {
       return 'low';
   }
 }
-

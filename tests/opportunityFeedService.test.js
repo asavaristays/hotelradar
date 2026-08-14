@@ -37,6 +37,7 @@ describe('opportunityFeedService', () => {
       opportunities: [
         {
           hotel_id: 'hotel-1',
+          hotel_name: 'Candolim Sands',
           city: 'Goa',
           signal_type: 'WEEKEND_COMPRESSION',
           title: 'Weekend Compression',
@@ -44,6 +45,7 @@ describe('opportunityFeedService', () => {
             'Compression pressure is rising in this cluster heading into the weekend. Focus area: Candolim Sands.',
           confidence_score: 97,
           impact_score: 15,
+          raw_score: 15,
           recommended_action: 'Increase weekend rates by 10-15%',
           created_at: '2026-03-14T14:30:00.000Z',
           coordinates: {

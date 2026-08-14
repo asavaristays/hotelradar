@@ -33,8 +33,14 @@ export default function HotelSelector({
 
         const body = await readResponseBody(response);
         const data = body.json;
+        const visibleHotels = Array.isArray(data)
+          ? data.filter((hotel) => ['goa', 'mumbai'].includes(String(hotel?.city || '').trim().toLowerCase()))
+          : [];
         if (!cancelled) {
           setHotels(Array.isArray(data) ? data : []);
+          if (!selectedHotelId && visibleHotels.length === 1) {
+            onSelect(String(visibleHotels[0].id || '').trim());
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -69,7 +75,9 @@ export default function HotelSelector({
         disabled={fetchingHotels || Boolean(error)}
         aria-label="Hotel selector"
       >
-        <option value="">{fetchingHotels ? 'Loading hotels...' : 'Select Hotel'}</option>
+        {(!selectedHotelId || fetchingHotels) && (
+          <option value="">{fetchingHotels ? 'Loading The Ten...' : 'Select Hotel'}</option>
+        )}
         {scopedHotels.map((hotel) => (
           <option key={hotel.id} value={hotel.id}>
             {hotel.hotel_name} ({hotel.city})

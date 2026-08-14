@@ -13,6 +13,7 @@ import {
   getRecalculationJobStatus,
 } from '../services/recalcQueueService.js';
 import { maybeRefreshOtaForDashboard } from '../services/onDemandOtaRefreshService.js';
+import { captureManualMarketSignals } from '../services/manualSignalInputService.js';
 import { isUuid } from '../utils/validation.js';
 import {
   preventReplayTriggers,
@@ -143,6 +144,24 @@ export async function postRecalculate(req, res, next) {
       hotelId,
       pollUrl: `/hotel/${hotelId}/recalculate-jobs/${job.id}`,
     });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function postManualMarketSignals(req, res, next) {
+  try {
+    const hotelId = String(req.params.id || '').trim();
+    if (!isUuid(hotelId)) throw invalidHotelIdError(hotelId);
+    const summary = await captureManualMarketSignals(
+      hotelId,
+      req.body || {},
+      {
+        userId: req.user?.id || null,
+        userRole: req.user?.role || null,
+      },
+    );
+    return res.status(201).json(summary);
   } catch (error) {
     return next(error);
   }

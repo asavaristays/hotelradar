@@ -158,66 +158,87 @@ ON CONFLICT DO NOTHING;
 -- ---------------------------
 -- Radar v3 geo normalization
 -- ---------------------------
-INSERT INTO states (id, name, country, timezone)
+INSERT INTO states (name, country, timezone)
 VALUES
-  ('90000000-0000-4000-8000-000000000001', 'Goa', 'India', 'Asia/Kolkata'),
-  ('90000000-0000-4000-8000-000000000002', 'Maharashtra', 'India', 'Asia/Kolkata'),
-  ('90000000-0000-4000-8000-000000000003', 'Rajasthan', 'India', 'Asia/Kolkata'),
-  ('90000000-0000-4000-8000-000000000004', 'Uttarakhand', 'India', 'Asia/Kolkata')
-ON CONFLICT (id) DO NOTHING;
+  ('Goa', 'India', 'Asia/Kolkata'),
+  ('Maharashtra', 'India', 'Asia/Kolkata'),
+  ('Rajasthan', 'India', 'Asia/Kolkata'),
+  ('Uttarakhand', 'India', 'Asia/Kolkata')
+ON CONFLICT (name, country) DO UPDATE
+SET timezone = EXCLUDED.timezone;
 
-INSERT INTO holiday_calendars (id, name)
+INSERT INTO holiday_calendars (name)
 VALUES
-  ('91000000-0000-4000-8000-000000000001', 'Goa Leisure Calendar'),
-  ('91000000-0000-4000-8000-000000000002', 'Mumbai Business Calendar'),
-  ('91000000-0000-4000-8000-000000000003', 'Rajasthan Heritage Calendar'),
-  ('91000000-0000-4000-8000-000000000004', 'Uttarakhand Hill Calendar')
-ON CONFLICT (id) DO NOTHING;
+  ('Goa Leisure Calendar'),
+  ('Mumbai Business Calendar'),
+  ('Rajasthan Heritage Calendar'),
+  ('Uttarakhand Hill Calendar')
+ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO season_profiles (
-  id, name, description, monthly_weights_json, weekend_multiplier, volatility_multiplier,
+  name, description, monthly_weights_json, weekend_multiplier, volatility_multiplier,
   event_sensitivity, compression_sensitivity, confidence_bias
 )
 VALUES
   (
-    '92000000-0000-4000-8000-000000000001',
     'Urban Business',
     'Business travel cycles with weekday premium.',
     '{"jan":56,"feb":57,"mar":58,"apr":57,"may":55,"jun":54,"jul":55,"aug":56,"sep":57,"oct":58,"nov":60,"dec":59}'::jsonb,
     1.08, 1.00, 1.05, 1.00, 2.00
   ),
   (
-    '92000000-0000-4000-8000-000000000002',
     'Coastal Leisure',
     'Leisure demand with pronounced seasonality.',
     '{"jan":68,"feb":72,"mar":66,"apr":54,"may":40,"jun":28,"jul":24,"aug":30,"sep":42,"oct":58,"nov":80,"dec":88}'::jsonb,
     1.12, 1.00, 1.08, 1.10, 1.00
   ),
   (
-    '92000000-0000-4000-8000-000000000003',
     'Heritage Desert',
     'Winter-heavy heritage and experiential demand.',
     '{"jan":64,"feb":67,"mar":70,"apr":62,"may":54,"jun":44,"jul":39,"aug":42,"sep":53,"oct":70,"nov":88,"dec":84}'::jsonb,
     1.09, 1.02, 1.10, 1.12, 1.50
   ),
   (
-    '92000000-0000-4000-8000-000000000004',
     'Hill Leisure',
     'Seasonal hill demand with summer and holiday spikes.',
     '{"jan":58,"feb":60,"mar":63,"apr":69,"may":78,"jun":82,"jul":66,"aug":61,"sep":64,"oct":68,"nov":62,"dec":71}'::jsonb,
     1.10, 1.04, 1.07, 1.05, 1.00
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (name) DO UPDATE
+SET
+  description = EXCLUDED.description,
+  monthly_weights_json = EXCLUDED.monthly_weights_json,
+  weekend_multiplier = EXCLUDED.weekend_multiplier,
+  volatility_multiplier = EXCLUDED.volatility_multiplier,
+  event_sensitivity = EXCLUDED.event_sensitivity,
+  compression_sensitivity = EXCLUDED.compression_sensitivity,
+  confidence_bias = EXCLUDED.confidence_bias;
 
-INSERT INTO cities (id, name, state_id, airport_code, season_profile_id, holiday_calendar_id)
-VALUES
-  ('93000000-0000-4000-8000-000000000001', 'Goa', '90000000-0000-4000-8000-000000000001', 'GOI', '92000000-0000-4000-8000-000000000002', '91000000-0000-4000-8000-000000000001'),
-  ('93000000-0000-4000-8000-000000000002', 'Mumbai', '90000000-0000-4000-8000-000000000002', 'BOM', '92000000-0000-4000-8000-000000000001', '91000000-0000-4000-8000-000000000002'),
-  ('93000000-0000-4000-8000-000000000006', 'Jaipur', '90000000-0000-4000-8000-000000000003', 'JAI', '92000000-0000-4000-8000-000000000003', '91000000-0000-4000-8000-000000000003'),
-  ('93000000-0000-4000-8000-000000000007', 'Nainital', '90000000-0000-4000-8000-000000000004', 'PGH', '92000000-0000-4000-8000-000000000004', '91000000-0000-4000-8000-000000000004'),
-  ('93000000-0000-4000-8000-000000000008', 'Corbett', '90000000-0000-4000-8000-000000000004', 'PGH', '92000000-0000-4000-8000-000000000004', '91000000-0000-4000-8000-000000000004'),
-  ('93000000-0000-4000-8000-000000000009', 'Mukeshwar', '90000000-0000-4000-8000-000000000004', 'PGH', '92000000-0000-4000-8000-000000000004', '91000000-0000-4000-8000-000000000004'),
-  ('93000000-0000-4000-8000-000000000010', 'Mukteshwar', '90000000-0000-4000-8000-000000000004', 'PGH', '92000000-0000-4000-8000-000000000004', '91000000-0000-4000-8000-000000000004')
+WITH city_seed (name, state_name, airport_code, profile_name, calendar_name) AS (
+  VALUES
+    ('Goa', 'Goa', 'GOI', 'Coastal Leisure', 'Goa Leisure Calendar'),
+    ('Mumbai', 'Maharashtra', 'BOM', 'Urban Business', 'Mumbai Business Calendar'),
+    ('Jaipur', 'Rajasthan', 'JAI', 'Heritage Desert', 'Rajasthan Heritage Calendar'),
+    ('Nainital', 'Uttarakhand', 'PGH', 'Hill Leisure', 'Uttarakhand Hill Calendar'),
+    ('Corbett', 'Uttarakhand', 'PGH', 'Hill Leisure', 'Uttarakhand Hill Calendar'),
+    ('Mukeshwar', 'Uttarakhand', 'PGH', 'Hill Leisure', 'Uttarakhand Hill Calendar'),
+    ('Mukteshwar', 'Uttarakhand', 'PGH', 'Hill Leisure', 'Uttarakhand Hill Calendar')
+)
+INSERT INTO cities (name, state_id, airport_code, season_profile_id, holiday_calendar_id)
+SELECT
+  city_seed.name,
+  states.id,
+  city_seed.airport_code,
+  season_profiles.id,
+  holiday_calendars.id
+FROM city_seed
+JOIN states
+  ON states.name = city_seed.state_name
+ AND states.country = 'India'
+JOIN season_profiles
+  ON season_profiles.name = city_seed.profile_name
+JOIN holiday_calendars
+  ON holiday_calendars.name = city_seed.calendar_name
 ON CONFLICT (name) DO UPDATE
 SET
   state_id = EXCLUDED.state_id,

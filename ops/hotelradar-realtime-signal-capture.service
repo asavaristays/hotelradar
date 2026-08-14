@@ -1,0 +1,16 @@
+[Unit]
+Description=HotelRADAR realtime signal capture
+After=network-online.target hotelradar-revenue.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/radar_light
+Environment=RADAR_ENV_FILE=/opt/radar_light/shared/.env
+Environment=RADAR_LIGHT_ENV_FILE=/opt/radar_light/shared/.env
+ExecStart=/usr/bin/node /opt/radar_light/src/scripts/runRealtimeSignalCapture.js --once
+User=root
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

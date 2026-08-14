@@ -45,7 +45,9 @@ import { computeOtaParity } from './otaParityService.js';
 import { computeDataHealthSnapshot } from './dataHealthService.js';
 import { buildSignalDiagnostics } from './signalDiagnosticsService.js';
 import { splitRateRows } from './rateSourceService.js';
+import { getRealtimeSignalSummary } from '../repositories/realtimeSignalRepository.js';
 import { simulateRevenueImpact } from './revenueImpactSimulator.js';
+import { buildRevenueIntelligenceWorkingModel } from './revenueIntelligenceWorkingModelService.js';
 import { average, clamp, round } from '../utils/math.js';
 import { getMockCompetitorRates } from '../../mock/mockScraper.js';
 
@@ -77,6 +79,7 @@ const defaultDeps = {
   getCanaryOverride,
   getModelVersionById,
   getSignalDiagnostics: buildSignalDiagnostics,
+  getRealtimeSignalSummary,
 };
 
 function normalizeWeights(city, dbWeights, calibration, overrideWeights = null) {
@@ -279,7 +282,109 @@ function normalizeMarketContext(raw = {}) {
     hotelRows: Number(raw?.hotelRows || 0),
     competitorRows: Number(raw?.competitorRows || 0),
     otaRows: Number(raw?.otaRows || 0),
+    importantDates: Array.isArray(raw?.importantDates) ? raw.importantDates : [],
   };
+}
+
+function normalizeRealtimeSignals(raw = null) {
+  const rows = Array.isArray(raw?.rows) ? raw.rows : [];
+  return {
+    status: raw?.status || 'missing',
+    latestCapturedAt: raw?.latestCapturedAt || null,
+    counts: {
+      official: Number(raw?.counts?.official || 0),
+      ota: Number(raw?.counts?.ota || 0),
+      competitor: Number(raw?.counts?.competitor || 0),
+      event: rows.filter((row) => row?.sourceType === 'event').length,
+      mice: rows.filter((row) => String(row?.metadata?.eventType || row?.signalType || '').toLowerCase().includes('mice')).length,
+      wedding: rows.filter((row) => String(row?.metadata?.eventType || row?.signalType || '').toLowerCase().includes('wedding')).length,
+      fresh: Number(raw?.counts?.fresh || 0),
+      total: Number(raw?.counts?.total || rows.length),
+    },
+    rows: rows.slice(0, 50).map((row) => ({
+      sourceType: row?.sourceType || '',
+      sourceName: row?.sourceName || '',
+      signalType: row?.signalType || '',
+      checkinDate: row?.checkinDate || null,
+      valueNumeric: row?.valueNumeric == null ? null : Number(row.valueNumeric),
+      valueText: row?.valueText || '',
+      currency: row?.currency || 'INR',
+      proofUrl: row?.proofUrl || '',
+      confidenceScore: Number(row?.confidenceScore || 0),
+      observedAt: row?.observedAt || null,
+      capturedAt: row?.capturedAt || null,
+      freshnessExpiresAt: row?.freshnessExpiresAt || null,
+      metadata: row?.metadata || {},
+    })),
+  };
+}
+
+function normalizeDateKey(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function sameMonth(dateKey, monthAnchor) {
+  if (!dateKey || !monthAnchor) return true;
+  return String(dateKey).slice(0, 7) === String(monthAnchor).slice(0, 7);
+}
+
+function classifyImportantDateType(entry = {}) {
+  const text = `${entry.category || ''} ${entry.event_name || entry.holiday_name || ''}`.toLowerCase();
+  if (/wedding|marriage|bridal|banquet/.test(text)) return 'wedding';
+  if (/mice|corporate|conference|summit|expo|exhibition|trade show|convention/.test(text)) return 'mice';
+  if (/rakhi|raksha|family/.test(text)) return 'family_festival';
+  if (/holiday|independence|milad/.test(text)) return 'holiday';
+  if (/festival|carnival|cultural/.test(text)) return 'festival';
+  return 'event';
+}
+
+function buildImportantDates({ events = [], holidays = [], checkinDate = null } = {}) {
+  const monthAnchor = checkinDate || new Date().toISOString().slice(0, 10);
+  const rows = [];
+
+  for (const holiday of holidays || []) {
+    const date = normalizeDateKey(holiday.holiday_date || holiday.holidayDate);
+    if (!date || !sameMonth(date, monthAnchor)) continue;
+    rows.push({
+      date,
+      endDate: date,
+      label: String(holiday.holiday_name || holiday.holidayName || 'Holiday').trim(),
+      type: classifyImportantDateType(holiday),
+      source: 'holiday-calendar',
+      confidence: 'confirmed',
+      impactScore: 12,
+      url: '',
+    });
+  }
+
+  for (const event of events || []) {
+    const date = normalizeDateKey(event.start_date || event.startDate);
+    const endDate = normalizeDateKey(event.end_date || event.endDate) || date;
+    if (!date || !sameMonth(date, monthAnchor)) continue;
+    rows.push({
+      date,
+      endDate,
+      label: String(event.event_name || event.eventName || event.name || 'Market event').trim(),
+      type: classifyImportantDateType(event),
+      source: String(event.source || 'event-pipeline').trim(),
+      confidence: String(event.confidence || 'tentative').trim(),
+      impactScore: Number(event.impact_score || event.impactScore || 0),
+      url: String(event.event_url || event.eventUrl || '').trim(),
+    });
+  }
+
+  const deduped = new Map();
+  for (const row of rows) {
+    const key = `${row.date}|${row.label.toLowerCase()}|${row.source.toLowerCase()}`;
+    if (!deduped.has(key)) deduped.set(key, row);
+  }
+
+  return [...deduped.values()]
+    .sort((left, right) => String(left.date).localeCompare(String(right.date)))
+    .slice(0, 12);
 }
 
 function deriveLastEventSync(events = []) {
@@ -879,6 +984,7 @@ function toDashboardContract({
   otaParity,
   dataHealth,
   marketContext,
+  realtimeSignals,
 }) {
   const explanation = Array.isArray(record.explanation)
     ? record.explanation
@@ -915,7 +1021,7 @@ function toDashboardContract({
     volatilityError: Number(normalizedPerf.stabilityDeviation || 0),
   };
 
-  return {
+  const contract = {
     hotelId: hotel.id,
     city: hotel.city,
     seasonProfile: hotel.season_profile_name || 'Default',
@@ -939,6 +1045,7 @@ function toDashboardContract({
     productLock,
     outputGuard,
     marketContext: normalizeMarketContext(marketContext),
+    realtimeSignals: normalizeRealtimeSignals(realtimeSignals),
     explanation,
     alerts: alertSummary.map(formatAlertSummary),
     alertGroups: alertSummary,
@@ -947,6 +1054,11 @@ function toDashboardContract({
     viewerRole: viewerRole || null,
     lastScrapedAt: lastScrapedAt ? new Date(lastScrapedAt).toISOString() : null,
     lastUpdated: new Date(record.created_at || Date.now()).toISOString(),
+  };
+
+  return {
+    ...contract,
+    revenueIntelligenceModel: buildRevenueIntelligenceWorkingModel(contract),
   };
 }
 
@@ -988,6 +1100,13 @@ function normalizeCheckinDate(value = '') {
   const parsed = new Date(`${raw}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString().slice(0, 10) === raw ? raw : null;
+}
+
+function normalizeAuditUserId(value = null) {
+  const candidate = String(value || '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate)
+    ? candidate
+    : null;
 }
 
 async function loadMarketScope(hotel, deps = defaultDeps, options = {}) {
@@ -1162,7 +1281,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     }));
   const competitorRates = preloaded.competitorRates || marketScope.hotelCompetitorRates;
   const otaParityRates = preloaded.otaParityRates || marketScope.otaParityRates;
-  const [airfareSeries, holidays, events, cityWeights, alerts, competitiveGrid, calibration, previousRecord, canaryOverride] = await Promise.all([
+  const [airfareSeries, holidays, events, cityWeights, alerts, competitiveGrid, calibration, previousRecord, canaryOverride, realtimeSignals] = await Promise.all([
     preloaded.airfareSeries || deps.getAirfareSeries(hotel.city),
     preloaded.holidays || deps.getUpcomingHolidays(hotel.city),
     preloaded.events || (deps.getUpcomingEvents ? deps.getUpcomingEvents(hotel.city) : Promise.resolve([])),
@@ -1175,6 +1294,9 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
         ? deps.getPreviousDemandScore(hotel.id, record.id || null)
         : Promise.resolve(null)),
     deps.getCanaryOverride ? deps.getCanaryOverride(hotel.id) : Promise.resolve(null),
+    deps.getRealtimeSignalSummary
+      ? deps.getRealtimeSignalSummary(hotel.id, { checkinDate: requestedCheckinDate, limit: 50 })
+      : Promise.resolve(null),
   ]);
 
   const marketPosition = normalizeMarketPosition(record.market_position);
@@ -1259,6 +1381,11 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
   const marketContext = {
     ...marketScope,
     lastEventSync,
+    importantDates: buildImportantDates({
+      events,
+      holidays,
+      checkinDate: marketScope.checkinDate,
+    }),
   };
 
   return toDashboardContract({
@@ -1280,6 +1407,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
     otaParity,
     dataHealth,
     marketContext,
+    realtimeSignals,
   });
 }
 
@@ -1428,7 +1556,7 @@ export async function recalculateDashboard(hotelId, context = {}, deps = default
   if (auditLogger) {
     await auditLogger({
       hotelId: hotel.id,
-      userId: context.user_id || null,
+      userId: normalizeAuditUserId(context.user_id),
       triggerSource: context.source || context.triggered_by || 'api',
       executionMs: Date.now() - startedAt,
       resultPayload: {
@@ -1476,6 +1604,25 @@ export async function getDashboard(hotelId, context = {}, deps = defaultDeps) {
     const error = new Error('Hotel not found');
     error.status = 404;
     throw error;
+  }
+
+  // A dashboard opened for an explicit stay date must be calculated from the
+  // observations for that date. Reusing the latest aggregate record here can
+  // surface a stale price captured for a different stay date.
+  const requestedCheckinDate = normalizeCheckinDate(
+    context?.checkin_date || context?.checkinDate || null,
+  );
+  if (requestedCheckinDate) {
+    return recalculateDashboard(
+      hotelId,
+      {
+        ...context,
+        checkin_date: requestedCheckinDate,
+        triggered_by: context.triggered_by || 'dashboard',
+        source: context.source || 'stay-date-refresh',
+      },
+      deps,
+    );
   }
 
   const latest = await deps.getLatestDemandScore(hotelId);

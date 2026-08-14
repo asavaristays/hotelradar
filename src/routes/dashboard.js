@@ -8,6 +8,7 @@ import {
   getHotelPerformance,
   getHotelRecalculateJob,
   postRecalculate,
+  postManualMarketSignals,
   postWebhookRecalculate,
 } from '../controllers/dashboardController.js';
 import { getMarketDemandController } from '../controllers/marketDemandController.js';
@@ -31,12 +32,22 @@ import {
   postNormalizeRates,
   postPositionAnalysis,
 } from '../controllers/intelligenceController.js';
+import {
+  getRevenueIntelligenceBriefHistory,
+  patchRevenueIntelligenceDeliveryStatus,
+  postGenerateDailyRevenueIntelligenceBriefs,
+  postGenerateRevenueIntelligenceBrief,
+  postRevenueIntelligenceFeedback,
+} from '../controllers/revenueIntelligenceDeliveryController.js';
 import { requireAuth, requireBetaAcceptance, requireHotelScope } from '../middleware/authMiddleware.js';
 
 export const dashboardRouter = express.Router();
 
 dashboardRouter.get('/hotel/:id/dashboard', requireAuth, requireBetaAcceptance(), requireHotelScope(), getHotelDashboard);
 dashboardRouter.post('/hotel/:id/recalculate', requireAuth, requireBetaAcceptance(), requireHotelScope(), postRecalculate);
+dashboardRouter.post('/hotel/:id/signals', requireAuth, requireBetaAcceptance(), requireHotelScope(), postManualMarketSignals);
+dashboardRouter.post('/hotel/:id/revenue-intelligence/brief', requireAuth, requireBetaAcceptance(), requireHotelScope(), postGenerateRevenueIntelligenceBrief);
+dashboardRouter.get('/hotel/:id/revenue-intelligence/briefs', requireAuth, requireBetaAcceptance(), requireHotelScope(), getRevenueIntelligenceBriefHistory);
 dashboardRouter.get('/hotel/:id/alerts', requireAuth, requireBetaAcceptance(), requireHotelScope(), getHotelAlerts);
 dashboardRouter.get('/hotel/:id/competitive-grid', requireAuth, requireBetaAcceptance(), requireHotelScope(), getHotelCompetitiveGrid);
 dashboardRouter.get('/hotel/:id/ota-parity', requireAuth, requireBetaAcceptance(), requireHotelScope(), getHotelOtaParity);
@@ -62,4 +73,8 @@ dashboardRouter.get('/api/intelligence/leadradar-events', requireAuth, requireBe
 dashboardRouter.get('/api/intelligence/market-position', requireAuth, requireBetaAcceptance(), getMarketPositionIntelligence);
 dashboardRouter.get('/api/intelligence/radar-score', requireAuth, requireBetaAcceptance(), getRadarScore);
 dashboardRouter.get('/api/intelligence/today', requireAuth, requireBetaAcceptance(), getTodayMarketIntelligence);
+dashboardRouter.post('/api/intelligence/revenue-briefs/daily', requireAuth, requireBetaAcceptance(), postGenerateDailyRevenueIntelligenceBriefs);
+dashboardRouter.get('/api/intelligence/revenue-briefs', requireAuth, requireBetaAcceptance(), getRevenueIntelligenceBriefHistory);
+dashboardRouter.patch('/api/intelligence/revenue-briefs/:deliveryId/status', requireAuth, requireBetaAcceptance(), patchRevenueIntelligenceDeliveryStatus);
+dashboardRouter.post('/api/intelligence/revenue-briefs/:deliveryId/feedback', requireAuth, requireBetaAcceptance(), postRevenueIntelligenceFeedback);
 dashboardRouter.get('/api/debug/system-status', requireAuth, requireBetaAcceptance(), getDebugSystemStatus);

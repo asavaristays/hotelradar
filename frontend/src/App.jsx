@@ -3,9 +3,11 @@ import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import HotelDashboard from './pages/HotelDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import LeadRadarPage from './pages/LeadRadarPage.jsx';
 import PrivacyPage from './pages/legal/Privacy.jsx';
 import TermsPage from './pages/legal/Terms.jsx';
 import DisclaimerPage from './pages/legal/Disclaimer.jsx';
+import PropertyResearchPage from './pages/PropertyResearchPage.jsx';
 import { SESSION_EXPIRED_EVENT } from './http.js';
 
 export default function App() {
@@ -86,6 +88,14 @@ export default function App() {
 
   if (path === '/admin') {
     return <AdminDashboard session={session} onLogout={handleLogout} onNavigate={navigate} />;
+  }
+
+  if (path === '/research') {
+    return <PropertyResearchPage session={session} onLogout={handleLogout} onNavigate={navigate} />;
+  }
+
+  if (path === '/leadradar') {
+    return <LeadRadarPage session={session} onLogout={handleLogout} onNavigate={navigate} />;
   }
 
   return <DashboardPage session={session} onLogout={handleLogout} onNavigate={navigate} />;

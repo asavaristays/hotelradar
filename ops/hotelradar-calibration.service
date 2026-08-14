@@ -1,0 +1,15 @@
+[Unit]
+Description=HotelRADAR latest-data calibration
+After=network-online.target hotelradar-revenue.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/radar_light
+Environment=RADAR_ENV_FILE=/opt/radar_light/shared/.env
+ExecStart=/usr/bin/bash /opt/radar_light/scripts/run_latest_data_calibration.sh
+User=root
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

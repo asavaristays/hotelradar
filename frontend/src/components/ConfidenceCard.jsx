@@ -16,6 +16,15 @@ function HeatScale({ value }) {
 }
 
 function RiskStrip({ level }) {
+  if (level === 'Not assessed') {
+    return (
+      <div className="riskStrip" aria-label="Risk not assessed">
+        {[1, 2, 3, 4, 5].map((index) => (
+          <span key={index} className="riskDot" />
+        ))}
+      </div>
+    );
+  }
   const active = level === 'High' ? 5 : level === 'Medium' ? 3 : 2;
   return (
     <div className="riskStrip" aria-label={`Risk strip ${level}`}>
@@ -45,8 +54,6 @@ export default function ConfidenceCard({
   performanceSummary = null,
   signalQuality = null,
 }) {
-  const riskLevel = suggestedPricing?.riskLevel || 'Low';
-  const riskClass = `riskBadge risk-${riskTone(riskLevel)}`;
   const factors = Array.isArray(confidence?.factors) ? confidence.factors : [];
   const confidenceScore = Number(confidence?.score || 0);
   const forecastAccuracy60d = Number(confidence?.forecastAccuracy60d || 0);
@@ -57,6 +64,9 @@ export default function ConfidenceCard({
   const calibrationMode = mode === 'calibrating' || sampleSize < 7;
   const verifyMode = mode === 'verify';
   const suppressedConfidence = calibrationMode || verifyMode;
+  const riskLevel = suppressedConfidence ? 'Not assessed' : suggestedPricing?.riskLevel || 'Low';
+  const riskClass = `riskBadge risk-${riskTone(riskLevel)}`;
+  const visibleFactors = suppressedConfidence ? [] : factors;
   const confidenceHeadline = verifyMode
     ? 'Verify before acting'
     : calibrationMode
@@ -99,9 +109,10 @@ export default function ConfidenceCard({
       </div>
 
       <ul className="compactList">
-        {factors.map((factor) => (
+        {visibleFactors.map((factor) => (
           <li key={factor}>{factor}</li>
         ))}
+        {!visibleFactors.length ? <li>Evidence is still calibrating; no risk factors are promoted yet.</li> : null}
       </ul>
 
       <MarketUrgencyGrid
