@@ -13,5 +13,6 @@ Read in this order:
 5. `04-formulas-and-decision-contract.md`
 6. `05-market-intelligence-method.md`
 7. `06-automation-and-beta-operations.md`
+8. `07-verified-live-data-connectors.md`
 
 Do not add secrets, passwords, API keys, SMTP credentials, cookies, or vendor tokens to these files.

@@ -207,7 +207,13 @@ export async function getRealtimeSignalSummary(hotelId, { checkinDate = null, li
       competitor: rows.filter((row) => row.source_type === 'competitor').length,
       fresh: freshRows.length,
       airfare: rows.filter((row) => row.source_type === 'airfare').length,
+      search: rows.filter((row) => row.source_type === 'search').length,
       event: rows.filter((row) => row.source_type === 'event').length,
+      weather: rows.filter((row) => row.source_type === 'weather').length,
+      digital: rows.filter((row) => row.source_type === 'digital').length,
+      pms: rows.filter((row) => row.source_type === 'pms').length,
+      review: rows.filter((row) => row.source_type === 'review').length,
+      social: rows.filter((row) => row.source_type === 'social').length,
       total: rows.length,
     },
   };

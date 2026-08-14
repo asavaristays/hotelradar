@@ -213,6 +213,7 @@ function buildSignals(dashboard = {}) {
   );
   const travelPressureRows = Math.max(
     realtimeCount(dashboard, 'airfare'),
+    realtimeCount(dashboard, 'search'),
     signalRowsByType(dashboard, /airfare|airport|arrival|tourism|travel|hotel_search|price_pressure|google_trends/).length,
   );
   const freshRows = realtimeCount(dashboard, 'fresh');

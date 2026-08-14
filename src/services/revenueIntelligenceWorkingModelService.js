@@ -71,6 +71,10 @@ function buildEvidence(dashboard = {}) {
   const miceRows = rowCount(dashboard, (text) => /mice|corporate|conference|offsite|expo|summit/.test(text));
   const weddingRows = rowCount(dashboard, (text) => /wedding|marriage|bridal|banquet/.test(text));
   const travelRows = rowCount(dashboard, (text) => /airfare|airport|flight|search|travel|google_trends/.test(text));
+  const summarizedTravelRows = Math.max(
+    Number(dashboard?.realtimeSignals?.counts?.airfare || 0),
+    Number(dashboard?.realtimeSignals?.counts?.search || 0),
+  );
   const weatherRows = rowCount(dashboard, (text) => /weather|monsoon|rain|risk/.test(text));
   const freshCount = Math.max(Number(dashboard?.realtimeSignals?.counts?.fresh || 0), freshRows(dashboard).length);
   const totalRows = Number(dashboard?.realtimeSignals?.counts?.total || rows(dashboard).length);
@@ -136,9 +140,9 @@ function buildEvidence(dashboard = {}) {
       key: 'travel_pressure',
       label: 'Travel / search',
       category: 'demand_pressure',
-      status: signalStatus({ ready: travelRows >= 2, supporting: travelRows > 0 }),
-      value: travelRows ? `${travelRows} signal${travelRows === 1 ? '' : 's'}` : null,
-      count: travelRows,
+      status: signalStatus({ ready: Math.max(travelRows, summarizedTravelRows) >= 2, supporting: Math.max(travelRows, summarizedTravelRows) > 0 }),
+      value: Math.max(travelRows, summarizedTravelRows) ? `${Math.max(travelRows, summarizedTravelRows)} signal${Math.max(travelRows, summarizedTravelRows) === 1 ? '' : 's'}` : null,
+      count: Math.max(travelRows, summarizedTravelRows),
       requiredForStrongAction: false,
       clientMeaning: 'Travel intent, airfare, and arrival pressure.',
       missingAction: 'Connect travel-search, airfare, or airport demand observations.',

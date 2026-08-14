@@ -22,6 +22,10 @@ import { listUpcomingEventsByCity } from '../repositories/eventRepository.js';
 import { enqueueRecalculationJob } from './recalcQueueService.js';
 import { normalizeCompetitorRates } from './intelligence-engine/rateNormalizationEngine.js';
 import { getLeadRadarExternalSignals } from './googleSignalIntelService.js';
+import {
+  normalizeVerifiedLiveObservation,
+  summarizeConnectorVerification,
+} from './verifiedLiveDataConnectorService.js';
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_SNAPSHOT_PATHS = [
@@ -225,10 +229,21 @@ async function ensureCompetitorForHotel(hotel, competitorName, websiteUrl, deps)
 }
 
 async function recordObservation(observation, deps) {
-  await deps.insertRealtimeSignalObservation(observation);
-  return {
+  const verification = normalizeVerifiedLiveObservation(observation, {
+    runId: observation.runId,
     hotelId: observation.hotelId,
-    checkinDate: observation.checkinDate,
+    city: observation.city,
+    nowIso: observation.nowIso,
+    connectorName: observation.connectorName || 'realtime-signal-capture',
+  });
+
+  if (!verification.accepted) return verification;
+
+  await deps.insertRealtimeSignalObservation(verification.observation);
+  return {
+    ...verification,
+    hotelId: verification.observation.hotelId,
+    checkinDate: verification.observation.checkinDate,
   };
 }
 
@@ -241,7 +256,7 @@ async function processSnapshotRow({ row, hotel, runId, nowIso, deps }) {
     const price = toFinitePrice(row);
     if (!price) return { skipped: true, reason: 'invalid_hotel_rate' };
     await deps.insertHotelRateSnapshot({ hotelId: hotel.id, checkinDate, price, capturedAt: observedAt });
-    await recordObservation({
+    const recorded = await recordObservation({
       runId,
       hotelId: hotel.id,
       city: hotel.city,
@@ -254,9 +269,12 @@ async function processSnapshotRow({ row, hotel, runId, nowIso, deps }) {
       confidenceScore: Number(row.confidence_score || 90),
       observedAt,
       freshnessExpiresAt: freshnessExpiry(nowIso, 'official'),
+      nowIso,
+      connectorName: row.connector_name || row.source_adapter || row.source || 'snapshot-official-rate',
       metadata: { roomType: row.room_type || row.room_category || null, mealPlan: row.meal_plan || null },
     }, deps);
-    return { hotelRateRows: 1, affected: { hotelId: hotel.id, checkinDate } };
+    if (!recorded.accepted) return { skipped: true, reason: recorded.reason, verification: recorded };
+    return { hotelRateRows: 1, affected: { hotelId: hotel.id, checkinDate }, verification: recorded };
   }
 
   const competitorName = String(row.competitor_name || row.channel || row.source_name || '').trim();
@@ -277,7 +295,7 @@ async function processSnapshotRow({ row, hotel, runId, nowIso, deps }) {
   });
 
   const sourceType = sourceTypeForName(competitorName, proofUrl);
-  await recordObservation({
+  const recorded = await recordObservation({
     runId,
     hotelId: hotel.id,
     city: hotel.city,
@@ -290,20 +308,25 @@ async function processSnapshotRow({ row, hotel, runId, nowIso, deps }) {
     confidenceScore: Number(row.confidence_score || (sourceType === 'ota' ? 82 : 78)),
     observedAt,
     freshnessExpiresAt: freshnessExpiry(nowIso, sourceType),
+    nowIso,
+    connectorName: row.connector_name || row.source_adapter || row.source || 'snapshot-rate-evidence',
     metadata: { roomType: row.room_type || row.room_category || null, mealPlan: row.meal_plan || null },
   }, deps);
+  if (!recorded.accepted) return { skipped: true, reason: recorded.reason, verification: recorded };
   return {
     competitorRows: sourceType === 'competitor' ? 1 : 0,
     otaRows: sourceType === 'ota' ? 1 : 0,
     affected: { hotelId: hotel.id, checkinDate },
+    verification: recorded,
   };
 }
 
 async function mirrorExistingEvidence({ runId, nowIso, deps, hotelId = null }) {
   const evidenceRows = await deps.listLatestRateEvidence({ hotelId, limit: 200 });
   const affected = [];
+  const verificationResults = [];
   for (const row of evidenceRows) {
-    await recordObservation({
+    const recorded = await recordObservation({
       runId,
       hotelId: row.hotel_id,
       city: row.city,
@@ -311,16 +334,21 @@ async function mirrorExistingEvidence({ runId, nowIso, deps, hotelId = null }) {
       sourceType: row.source_type,
       sourceName: row.source_name,
       signalType: row.signal_type,
-      valueNumeric: Number(row.value_numeric || 0),
+      valueNumeric: row.value_numeric == null ? null : Number(row.value_numeric),
       proofUrl: row.proof_url || '',
       confidenceScore: row.source_type === 'official' ? 88 : 76,
       observedAt: row.observed_at || nowIso,
       freshnessExpiresAt: freshnessExpiry(nowIso, row.source_type),
+      nowIso,
+      connectorName: 'latest-rate-evidence-mirror',
       metadata: { ...(row.metadata || {}), mirroredFromLatestEvidence: true },
     }, deps);
-    affected.push({ hotelId: row.hotel_id, checkinDate: toCheckinDate(row.checkin_date) });
+    verificationResults.push(recorded);
+    if (recorded.accepted) {
+      affected.push({ hotelId: row.hotel_id, checkinDate: toCheckinDate(row.checkin_date) });
+    }
   }
-  return { evidenceRows, affected };
+  return { evidenceRows, affected, verificationResults };
 }
 
 async function mirrorUpcomingEventSignals({ runId, nowIso, deps, hotels = [], horizonDays = 45 }) {
@@ -333,6 +361,7 @@ async function mirrorUpcomingEventSignals({ runId, nowIso, deps, hotels = [], ho
   }
 
   const affected = [];
+  const verificationResults = [];
   let eventRows = 0;
   let weddingRows = 0;
   let miceRows = 0;
@@ -346,7 +375,7 @@ async function mirrorUpcomingEventSignals({ runId, nowIso, deps, hotels = [], ho
       const impactScore = Number.isFinite(Number(event.impact_score)) ? Number(event.impact_score) : 8;
 
       for (const hotel of cityHotels) {
-        await recordObservation({
+        const recorded = await recordObservation({
           runId,
           hotelId: hotel.id,
           city,
@@ -360,6 +389,8 @@ async function mirrorUpcomingEventSignals({ runId, nowIso, deps, hotels = [], ho
           confidenceScore: eventConfidenceScore(event),
           observedAt: event.scraped_at || nowIso,
           freshnessExpiresAt: eventFreshnessExpiry(event, nowIso),
+          nowIso,
+          connectorName: 'city-event-intelligence-mirror',
           metadata: {
             eventType,
             category: event.category || null,
@@ -370,20 +401,23 @@ async function mirrorUpcomingEventSignals({ runId, nowIso, deps, hotels = [], ho
             mirroredFromCityEvents: true,
           },
         }, deps);
-        affected.push({ hotelId: hotel.id, checkinDate });
-        eventRows += 1;
-        if (eventType === 'wedding') weddingRows += 1;
-        if (eventType === 'mice') miceRows += 1;
+        verificationResults.push(recorded);
+        if (recorded.accepted) {
+          affected.push({ hotelId: hotel.id, checkinDate });
+          eventRows += 1;
+          if (eventType === 'wedding') weddingRows += 1;
+          if (eventType === 'mice') miceRows += 1;
+        }
       }
     }
   }
 
-  return { eventRows, weddingRows, miceRows, affected };
+  return { eventRows, weddingRows, miceRows, affected, verificationResults };
 }
 
 async function mirrorGoogleTravelSignals({ runId, nowIso, deps, hotels = [] }) {
   if (!deps.getLeadRadarExternalSignals) {
-    return { googleTrendRows: 0, affected: [] };
+    return { googleTrendRows: 0, affected: [], verificationResults: [] };
   }
 
   const hotelsByCity = new Map();
@@ -395,6 +429,7 @@ async function mirrorGoogleTravelSignals({ runId, nowIso, deps, hotels = [] }) {
   }
 
   const affected = [];
+  const verificationResults = [];
   let googleTrendRows = 0;
   const checkinDate = toCheckinDate(nowIso);
 
@@ -418,20 +453,22 @@ async function mirrorGoogleTravelSignals({ runId, nowIso, deps, hotels = [] }) {
     for (const signal of liveSignals) {
       const impactScore = Number.isFinite(Number(signal.impactScore)) ? Number(signal.impactScore) : null;
       for (const hotel of cityHotels) {
-        await recordObservation({
+        const recorded = await recordObservation({
           runId,
           hotelId: hotel.id,
           city,
           checkinDate,
-          sourceType: 'airfare',
+          sourceType: 'search',
           sourceName: String(signal.title || signal.id || 'Google Trends travel pressure').trim(),
-          signalType: 'airfare_trend',
+          signalType: 'search_trend',
           valueNumeric: impactScore,
           valueText: String(signal.description || '').trim(),
           proofUrl: '',
           confidenceScore: Number(signal.confidenceScore || 66),
           observedAt: signal.createdAt || nowIso,
           freshnessExpiresAt: new Date(new Date(nowIso).getTime() + 12 * 60 * 60 * 1000).toISOString(),
+          nowIso,
+          connectorName: 'google-trends-travel-signal',
           metadata: {
             source: signal.source || 'google_trends_live',
             signalType: signal.signalType || '',
@@ -440,13 +477,16 @@ async function mirrorGoogleTravelSignals({ runId, nowIso, deps, hotels = [] }) {
             details: Array.isArray(signal.details) ? signal.details.slice(-7) : [],
           },
         }, deps);
-        googleTrendRows += 1;
-        affected.push({ hotelId: hotel.id, checkinDate });
+        verificationResults.push(recorded);
+        if (recorded.accepted) {
+          googleTrendRows += 1;
+          affected.push({ hotelId: hotel.id, checkinDate });
+        }
       }
     }
   }
 
-  return { googleTrendRows, affected };
+  return { googleTrendRows, affected, verificationResults };
 }
 
 function uniqueAffectedDates(entries = []) {
@@ -479,11 +519,18 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
     googleTrendRows: 0,
     mirroredEvidenceRows: 0,
     skippedRows: 0,
+    verifiedRows: 0,
+    needsProofRows: 0,
+    rejectedObservationRows: 0,
+    sourceTypeRows: {},
+    verificationRejectionReasons: {},
     recalcJobsQueued: 0,
     collectorRan: false,
     missingSnapshot: false,
     durationMs: 0,
   };
+
+  const verificationResults = [];
 
   try {
     const collector = await maybeRunCollector(options, deps);
@@ -506,16 +553,19 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
       const result = await processSnapshotRow({ row, hotel, runId: run.id, nowIso, deps });
       if (result.skipped) {
         summary.skippedRows += 1;
+        if (result.verification) verificationResults.push(result.verification);
         continue;
       }
       summary.hotelRateRows += Number(result.hotelRateRows || 0);
       summary.otaRows += Number(result.otaRows || 0);
       summary.competitorRows += Number(result.competitorRows || 0);
+      if (result.verification) verificationResults.push(result.verification);
       affected.push(result.affected);
     }
 
     const mirrored = await mirrorExistingEvidence({ runId: run.id, nowIso, deps, hotelId: options.hotelId || null });
     summary.mirroredEvidenceRows = mirrored.evidenceRows.length;
+    verificationResults.push(...mirrored.verificationResults);
     affected.push(...mirrored.affected);
 
     const eventHotels = options.hotelId
@@ -531,6 +581,7 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
     summary.eventRows = mirroredEvents.eventRows;
     summary.weddingRows = mirroredEvents.weddingRows;
     summary.miceRows = mirroredEvents.miceRows;
+    verificationResults.push(...mirroredEvents.verificationResults);
     affected.push(...mirroredEvents.affected);
 
     const mirroredGoogleTravel = await mirrorGoogleTravelSignals({
@@ -540,7 +591,15 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
       hotels: eventHotels,
     });
     summary.googleTrendRows = mirroredGoogleTravel.googleTrendRows;
+    verificationResults.push(...mirroredGoogleTravel.verificationResults);
     affected.push(...mirroredGoogleTravel.affected);
+
+    const verificationSummary = summarizeConnectorVerification(verificationResults);
+    summary.verifiedRows = verificationSummary.verifiedRows;
+    summary.needsProofRows = verificationSummary.needsProofRows;
+    summary.rejectedObservationRows = verificationSummary.rejectedRows;
+    summary.sourceTypeRows = verificationSummary.bySourceType;
+    summary.verificationRejectionReasons = verificationSummary.rejectionReasons;
 
     for (const entry of uniqueAffectedDates(affected)) {
       await deps.enqueueRecalculationJob({

@@ -124,4 +124,75 @@ describe('realtimeSignalCaptureService', () => {
       }),
     );
   });
+
+  test('verifies snapshot rate rows and rejects invalid zero-rate evidence', async () => {
+    const snapshotRows = [
+      {
+        hotel_name: 'The Ten Resort Siolem',
+        city: 'Goa',
+        checkin_date: '2026-08-16',
+        is_hotel_rate: true,
+        rate: 36800,
+        source_name: 'The Ten booking engine',
+        proof_url: '',
+        confidence_score: 95,
+      },
+      {
+        hotel_name: 'The Ten Resort Siolem',
+        city: 'Goa',
+        checkin_date: '2026-08-16',
+        competitor_name: 'Agoda',
+        rate: 35400,
+        proof_url: 'https://www.agoda.com/the-ten-goa/rates',
+        confidence_score: 84,
+      },
+      {
+        hotel_name: 'The Ten Resort Siolem',
+        city: 'Goa',
+        checkin_date: '2026-08-16',
+        competitor_name: 'Invalid OTA',
+        rate: 0,
+        proof_url: 'https://example.com/invalid',
+      },
+    ];
+    const { deps, observations } = buildDeps({
+      readFile: async () => JSON.stringify({ rows: snapshotRows }),
+      listUpcomingEventsByCity: async () => [],
+    });
+
+    const summary = await runRealtimeSignalCaptureCycle(
+      {
+        snapshotPath: '/tmp/hotelradar-snapshot.json',
+        source: 'test-realtime-capture',
+        cadence: 'manual',
+      },
+      deps,
+    );
+
+    expect(summary.snapshotRows).toBe(3);
+    expect(summary.hotelRateRows).toBe(1);
+    expect(summary.otaRows).toBe(1);
+    expect(summary.skippedRows).toBe(1);
+    expect(summary.needsProofRows).toBe(1);
+    expect(summary.verifiedRows).toBe(1);
+    expect(summary.sourceTypeRows).toEqual(expect.objectContaining({ official: 1, ota: 1 }));
+    expect(observations).toHaveLength(2);
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'official',
+          signalType: 'hotel_rate',
+          valueNumeric: 36800,
+          confidenceScore: 72,
+          metadata: expect.objectContaining({ verificationStatus: 'needs_proof' }),
+        }),
+        expect.objectContaining({
+          sourceType: 'ota',
+          signalType: 'ota_rate',
+          valueNumeric: 35400,
+          metadata: expect.objectContaining({ verificationStatus: 'verified' }),
+        }),
+      ]),
+    );
+  });
 });
