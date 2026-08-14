@@ -366,6 +366,87 @@ function buildMorningBrief({ dashboard, evidence, score, action, opportunities }
   };
 }
 
+function buildBetaReadiness({ evidence, opportunities, missingDataActions, score, trust }) {
+  const required = evidence.filter((item) => item.requiredForStrongAction);
+  const supportingSignals = evidence.filter((item) => !item.requiredForStrongAction);
+  const requiredReady = required.filter((item) => item.status === 'ready').length;
+  const supportingActive = supportingSignals.filter((item) => item.status !== 'missing').length;
+  const missingCritical = missingRequired(evidence);
+  const staleSignals = evidence.filter((item) => item.status === 'stale');
+
+  const pillars = [
+    {
+      key: 'decision_contract',
+      label: 'Decision contract',
+      status: missingCritical.length ? 'supporting' : 'ready',
+      score: missingCritical.length ? 70 : 100,
+      proof: missingCritical.length
+        ? `${missingCritical.length} required evidence gate${missingCritical.length === 1 ? '' : 's'} still open`
+        : 'All required pricing gates are ready',
+      nextAction: missingCritical.length
+        ? `Complete ${missingCritical.map((item) => item.label.toLowerCase()).join(', ')}`
+        : 'Use only controlled, evidence-backed pricing actions',
+    },
+    {
+      key: 'source_health',
+      label: 'Source health',
+      status: staleSignals.length ? 'stale' : requiredReady >= Math.max(1, required.length - 1) ? 'ready' : 'supporting',
+      score: staleSignals.length ? 45 : requiredReady >= Math.max(1, required.length - 1) ? 92 : 68,
+      proof: `${requiredReady}/${required.length || 1} required feeds ready`,
+      nextAction: staleSignals.length
+        ? 'Refresh stale observations before strong action'
+        : 'Keep official, OTA, competitor, market price, and freshness feeds refreshed',
+    },
+    {
+      key: 'client_story',
+      label: 'Client story',
+      status: supportingActive >= 3 ? 'ready' : supportingActive > 0 ? 'supporting' : 'missing',
+      score: supportingActive >= 3 ? 90 : supportingActive > 0 ? 66 : 35,
+      proof: `${supportingActive}/${supportingSignals.length || 1} demand-pressure layers active`,
+      nextAction: 'Separate event, travel, MICE, wedding, and risk signals instead of blending them into one score',
+    },
+    {
+      key: 'commercial_actionability',
+      label: 'Commercial actionability',
+      status: opportunities.length >= 2 ? 'ready' : opportunities.length ? 'supporting' : 'missing',
+      score: opportunities.length >= 2 ? 88 : opportunities.length ? 64 : 30,
+      proof: `${opportunities.length} revenue opportunity row${opportunities.length === 1 ? '' : 's'} generated`,
+      nextAction: 'Convert signal gaps into daily actions for revenue, sales, and reservations teams',
+    },
+    {
+      key: 'automation_loop',
+      label: 'Morning automation loop',
+      status: missingDataActions.length <= 2 && trust !== 'needs_data' ? 'supporting' : 'missing',
+      score: missingDataActions.length <= 2 && trust !== 'needs_data' ? 72 : 48,
+      proof: missingDataActions.length
+        ? `${missingDataActions.length} missing-data action${missingDataActions.length === 1 ? '' : 's'} remain`
+        : 'Brief can be generated from the current working model',
+      nextAction: 'Run scheduled capture, recalculation, PDF/email delivery, and feedback logging every morning',
+    },
+  ];
+
+  const weightedScore =
+    score * 0.35 +
+    pillars.reduce((sum, pillar) => sum + pillar.score, 0) / Math.max(1, pillars.length) * 0.65;
+  const scoreOutOf10 = Math.round((weightedScore / 10) * 10) / 10;
+
+  return {
+    targetScore: 8.5,
+    scoreOutOf10,
+    status: scoreOutOf10 >= 8.5 ? 'beta_ready' : scoreOutOf10 >= 7 ? 'near_beta_ready' : 'hardening',
+    summary:
+      scoreOutOf10 >= 8.5
+        ? 'Revenue Intelligence is strong enough for controlled client demonstrations, provided source-health remains transparent.'
+        : 'The product story is in place, but stronger live source coverage is needed before this reaches the target quality bar.',
+    pillars,
+    nextToReachTen: [
+      'Automated OTA and official-rate capture with proof URL and timestamp for every selected stay date.',
+      'PMS/booking-pace and cancellation feed so the system can compare market pressure with actual pickup.',
+      'Digital asset intelligence covering Google Business Profile, reviews, website booking flow, metasearch parity, and campaign pressure.',
+    ],
+  };
+}
+
 export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
   const evidence = buildEvidence(dashboard);
   const score = readinessScore(evidence);
@@ -373,6 +454,13 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
   const opportunities = buildOpportunityRows(dashboard, evidence, pricingAction);
   const missingDataActions = buildMissingDataActions(evidence);
   const trust = trustStatus(pricingAction, score, evidence);
+  const betaReadiness = buildBetaReadiness({
+    evidence,
+    opportunities,
+    missingDataActions,
+    score,
+    trust,
+  });
 
   return {
     version: 'revenue-intelligence-working-model-v1',
@@ -390,6 +478,7 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
         : 'Revenue Intelligence can guide the story, but strong pricing action remains guarded until required evidence is ready.',
     },
     evidence,
+    betaReadiness,
     opportunityRows: opportunities,
     missingDataActions,
     morningBrief: buildMorningBrief({

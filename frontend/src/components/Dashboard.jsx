@@ -152,6 +152,7 @@ function signalStatus({ ready, supporting }) {
 function statusCopy(status) {
   if (status === 'ready') return 'Ready';
   if (status === 'supporting') return 'Supporting';
+  if (status === 'stale') return 'Stale';
   return 'Missing';
 }
 
@@ -178,6 +179,9 @@ function signalRowsByType(dashboard = {}, typePattern) {
 }
 
 function buildSignals(dashboard = {}) {
+  const modelSignals = buildSignalsFromModel(dashboard?.revenueIntelligenceModel);
+  if (modelSignals.length) return modelSignals;
+
   const signalQuality = dashboard.signalQuality || {};
   const signalBreakdown = dashboard.signalBreakdown || {};
   const competitorRows = Math.max(
@@ -287,6 +291,40 @@ function buildSignals(dashboard = {}) {
       tone: 'freshness',
     },
   ];
+}
+
+const MODEL_EVIDENCE_TO_SIGNAL = {
+  official_rate: { key: 'own-rate', tone: 'rate' },
+  ota_rate: { key: 'ota', tone: 'ota' },
+  competitor_rate: { key: 'competitors', tone: 'competitor' },
+  market_price: { key: 'market-average', tone: 'market' },
+  event_pressure: { key: 'events', tone: 'event' },
+  travel_pressure: { key: 'airfare', tone: 'airfare' },
+  mice_pressure: { key: 'mice', tone: 'mice' },
+  wedding_pressure: { key: 'wedding', tone: 'wedding' },
+  weather_risk: { key: 'weather', tone: 'weather' },
+  freshness: { key: 'freshness', tone: 'freshness' },
+};
+
+function buildSignalsFromModel(model = null) {
+  const evidence = Array.isArray(model?.evidence) ? model.evidence : [];
+  return evidence
+    .map((item) => {
+      const mapping = MODEL_EVIDENCE_TO_SIGNAL[item?.key];
+      if (!mapping) return null;
+      return {
+        key: mapping.key,
+        label: item.label || mapping.key,
+        status: item.status || 'missing',
+        value: item.value || (item.status === 'missing' || item.status === 'stale' ? 'Not connected' : 'Captured'),
+        detail: item.clientMeaning || item.missingAction || 'Revenue Intelligence evidence',
+        tone: mapping.tone,
+        requiredForStrongAction: Boolean(item.requiredForStrongAction),
+        missingAction: item.missingAction || '',
+        category: item.category || '',
+      };
+    })
+    .filter(Boolean);
 }
 
 function buildExecutiveCall(dashboard = {}, signals = []) {
@@ -447,11 +485,11 @@ function evidencePct(signals = []) {
   return Math.round((score / signals.length) * 100);
 }
 
-function ClientKpiGrid({ dashboard, signals, selectedDate, otaRows, competitorRows }) {
+function ClientKpiGrid({ dashboard, signals, selectedDate, otaRows, competitorRows, model }) {
   const ownRate = signalByKey(signals, 'own-rate');
   const events = signalByKey(signals, 'events');
   const travel = signalByKey(signals, 'airfare');
-  const readiness = evidencePct(signals);
+  const readiness = numericOrNull(model?.executiveSummary?.confidenceScore) ?? evidencePct(signals);
 
   const items = [
     {
@@ -666,6 +704,51 @@ function WorkingModelPanel({ model }) {
   );
 }
 
+function BetaReadinessPanel({ model }) {
+  const readiness = model?.betaReadiness;
+  if (!readiness) return null;
+  const pillars = Array.isArray(readiness.pillars) ? readiness.pillars : [];
+  const nextToReachTen = Array.isArray(readiness.nextToReachTen) ? readiness.nextToReachTen : [];
+
+  return (
+    <section className="riPanel riBetaReadinessPanel" aria-label="HotelRADAR beta readiness scorecard">
+      <div className="riBetaReadinessIntro">
+        <div>
+          <span>Revenue Intelligence Readiness</span>
+          <h2>{readiness.status === 'beta_ready' ? 'Market confidence is demonstration-ready' : 'Live feed coverage is the main quality gap'}</h2>
+          <p>{readiness.summary}</p>
+        </div>
+        <article>
+          <span>Current</span>
+          <strong>{Number(readiness.scoreOutOf10 || 0).toFixed(1)}</strong>
+          <small>quality target {Number(readiness.targetScore || 8.5).toFixed(1)}/10</small>
+        </article>
+      </div>
+
+      <div className="riBetaPillars">
+        {pillars.map((pillar) => (
+          <article key={pillar.key} className={`riBetaPillar riTone-${pillar.status}`}>
+            <div>
+              <span>{pillar.label}</span>
+              <em>{statusCopy(pillar.status)}</em>
+            </div>
+            <strong>{Math.round(Number(pillar.score || 0))}%</strong>
+            <p>{pillar.proof}</p>
+            <small>{pillar.nextAction}</small>
+          </article>
+        ))}
+      </div>
+
+      {nextToReachTen.length ? (
+        <div className="riTenPath">
+          <span>Path to a stronger intelligence layer</span>
+          {nextToReachTen.map((item) => <p key={item}>{item}</p>)}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function RevenueSignalTable({ signals }) {
   return (
     <section className="riPanel riSignalTable" aria-label="Revenue signal table">
@@ -729,6 +812,7 @@ export default function Dashboard({ dashboard, loading, error }) {
   const market = dashboard?.marketContext?.city || dashboard?.city || 'Goa';
   const readySignals = signals.filter((signal) => signal.status === 'ready').length;
   const missingSignals = signals.filter((signal) => signal.status === 'missing').length;
+  const readinessPct = numericOrNull(model?.executiveSummary?.confidenceScore) ?? evidencePct(signals);
   const otaRows = Math.max(Number(dashboard?.signalQuality?.otaLiveRows || 0), realtimeCount(dashboard, 'ota'));
   const competitorRows = Math.max(Number(dashboard?.signalQuality?.competitorRows || 0), realtimeCount(dashboard, 'competitor'));
 
@@ -752,8 +836,8 @@ export default function Dashboard({ dashboard, loading, error }) {
             </article>
             <article>
               <span>Readiness</span>
-              <em>{readySignals}/{signals.length}</em>
-              <small>{missingSignals} gaps</small>
+              <em>{readinessPct}%</em>
+              <small>{readySignals}/{signals.length} ready · {missingSignals} gaps</small>
             </article>
           </div>
         </header>
@@ -764,7 +848,10 @@ export default function Dashboard({ dashboard, loading, error }) {
           selectedDate={selectedDate}
           otaRows={otaRows}
           competitorRows={competitorRows}
+          model={model}
         />
+
+        <BetaReadinessPanel model={model} />
 
         <WorkingModelPanel model={model} />
 
