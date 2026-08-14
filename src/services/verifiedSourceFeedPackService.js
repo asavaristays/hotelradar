@@ -301,7 +301,7 @@ async function findHotel({ hotelId = '', hotelName = DEFAULT_HOTEL_NAME, city = 
        AND lower(COALESCE(c.name, h.city, $2)) = lower($2)
      ORDER BY
        CASE WHEN lower(h.hotel_name) = lower($1) THEN 0 ELSE 1 END,
-       h.updated_at DESC NULLS LAST
+       h.created_at DESC NULLS LAST
      LIMIT 1`,
     [hotelName, city, `%${hotelName}%`],
   );
