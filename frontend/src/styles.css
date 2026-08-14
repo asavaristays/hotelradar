@@ -9556,6 +9556,56 @@ textarea::placeholder {
   font-weight: 400;
 }
 
+.riDateList {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.riDateStory {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: start;
+  border: 1px solid #e4e8ec;
+  border-left: 3px solid #cbd5df;
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.riDateStory.riDate-high {
+  border-left-color: #e95d5d;
+}
+
+.riDateStory.riDate-watch {
+  border-left-color: #73ad64;
+}
+
+.riDateStory span {
+  color: #7a8189;
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.riDateStory strong {
+  overflow: hidden;
+  color: #30343a;
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.riDateStory small {
+  grid-column: 2;
+  color: #737a82;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
 .riMixPanel {
   display: grid;
   align-content: start;
@@ -10558,8 +10608,46 @@ textarea::placeholder {
   margin-bottom: 16px;
 }
 
+.shSourceHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.shSourceStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 8px;
+}
+
+.shSourceStats article {
+  min-width: 70px;
+  border: 1px solid #e4e8ec;
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: #f8fafb;
+}
+
+.shSourceStats span {
+  display: block;
+  color: #7b828a;
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
+.shSourceStats em {
+  display: block;
+  margin-top: 5px;
+  color: #30343a;
+  font-size: 1rem;
+  font-style: normal;
+  font-weight: 500;
+}
+
 .shTable,
-.opTable {
+.opTable,
+.shSourceTable {
   display: grid;
   gap: 0;
   overflow-x: auto;
@@ -10568,7 +10656,9 @@ textarea::placeholder {
 .shTableHead,
 .shTableRow,
 .opTableHead,
-.opTableRow {
+.opTableRow,
+.shSourceTableHead,
+.shSourceTableRow {
   display: grid;
   gap: 0;
   min-width: 1080px;
@@ -10584,8 +10674,14 @@ textarea::placeholder {
   grid-template-columns: 0.72fr 0.95fr 1.25fr 0.72fr 1.7fr 0.78fr 0.88fr;
 }
 
+.shSourceTableHead,
+.shSourceTableRow {
+  grid-template-columns: 1.18fr 0.7fr 0.92fr 0.72fr 0.82fr 0.56fr 1.55fr;
+}
+
 .shTableHead,
-.opTableHead {
+.opTableHead,
+.shSourceTableHead {
   border-radius: 12px 12px 0 0;
   background: #eef1f4;
 }
@@ -10593,13 +10689,16 @@ textarea::placeholder {
 .shTableHead span,
 .shTableRow span,
 .opTableHead span,
-.opTableRow span {
+.opTableRow span,
+.shSourceTableHead span,
+.shSourceTableRow span {
   border-bottom: 1px solid #e1e5e9;
   padding: 10px 11px;
 }
 
 .shTableRow span,
-.opTableRow span {
+.opTableRow span,
+.shSourceTableRow span {
   display: flex;
   align-items: center;
   min-height: 58px;
@@ -10609,10 +10708,59 @@ textarea::placeholder {
   font-weight: 400;
 }
 
+.shSourceTableRow span {
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.shSourceTableRow strong {
+  color: #30343a;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.shSourceTableRow small {
+  margin-top: 3px;
+  color: #8a9097;
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
 .shTableRow span:first-child,
 .opTableRow span:nth-child(2) {
   color: #30343a;
   font-weight: 500;
+}
+
+.shSourceEmpty {
+  border: 1px dashed #d9dee3;
+  border-radius: 14px;
+  padding: 18px;
+  background: #fafbfc;
+}
+
+.shSourceEmpty span {
+  display: block;
+  color: #30343a;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.shSourceEmpty p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #626972;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.shSourceEmpty small {
+  display: block;
+  margin-top: 10px;
+  color: #73ad64;
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 
 .shState,
@@ -10708,8 +10856,13 @@ textarea::placeholder {
 
 @media (max-width: 980px) {
   .shHeader,
-  .shSummaryGrid {
+  .shSummaryGrid,
+  .shSourceHeader {
     grid-template-columns: 1fr;
+  }
+
+  .shSourceStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -10722,6 +10875,15 @@ textarea::placeholder {
 
   .opHeaderStats {
     grid-template-columns: 1fr;
+  }
+
+  .shSourceStats,
+  .riDateStory {
+    grid-template-columns: 1fr;
+  }
+
+  .riDateStory small {
+    grid-column: auto;
   }
 }
 

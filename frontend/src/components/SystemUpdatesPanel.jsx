@@ -53,6 +53,30 @@ function healthTone(state) {
   return 'missing';
 }
 
+function sourceStatusTone(source = {}) {
+  if (!source.enabled) return 'missing';
+  const normalized = String(source.lastStatus || '').toLowerCase();
+  if (normalized === 'ok') return 'ready';
+  if (normalized === 'partial' || normalized === 'never_checked') return 'supporting';
+  return 'missing';
+}
+
+function formatSourceStatus(source = {}) {
+  if (!source.enabled) return 'Disabled';
+  const normalized = String(source.lastStatus || '').trim();
+  if (!normalized || normalized === 'never_checked') return 'Not checked yet';
+  if (normalized === 'ok') return 'OK';
+  return normalized.replace(/_/g, ' ');
+}
+
+function formatSourceLabel(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return 'Not configured';
+  return normalized
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function rowTimestamp(rows = [], matcher) {
   const timestamps = rows
     .filter(matcher)
@@ -192,6 +216,92 @@ function SummaryCard({ label, value, note, tone = 'ready' }) {
   );
 }
 
+function LiveSourceRegistryPanel({ liveSources = null }) {
+  const sources = Array.isArray(liveSources?.sources) ? liveSources.sources : [];
+  const enabledSources = Number(liveSources?.enabledSources || 0);
+  const okSources = Number(liveSources?.okSources || 0);
+  const partialSources = Number(liveSources?.partialSources || 0);
+  const failedSources = Number(liveSources?.failedSources || 0);
+  const neverCheckedSources = Number(liveSources?.neverCheckedSources || 0);
+
+  return (
+    <section className="shPanel shSourcePanel" aria-label="Registered live connector source status">
+      <div className="shPanelHeader shSourceHeader">
+        <div>
+          <span>Live connector registry</span>
+          <p>
+            These are the permanent source contracts that can feed verified Revenue Intelligence.
+            A source can exist before it has produced accepted rate evidence.
+          </p>
+        </div>
+        <div className="shSourceStats" aria-label="Live source summary">
+          <article>
+            <span>Enabled</span>
+            <em>{enabledSources}</em>
+          </article>
+          <article>
+            <span>Healthy</span>
+            <em>{okSources}</em>
+          </article>
+          <article>
+            <span>Watch</span>
+            <em>{partialSources + neverCheckedSources}</em>
+          </article>
+          <article>
+            <span>Failed</span>
+            <em>{failedSources}</em>
+          </article>
+        </div>
+      </div>
+
+      {sources.length ? (
+        <div className="shSourceTable" role="table" aria-label="Live source registry table">
+          <div className="shSourceTableHead" role="row">
+            <span>Source</span>
+            <span>Type</span>
+            <span>Adapter</span>
+            <span>Status</span>
+            <span>Last checked</span>
+            <span>Proof</span>
+            <span>Reason / next action</span>
+          </div>
+          {sources.map((source) => (
+            <article key={source.id || `${source.sourceName}-${source.sourceType}`} className="shSourceTableRow" role="row">
+              <span>
+                <strong>{source.sourceName || 'Unnamed source'}</strong>
+                <small>{source.hotelName || source.city || 'Market source'}</small>
+              </span>
+              <span>{formatSourceLabel(source.sourceType)}</span>
+              <span>{formatSourceLabel(source.adapterType)}</span>
+              <span>
+                <em className={`shState shTone-${sourceStatusTone(source)}`}>
+                  {formatSourceStatus(source)}
+                </em>
+              </span>
+              <span>{formatTimestamp(source.lastCheckedAt)}</span>
+              <span>{source.proofRequired ? 'Required' : 'Optional'}</span>
+              <span>
+                {source.lastError || (source.lastCheckedAt
+                  ? 'Source registered. Keep scheduler active and review latest accepted observations.'
+                  : 'Registered but not checked yet. Run the verified live capture job.')}
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="shSourceEmpty">
+          <span>No live connector source registered yet</span>
+          <p>
+            Register the official booking engine and priority OTA proof manifests first. Until then,
+            the dashboard will keep rate fields as Not captured instead of inventing market data.
+          </p>
+          <small>Next: add source manifests → run verified capture → review accepted observations.</small>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function resolvePropertyName(dashboard = null) {
   const directName =
     dashboard?.hotelName ||
@@ -247,6 +357,8 @@ export default function SystemUpdatesPanel({
         <SummaryCard label="Ready feeds" value={`${readyCount}/${rows.length}`} note={`${watchCount} watch · ${missingCount} missing`} tone={missingCount ? 'supporting' : 'ready'} />
         <SummaryCard label="Decision policy" value="No zero fallback" note="Missing values stay Not captured / Unavailable" />
       </div>
+
+      <LiveSourceRegistryPanel liveSources={status?.liveSources} />
 
       <section className="shPanel">
         <div className="shPanelHeader">

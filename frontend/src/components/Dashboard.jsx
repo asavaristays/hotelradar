@@ -755,6 +755,7 @@ function RateEvidencePanel({ dashboard, otaRows, competitorRows }) {
 
 function DatePressurePanel({ dates }) {
   const visibleDates = dates.slice(0, 7);
+  const headlineDates = visibleDates.filter((date) => date.tone !== 'missing').slice(0, 4);
   const heightFor = (date) => {
     if (date.tone === 'high') return 88;
     if (date.tone === 'watch') return 58;
@@ -765,7 +766,7 @@ function DatePressurePanel({ dates }) {
     <section className="riPanel riDatePanel" aria-label="Revenue date pressure">
       <div className="riPanelHeader">
         <span>Revenue dates</span>
-        <p>Upcoming stay-date pressure</p>
+        <p>Month pressure map for upcoming stay dates</p>
       </div>
       <div className="riDateBars">
         {visibleDates.map((date) => (
@@ -775,6 +776,15 @@ function DatePressurePanel({ dates }) {
             </div>
             <span>{formatDate(date.date, { weekday: undefined }).replace(',', '')}</span>
             <small>{date.pressure}</small>
+          </article>
+        ))}
+      </div>
+      <div className="riDateList" aria-label="Important revenue dates">
+        {(headlineDates.length ? headlineDates : visibleDates.slice(0, 3)).map((date) => (
+          <article key={`story-${date.date}-${date.label}`} className={`riDateStory riDate-${date.tone}`}>
+            <span>{formatDate(date.date, { year: 'numeric' })}</span>
+            <strong>{date.label}</strong>
+            <small>{date.driver || date.pressure || 'Revenue pressure watch'}</small>
           </article>
         ))}
       </div>

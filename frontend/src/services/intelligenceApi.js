@@ -430,6 +430,7 @@ export async function getMarketDemand(token, city = 'Goa', horizonDays = 30) {
 }
 
 export function normalizeSystemStatusPayload(payload = {}) {
+  const liveSources = payload?.live_sources || {};
   return {
     hotelsIndexed: toNumber(payload?.hotels_indexed, 0),
     signalsGenerated: toNumber(payload?.signals_generated, 0),
@@ -445,6 +446,33 @@ export function normalizeSystemStatusPayload(payload = {}) {
     systemMessage: String(payload?.system_message || '').trim(),
     lastHotelScrapeAt: String(payload?.last_hotel_scrape_at || '').trim(),
     lastSignalRefreshAt: String(payload?.last_signal_refresh_at || '').trim(),
+    liveSources: {
+      totalSources: toNumber(liveSources?.total_sources, 0),
+      enabledSources: toNumber(liveSources?.enabled_sources, 0),
+      okSources: toNumber(liveSources?.ok_sources, 0),
+      partialSources: toNumber(liveSources?.partial_sources, 0),
+      failedSources: toNumber(liveSources?.failed_sources, 0),
+      neverCheckedSources: toNumber(liveSources?.never_checked_sources, 0),
+      lastCheckedAt: String(liveSources?.last_checked_at || '').trim(),
+      sources: Array.isArray(liveSources?.sources)
+        ? liveSources.sources.map((entry) => ({
+            id: String(entry?.id || '').trim(),
+            hotelId: String(entry?.hotel_id || '').trim(),
+            hotelName: String(entry?.hotel_name || '').trim(),
+            city: String(entry?.city || '').trim(),
+            sourceType: String(entry?.source_type || '').trim(),
+            sourceName: String(entry?.source_name || '').trim(),
+            adapterType: String(entry?.adapter_type || '').trim(),
+            enabled: Boolean(entry?.enabled),
+            cadenceMinutes: toNumber(entry?.cadence_minutes, 0),
+            proofRequired: Boolean(entry?.proof_required),
+            freshnessMinutes: toNumber(entry?.freshness_minutes, 0),
+            lastCheckedAt: String(entry?.last_checked_at || '').trim(),
+            lastStatus: String(entry?.last_status || '').trim(),
+            lastError: String(entry?.last_error || '').trim(),
+          }))
+        : [],
+    },
     systemTime: String(payload?.system_time || '').trim(),
   };
 }
