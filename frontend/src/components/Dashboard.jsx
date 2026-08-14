@@ -544,6 +544,180 @@ function ClientKpiGrid({ dashboard, signals, selectedDate, otaRows, competitorRo
   );
 }
 
+function toneForReadiness(value) {
+  const score = Number(value || 0);
+  if (score >= 75) return 'ready';
+  if (score >= 55) return 'supporting';
+  return 'missing';
+}
+
+function firstAvailable(items = []) {
+  return items.find((item) => String(item || '').trim()) || '';
+}
+
+function buildGmCommand({ dashboard = {}, model = null, signals = [], dates = [], market = '', selectedDate = '' }) {
+  const summary = model?.executiveSummary || {};
+  const evidence = Array.isArray(model?.evidence) ? model.evidence : [];
+  const opportunities = Array.isArray(model?.opportunityRows) ? model.opportunityRows : [];
+  const missing = Array.isArray(model?.missingDataActions) ? model.missingDataActions : [];
+  const morningBullets = Array.isArray(model?.morningBrief?.bullets) ? model.morningBrief.bullets : [];
+  const confidenceScore = numericOrNull(summary.confidenceScore) ?? evidencePct(signals);
+  const missingRequired = evidence.filter((item) => item.requiredForStrongAction && item.status !== 'ready');
+  const activeSignals = evidence.filter((item) => item.status === 'ready' || item.status === 'supporting');
+  const watchDates = dates.filter((date) => date.tone === 'high' || date.tone === 'watch').slice(0, 3);
+  const official = evidence.find((item) => item.key === 'official_rate') || signalByKey(signals, 'own-rate');
+  const ota = evidence.find((item) => item.key === 'ota_rate') || signalByKey(signals, 'ota');
+  const competitor = evidence.find((item) => item.key === 'competitor_rate') || signalByKey(signals, 'competitors');
+  const freshness = evidence.find((item) => item.key === 'freshness') || signalByKey(signals, 'freshness');
+  const demandSignals = evidence.filter((item) =>
+    ['event_pressure', 'travel_pressure', 'mice_pressure', 'wedding_pressure'].includes(item.key) &&
+    item.status !== 'missing');
+
+  const action = summary.pricingAction || summary.title || dashboard?.actionSummary?.action || 'Hold / Watch';
+  const attention =
+    missingRequired.length > 0
+      ? `Strong rate action is locked until ${missingRequired.map((item) => item.label.toLowerCase()).join(', ')} are ready.`
+      : 'Required pricing evidence is ready for a controlled revenue decision.';
+
+  const headline = firstAvailable([
+    morningBullets[4],
+    opportunities[0]?.opportunity,
+    activeSignals.length ? `${activeSignals.length} evidence layers are active for ${formatDate(selectedDate)}.` : '',
+    'Revenue Intelligence is waiting for verified market evidence.',
+  ]);
+
+  return {
+    action,
+    confidenceScore,
+    trustStatus: String(summary.trustStatus || '').replace(/_/g, ' ') || 'watch only',
+    headline,
+    attention,
+    market,
+    selectedDate,
+    sourceRows: [
+      {
+        label: 'Official rate',
+        status: official?.status || 'missing',
+        value: official?.value || formatCurrency(dashboard?.marketPosition?.hotelPrice),
+        note: official?.clientMeaning || official?.detail || 'Direct selling rate',
+      },
+      {
+        label: 'OTA proof',
+        status: ota?.status || 'missing',
+        value: ota?.value || 'Not connected',
+        note: ota?.clientMeaning || ota?.detail || 'Public channel evidence',
+      },
+      {
+        label: 'Competitor proof',
+        status: competitor?.status || 'missing',
+        value: competitor?.value || 'Not captured',
+        note: competitor?.clientMeaning || competitor?.detail || 'Comparable market pressure',
+      },
+      {
+        label: 'Demand pressure',
+        status: demandSignals.length >= 2 ? 'ready' : demandSignals.length ? 'supporting' : 'missing',
+        value: demandSignals.length ? `${demandSignals.length} active` : 'Not connected',
+        note: 'Event, travel, MICE, wedding signals',
+      },
+      {
+        label: 'Freshness',
+        status: freshness?.status || 'missing',
+        value: freshness?.value || formatTimestamp(dashboard?.realtimeSignals?.latestCapturedAt),
+        note: freshness?.clientMeaning || freshness?.detail || 'Last verified observation',
+      },
+    ],
+    actionCards: [
+      {
+        owner: 'Revenue',
+        title: action,
+        detail: attention,
+        tone: toneForReadiness(confidenceScore),
+      },
+      {
+        owner: 'Sales',
+        title: opportunities.find((item) => item.type === 'sales')?.opportunity || 'Watch group demand windows',
+        detail: opportunities.find((item) => item.type === 'sales')?.action || 'Use MICE and wedding signals to start opportunity validation.',
+        tone: demandSignals.length ? 'supporting' : 'missing',
+      },
+      {
+        owner: 'Data ops',
+        title: missing.length ? `${missing.length} evidence gap${missing.length === 1 ? '' : 's'} to close` : 'Evidence contract healthy',
+        detail: missing[0]?.action || 'Keep proof-bearing source capture fresh before the morning brief.',
+        tone: missing.length ? 'supporting' : 'ready',
+      },
+    ],
+    watchDates,
+  };
+}
+
+function GmCommandPanel({ dashboard, model, signals, dates, market, selectedDate }) {
+  const command = buildGmCommand({ dashboard, model, signals, dates, market, selectedDate });
+
+  return (
+    <section className="riPanel riCommandPanel" aria-label="GM morning command view">
+      <div className="riCommandHero">
+        <div>
+          <span>GM Morning Command View</span>
+          <h2>{command.headline}</h2>
+          <p>{command.attention}</p>
+        </div>
+        <article>
+          <span>Action</span>
+          <strong>{command.action}</strong>
+          <small>{command.trustStatus} · {command.confidenceScore}% readiness</small>
+        </article>
+      </div>
+
+      <div className="riCommandGrid">
+        <div className="riCommandBlock">
+          <span>Source confidence</span>
+          <div className="riSourceStack">
+            {command.sourceRows.map((row) => (
+              <article key={row.label} className={`riSourceRow riTone-${row.status}`}>
+                <div>
+                  <strong>{row.label}</strong>
+                  <small>{row.note}</small>
+                </div>
+                <em>{statusCopy(row.status)}</em>
+                <span>{row.value}</span>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="riCommandBlock">
+          <span>Today’s operating focus</span>
+          <div className="riActionStack">
+            {command.actionCards.map((card) => (
+              <article key={`${card.owner}-${card.title}`} className={`riActionCard riTone-${card.tone}`}>
+                <em>{card.owner}</em>
+                <strong>{card.title}</strong>
+                <p>{card.detail}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="riCommandBlock">
+          <span>Upcoming pressure</span>
+          <div className="riWatchDates">
+            {command.watchDates.map((date) => (
+              <article key={`${date.date}-${date.label}`} className={`riWatchDate riDate-${date.tone}`}>
+                <em>{formatDate(date.date, { weekday: undefined }).replace(',', '')}</em>
+                <strong>{date.label}</strong>
+                <small>{date.pressure} · {date.driver}</small>
+              </article>
+            ))}
+            {!command.watchDates.length ? (
+              <p className="metaLabel">No upcoming pressure date is ready yet.</p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function RateEvidencePanel({ dashboard, otaRows, competitorRows }) {
   const ownRate = numericOrNull(dashboard?.marketPosition?.hotelPrice) || 0;
   const marketAvg = numericOrNull(dashboard?.marketPosition?.marketAvg) || 0;
@@ -850,6 +1024,15 @@ export default function Dashboard({ dashboard, loading, error }) {
           otaRows={otaRows}
           competitorRows={competitorRows}
           model={model}
+        />
+
+        <GmCommandPanel
+          dashboard={dashboard}
+          model={model}
+          signals={signals}
+          dates={dates}
+          market={market}
+          selectedDate={selectedDate}
         />
 
         <BetaReadinessPanel model={model} />

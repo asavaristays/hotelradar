@@ -9676,6 +9676,218 @@ textarea::placeholder {
   color: #5276a9;
 }
 
+.riCommandPanel {
+  min-height: auto;
+  padding: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 252, 0.98)),
+    radial-gradient(circle at 8% 10%, rgba(15, 157, 138, 0.08), transparent 30%);
+}
+
+.riCommandHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.24fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.riCommandHero > div {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-height: 112px;
+  border: 1px solid rgba(216, 226, 235, 0.9);
+  border-radius: 18px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.riCommandHero span,
+.riCommandBlock > span {
+  display: block;
+  color: #607085;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.riCommandHero h2 {
+  margin: 0;
+  color: #202a36;
+  font-size: 1.1rem;
+  line-height: 1.34;
+  font-weight: 500;
+}
+
+.riCommandHero p {
+  max-width: 900px;
+  margin: 0;
+  color: #5d6f84;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.riCommandHero article {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  min-height: 112px;
+  border: 1px solid rgba(15, 157, 138, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(33, 132, 207, 0.08), rgba(15, 157, 138, 0.11));
+  text-align: center;
+}
+
+.riCommandHero article strong {
+  color: #18364f;
+  font-size: 1.16rem;
+  line-height: 1.22;
+  font-weight: 500;
+}
+
+.riCommandHero article small {
+  color: #657386;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.riCommandGrid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.15fr) minmax(260px, 0.8fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.riCommandBlock {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid #dde7f0;
+  border-radius: 18px;
+  padding: 15px;
+  background: #ffffff;
+}
+
+.riSourceStack,
+.riActionStack,
+.riWatchDates {
+  display: grid;
+  gap: 9px;
+}
+
+.riSourceRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 10px;
+  align-items: center;
+  border: 1px solid #e4ebf2;
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: #f9fbfd;
+}
+
+.riSourceRow strong,
+.riActionCard strong,
+.riWatchDate strong {
+  color: #263342;
+  font-size: 0.84rem;
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+.riSourceRow small,
+.riWatchDate small {
+  display: block;
+  margin-top: 2px;
+  color: #7a8898;
+  font-size: 0.7rem;
+  line-height: 1.32;
+}
+
+.riSourceRow em {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #f1f4f7;
+  color: #607085;
+  font-size: 0.64rem;
+  font-style: normal;
+}
+
+.riSourceRow span {
+  grid-column: 1 / -1;
+  color: #405066;
+  font-size: 0.76rem;
+}
+
+.riSourceRow.riTone-ready em {
+  background: rgba(15, 157, 138, 0.12);
+  color: #0f7a5d;
+}
+
+.riSourceRow.riTone-supporting em {
+  background: rgba(159, 189, 232, 0.24);
+  color: #5276a9;
+}
+
+.riSourceRow.riTone-missing em,
+.riSourceRow.riTone-stale em {
+  background: rgba(211, 75, 75, 0.09);
+  color: #ad5d00;
+}
+
+.riActionCard {
+  display: grid;
+  gap: 5px;
+  border-left: 3px solid #9fbde8;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #f9fbfd;
+}
+
+.riActionCard.riTone-ready {
+  border-left-color: #0f9d8a;
+}
+
+.riActionCard.riTone-missing {
+  border-left-color: #d18a2c;
+}
+
+.riActionCard em,
+.riWatchDate em {
+  color: #607085;
+  font-size: 0.68rem;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.riActionCard p {
+  margin: 0;
+  color: #5d6f84;
+  font-size: 0.78rem;
+  line-height: 1.42;
+}
+
+.riWatchDate {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e4ebf2;
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: #f9fbfd;
+}
+
+.riWatchDate.riDate-high {
+  border-color: rgba(233, 93, 93, 0.28);
+  background: rgba(233, 93, 93, 0.055);
+}
+
+.riWatchDate.riDate-watch {
+  border-color: rgba(15, 157, 138, 0.22);
+  background: rgba(15, 157, 138, 0.045);
+}
+
 .riBetaReadinessPanel {
   min-height: auto;
   padding: 20px;
@@ -9838,6 +10050,10 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .riCommandGrid {
+    grid-template-columns: 1fr;
+  }
+
   .riBetaPillars {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -9855,6 +10071,7 @@ textarea::placeholder {
 
   .riHeader,
   .riHeaderMeta,
+  .riCommandHero,
   .riKpiGrid,
   .riBetaReadinessIntro,
   .riBetaPillars,
