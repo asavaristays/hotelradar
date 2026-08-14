@@ -19,6 +19,7 @@
     "ingestion:ota": "node src/scripts/runOtaIngestion.js",
     "ingestion:realtime-signals": "node src/scripts/runRealtimeSignalCapture.js --once",
     "sources:register": "node src/scripts/registerVerifiedLiveDataSource.js",
+    "sources:provision-feed-pack": "node src/scripts/provisionVerifiedSourceFeedPack.js",
     "seed:phase1-market-intelligence": "node src/scripts/seedPhaseOneMarketIntelligence.js",
     "signals:capture": "node src/scripts/captureManualSignal.js",
     "briefs:morning": "node src/scripts/runRevenueIntelligenceMorningBriefs.js",
