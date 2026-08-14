@@ -64,6 +64,26 @@ flowchart LR
 
 Use the CLI after the source has a proof-manifest URL or a server-side manifest file.
 
+For a new beta property, provision the standard five-feed pack first:
+
+```bash
+npm run sources:provision-feed-pack -- \
+  --hotel-name "The Ten" \
+  --city Goa \
+  --slug the-ten \
+  --base-dir /opt/radar_light/shared/live_sources
+```
+
+This creates and registers:
+
+- `official-rates.json`
+- `ota-rates.json`
+- `competitor-rates.json`
+- `demand-signals.json`
+- `pms-pickup.json`
+
+The provisioner does not overwrite existing manifests unless `--overwrite true` is passed. Keep `rows: []` empty until evidence is genuinely captured; never enter `0` for missing rates.
+
 Official booking-engine manifest example:
 
 ```bash
@@ -111,6 +131,14 @@ Manifest shape:
   ]
 }
 ```
+
+After editing manifest rows, run:
+
+```bash
+npm run ingestion:realtime-signals
+```
+
+System Health should then show each registered source as `ok`, `partial`, or `failed` with the last checked time.
 
 ## Recommended permanent connectors
 
