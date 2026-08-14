@@ -18,10 +18,15 @@ import {
   insertRealtimeSignalObservation,
   listLatestRateEvidence,
 } from '../repositories/realtimeSignalRepository.js';
+import {
+  listEnabledVerifiedLiveDataSources,
+  updateVerifiedLiveDataSourceHealth,
+} from '../repositories/verifiedLiveDataSourceRepository.js';
 import { listUpcomingEventsByCity } from '../repositories/eventRepository.js';
 import { enqueueRecalculationJob } from './recalcQueueService.js';
 import { normalizeCompetitorRates } from './intelligence-engine/rateNormalizationEngine.js';
 import { getLeadRadarExternalSignals } from './googleSignalIntelService.js';
+import { collectVerifiedLiveDataSourceRows } from './verifiedLiveDataSourceAdapterService.js';
 import {
   normalizeVerifiedLiveObservation,
   summarizeConnectorVerification,
@@ -37,6 +42,7 @@ const DEFAULT_SNAPSHOT_PATHS = [
 ];
 
 const OTA_PATTERN = /(booking|agoda|makemytrip|\bmmt\b|goibibo|expedia|trip\.?com|tripadvisor|google hotels)/i;
+const RATE_SIGNAL_TYPES = new Set(['hotel_rate', 'ota_rate', 'competitor_rate']);
 
 const defaultDeps = {
   listActiveHotelsForIngestion,
@@ -49,6 +55,9 @@ const defaultDeps = {
   finishRealtimeSignalRun,
   insertRealtimeSignalObservation,
   listLatestRateEvidence,
+  listEnabledVerifiedLiveDataSources,
+  updateVerifiedLiveDataSourceHealth,
+  collectVerifiedLiveDataSourceRows,
   listUpcomingEventsByCity,
   enqueueRecalculationJob,
   getLeadRadarExternalSignals,
@@ -127,9 +136,11 @@ function toFinitePrice(row = {}) {
 
 function isHotelRateRow(row = {}) {
   const kind = String(row.kind || row.signal_type || row.type || '').trim().toLowerCase();
+  const sourceType = String(row.source_type || row.sourceType || '').trim().toLowerCase();
+  if (sourceType === 'official') return true;
   if (row.is_hotel_rate === true) return true;
   if (kind === 'hotel_rate' || kind === 'official_rate') return true;
-  return !String(row.competitor_name || '').trim() && toFinitePrice(row) > 0;
+  return !sourceType && !String(row.competitor_name || '').trim() && toFinitePrice(row) > 0;
 }
 
 function toRateList(row = {}) {
@@ -251,6 +262,37 @@ async function processSnapshotRow({ row, hotel, runId, nowIso, deps }) {
   const checkinDate = toCheckinDate(row.checkin_date || row.date || row.stay_date);
   const proofUrl = String(row.proof_url || row.url || row.website_url || '').trim();
   const observedAt = row.observed_at || row.captured_at || nowIso;
+  const sourceTypeHint = String(row.source_type || row.sourceType || '').trim().toLowerCase();
+  const signalTypeHint = String(row.signal_type || row.signalType || '').trim().toLowerCase();
+  const isKnownNonRateSignal =
+    signalTypeHint && !RATE_SIGNAL_TYPES.has(signalTypeHint) && sourceTypeHint !== 'official';
+
+  if (isKnownNonRateSignal) {
+    const recorded = await recordObservation({
+      runId,
+      hotelId: hotel.id,
+      city: hotel.city,
+      checkinDate,
+      sourceType: sourceTypeHint,
+      sourceName: String(row.source_name || row.sourceName || row.channel || row.provider || 'Live data source').trim(),
+      signalType: signalTypeHint,
+      valueNumeric: row.value_numeric ?? row.valueNumeric ?? row.price ?? row.rate ?? row.amount ?? null,
+      valueText: String(row.value_text || row.valueText || row.description || row.note || '').trim(),
+      proofUrl,
+      confidenceScore: Number(row.confidence_score || row.confidenceScore || 70),
+      observedAt,
+      freshnessExpiresAt: row.freshness_expires_at || row.freshnessExpiresAt || freshnessExpiry(nowIso, sourceTypeHint),
+      nowIso,
+      connectorName: row.connector_name || row.connectorName || row.source_adapter || row.source || 'configured-live-data-source',
+      metadata: { ...(row.metadata || {}), directConnectorSignal: true },
+    }, deps);
+    if (!recorded.accepted) return { skipped: true, reason: recorded.reason, verification: recorded };
+    return {
+      signalRows: 1,
+      affected: { hotelId: hotel.id, checkinDate },
+      verification: recorded,
+    };
+  }
 
   if (isHotelRateRow(row)) {
     const price = toFinitePrice(row);
@@ -517,7 +559,12 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
     weddingRows: 0,
     miceRows: 0,
     googleTrendRows: 0,
+    directSignalRows: 0,
     mirroredEvidenceRows: 0,
+    configuredSourceRows: 0,
+    configuredSourcesChecked: 0,
+    configuredSourcesOk: 0,
+    configuredSourcesFailed: 0,
     skippedRows: 0,
     verifiedRows: 0,
     needsProofRows: 0,
@@ -544,7 +591,28 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
     summary.missingSnapshot = !snapshot.rows.length;
 
     const affected = [];
-    for (const row of snapshot.rows) {
+    const configuredSources = await deps.listEnabledVerifiedLiveDataSources?.({ hotelId: options.hotelId || null }) || [];
+    const configuredRows = await deps.collectVerifiedLiveDataSourceRows?.({
+      sources: configuredSources,
+      nowIso,
+    });
+    const sourceResults = Array.isArray(configuredRows?.sourceResults) ? configuredRows.sourceResults : [];
+    summary.configuredSourcesChecked = sourceResults.length;
+    summary.configuredSourcesOk = sourceResults.filter((row) => row.status === 'ok').length;
+    summary.configuredSourcesFailed = sourceResults.filter((row) => row.status === 'failed').length;
+    summary.configuredSourceRows = Array.isArray(configuredRows?.rows) ? configuredRows.rows.length : 0;
+
+    for (const result of sourceResults) {
+      if (!result.sourceId || !deps.updateVerifiedLiveDataSourceHealth) continue;
+      await deps.updateVerifiedLiveDataSourceHealth({
+        sourceId: result.sourceId,
+        status: result.status,
+        errorMessage: result.error,
+        metadata: { lastRows: result.rows, lastRunId: run.id },
+      });
+    }
+
+    for (const row of [...snapshot.rows, ...(configuredRows?.rows || [])]) {
       const hotel = resolveHotel(row, hotelIndex);
       if (!hotel) {
         summary.skippedRows += 1;
@@ -559,6 +627,7 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
       summary.hotelRateRows += Number(result.hotelRateRows || 0);
       summary.otaRows += Number(result.otaRows || 0);
       summary.competitorRows += Number(result.competitorRows || 0);
+      summary.directSignalRows += Number(result.signalRows || 0);
       if (result.verification) verificationResults.push(result.verification);
       affected.push(result.affected);
     }

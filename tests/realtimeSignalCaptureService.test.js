@@ -10,6 +10,7 @@ function buildDeps(overrides = {}) {
   const observations = [];
   const recalcJobs = [];
   const finishedRuns = [];
+  const sourceHealthUpdates = [];
   const deps = {
     listActiveHotelsForIngestion: async () => [
       {
@@ -33,6 +34,12 @@ function buildDeps(overrides = {}) {
       return payload;
     },
     listLatestRateEvidence: async () => [],
+    listEnabledVerifiedLiveDataSources: async () => [],
+    updateVerifiedLiveDataSourceHealth: async (payload) => {
+      sourceHealthUpdates.push(payload);
+      return payload;
+    },
+    collectVerifiedLiveDataSourceRows: async () => ({ rows: [], sourceResults: [] }),
     listUpcomingEventsByCity: async () => [
       {
         city: 'Goa',
@@ -71,7 +78,7 @@ function buildDeps(overrides = {}) {
     execFile: async () => ({ stdout: '', stderr: '' }),
     ...overrides,
   };
-  return { deps, observations, recalcJobs, finishedRuns };
+  return { deps, observations, recalcJobs, finishedRuns, sourceHealthUpdates };
 }
 
 describe('realtimeSignalCaptureService', () => {
@@ -194,5 +201,70 @@ describe('realtimeSignalCaptureService', () => {
         }),
       ]),
     );
+  });
+
+  test('captures configured verified live-data source rows and updates source health', async () => {
+    const { deps, observations, sourceHealthUpdates } = buildDeps({
+      listUpcomingEventsByCity: async () => [],
+      listEnabledVerifiedLiveDataSources: async () => [
+        {
+          id: 'source-official-1',
+          hotel_id: 'hotel-goa-1',
+          hotel_name: 'The Ten Resort Siolem',
+          city: 'Goa',
+          source_type: 'official',
+          source_name: 'The Ten booking engine',
+          adapter_type: 'official_rate_manifest',
+          source_url: '/tmp/the-ten-official-rates.json',
+        },
+      ],
+      collectVerifiedLiveDataSourceRows: async () => ({
+        sourceResults: [{ sourceId: 'source-official-1', status: 'ok', rows: 1, error: null }],
+        rows: [
+          {
+            hotel_id: 'hotel-goa-1',
+            city: 'Goa',
+            checkin_date: '2026-08-17',
+            source_type: 'official',
+            source_name: 'The Ten booking engine',
+            signal_type: 'hotel_rate',
+            rate: 37200,
+            proof_url: 'https://letsbook.me/booking/994038?checkin=2026-08-17',
+            connector_name: 'official_rate_manifest',
+          },
+        ],
+      }),
+    });
+
+    const summary = await runRealtimeSignalCaptureCycle(
+      {
+        snapshotPath: '/tmp/hotelradar-no-snapshot.json',
+        source: 'test-realtime-capture',
+        cadence: 'manual',
+      },
+      deps,
+    );
+
+    expect(summary.configuredSourcesChecked).toBe(1);
+    expect(summary.configuredSourcesOk).toBe(1);
+    expect(summary.configuredSourceRows).toBe(1);
+    expect(summary.hotelRateRows).toBe(1);
+    expect(summary.verifiedRows).toBe(1);
+    expect(sourceHealthUpdates).toEqual([
+      expect.objectContaining({
+        sourceId: 'source-official-1',
+        status: 'ok',
+        metadata: expect.objectContaining({ lastRows: 1, lastRunId: 'run-1' }),
+      }),
+    ]);
+    expect(observations).toEqual([
+      expect.objectContaining({
+        sourceType: 'official',
+        signalType: 'hotel_rate',
+        valueNumeric: 37200,
+        proofUrl: 'https://letsbook.me/booking/994038?checkin=2026-08-17',
+        metadata: expect.objectContaining({ verificationStatus: 'verified' }),
+      }),
+    ]);
   });
 });

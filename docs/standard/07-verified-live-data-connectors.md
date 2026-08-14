@@ -60,6 +60,58 @@ flowchart LR
   G --> H["Daily Market Intelligence email/PDF"]
 ```
 
+## Registering a connector source
+
+Use the CLI after the source has a proof-manifest URL or a server-side manifest file.
+
+Official booking-engine manifest example:
+
+```bash
+npm run sources:register -- \
+  --hotel-id <hotel_uuid> \
+  --city Goa \
+  --source-type official \
+  --source-name "The Ten booking engine" \
+  --adapter-type official_rate_manifest \
+  --source-url "/opt/radar_light/shared/live_sources/the-ten-official-rates.json" \
+  --proof-required true \
+  --freshness-minutes 240 \
+  --cadence-minutes 60
+```
+
+OTA / Google Hotels proof manifest example:
+
+```bash
+npm run sources:register -- \
+  --hotel-id <hotel_uuid> \
+  --city Goa \
+  --source-type ota \
+  --source-name "Google Hotels proof manifest" \
+  --adapter-type google_hotels_manifest \
+  --source-url "/opt/radar_light/shared/live_sources/the-ten-google-hotels.json" \
+  --proof-required true \
+  --freshness-minutes 120 \
+  --cadence-minutes 60
+```
+
+Manifest shape:
+
+```json
+{
+  "rows": [
+    {
+      "checkin_date": "2026-08-16",
+      "source_name": "Agoda",
+      "source_type": "ota",
+      "signal_type": "ota_rate",
+      "rate": 35400,
+      "proof_url": "https://example.com/proof",
+      "observed_at": "2026-08-15T04:00:00.000Z"
+    }
+  ]
+}
+```
+
 ## Recommended permanent connectors
 
 Phase 1 — current foundation:
@@ -101,4 +153,3 @@ They only produce verified or guarded evidence. Central Revenue Intelligence dec
 - Close Discount
 - Minimum Stay
 - Close Out
-
