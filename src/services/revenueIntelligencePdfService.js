@@ -43,6 +43,27 @@ function statusColor(status = '') {
   return BRAND.muted;
 }
 
+function toneColor(tone = '') {
+  const value = clean(tone).toLowerCase();
+  if (value === 'high') return BRAND.red;
+  if (value === 'watch') return '#83bd73';
+  if (value === 'ready') return BRAND.green;
+  return '#cbd5df';
+}
+
+function numericOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function shortCurrency(value) {
+  const amount = numericOrNull(value);
+  if (amount === null) return 'Not captured';
+  if (amount >= 100000) return `Rs. ${Math.round(amount / 1000)}k`;
+  return `Rs. ${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount)}`;
+}
+
 function collect(doc) {
   const chunks = [];
   doc.on('data', (chunk) => chunks.push(chunk));
@@ -106,6 +127,68 @@ function filenameFor({ hotelName = 'hotel', stayDate = '' } = {}) {
   return `hotelradar-daily-market-intelligence-${hotelSlug}-${dateSlug}.pdf`;
 }
 
+function draw15DayTariffChart(doc, y, enterpriseBrief = {}) {
+  const days = normalizeList(enterpriseBrief.next15Days).slice(0, 15);
+  if (!days.length) return y;
+
+  y = ensureSpace(doc, y, 170);
+  sectionTitle(doc, '15-day tariff and pressure outlook', y);
+  const chartY = y + 36;
+  const chartX = 44;
+  const chartW = 506;
+  const chartH = 122;
+  const maxTariff = Math.max(
+    1,
+    ...days
+      .flatMap((day) => [numericOrNull(day.tariff), numericOrNull(day.marketTariff)])
+      .filter(Boolean),
+  );
+  const barGap = 5;
+  const barW = (chartW - barGap * (days.length - 1)) / days.length;
+
+  doc.roundedRect(chartX, chartY, chartW, chartH, 10).fillAndStroke('#ffffff', BRAND.line);
+  [0.25, 0.5, 0.75].forEach((share) => {
+    const lineY = chartY + 12 + (chartH - 46) * share;
+    doc.moveTo(chartX + 10, lineY).lineTo(chartX + chartW - 10, lineY).strokeColor('#edf2f7').stroke();
+  });
+
+  days.forEach((day, index) => {
+    const x = chartX + 10 + index * (barW + barGap);
+    const tariff = numericOrNull(day.tariff) || numericOrNull(day.marketTariff);
+    const barH = tariff ? Math.max(12, Math.round((tariff / maxTariff) * 70)) : 14;
+    const barY = chartY + 82 - barH;
+    doc.roundedRect(x, barY, Math.max(8, barW - 2), barH, 3).fill(tariff ? toneColor(day.tone) : '#d8e0e8');
+    doc
+      .fontSize(5.9)
+      .fillColor(BRAND.muted)
+      .text(displayDate(day.date).replace(/, 2026$/, ''), x - 1, chartY + 88, {
+        width: barW + 2,
+        align: 'center',
+        lineBreak: false,
+      });
+    doc
+      .fontSize(5.9)
+      .fillColor(tariff ? BRAND.ink : BRAND.muted)
+      .text(shortCurrency(tariff), x - 2, chartY + 104, {
+        width: barW + 4,
+        align: 'center',
+        lineBreak: false,
+      });
+  });
+
+  const footY = chartY + chartH + 8;
+  doc
+    .fontSize(7.5)
+    .fillColor(BRAND.muted)
+    .text(
+      'Bars use captured official tariff where available, otherwise captured market tariff. Missing values stay Not captured.',
+      44,
+      footY,
+      { width: 506, align: 'center' },
+    );
+  return footY + 24;
+}
+
 export async function buildRevenueIntelligencePdf({ dashboard = {}, model = {}, stayDate = '' } = {}) {
   const hotelName = dashboard?.hotel?.name || dashboard?.hotelName || 'HotelRADAR Property';
   const summary = model.executiveSummary || {};
@@ -113,6 +196,7 @@ export async function buildRevenueIntelligencePdf({ dashboard = {}, model = {}, 
   const opportunities = normalizeList(model.opportunityRows);
   const missingActions = normalizeList(model.missingDataActions);
   const brief = model.morningBrief || {};
+  const enterpriseBrief = model.enterpriseBrief || {};
   const insights = buildClientInsightNarrative({ dashboard, model });
   const reportDate = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -184,6 +268,8 @@ export async function buildRevenueIntelligencePdf({ dashboard = {}, model = {}, 
     });
 
   let y = 390;
+  y = draw15DayTariffChart(doc, y, enterpriseBrief);
+  y = ensureSpace(doc, y + 16, 105);
   sectionTitle(doc, 'Market read', y);
   y += 34;
   insights.marketRead.slice(0, 4).forEach((line) => {

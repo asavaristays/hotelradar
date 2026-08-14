@@ -27,13 +27,44 @@ function manifestPath(baseDir, slug, fileName) {
   return path.resolve(baseDir, slug, fileName);
 }
 
-function buildManifest({ title, sourceType, adapterType, description, templateRows = [] }) {
+function currentIndiaDate() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function addDays(dateString, days) {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ''))
+    ? new Date(`${dateString}T00:00:00Z`)
+    : new Date(`${currentIndiaDate()}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + Number(days || 0));
+  return parsed.toISOString().slice(0, 10);
+}
+
+function buildCapturePlan({ startDate = currentIndiaDate(), horizonDays = 15, requiredFields = [] } = {}) {
+  return Array.from({ length: Math.max(1, Math.min(31, Number(horizonDays || 15))) }, (_, index) => ({
+    stay_date: addDays(startDate, index),
+    status: 'awaiting_capture',
+    required_fields: requiredFields,
+    note: 'Fill rows only after verified evidence is captured for this stay date.',
+  }));
+}
+
+function buildManifest({ title, sourceType, adapterType, description, templateRows = [], requiredFields = [], startDate, horizonDays = 15 }) {
   return {
     schema_version: 'hotelradar-verified-live-source-v1',
     title,
     source_type: sourceType,
     adapter_type: adapterType,
     description,
+    horizon_days: horizonDays,
+    capture_plan: buildCapturePlan({ startDate, horizonDays, requiredFields }),
+    required_fields: requiredFields,
     rows: [],
     template_rows: templateRows,
     notes: [
@@ -51,6 +82,8 @@ export function buildVerifiedSourceFeedPackDefinitions({
   city = DEFAULT_CITY,
   baseDir = defaultBaseDir(),
   slug = DEFAULT_SLUG,
+  startDate = currentIndiaDate(),
+  horizonDays = 15,
 } = {}) {
   const safeHotelName = cleanText(hotelName) || DEFAULT_HOTEL_NAME;
   const safeCity = cleanText(city) || DEFAULT_CITY;
@@ -73,6 +106,9 @@ export function buildVerifiedSourceFeedPackDefinitions({
         sourceType: 'official',
         adapterType: 'official_rate_manifest',
         description: 'Direct booking engine / brand website rate evidence for the next 15 stay dates.',
+        requiredFields: ['hotel_id', 'city', 'checkin_date', 'source_type', 'source_name', 'signal_type', 'rate', 'proof_url', 'observed_at'],
+        startDate,
+        horizonDays,
         templateRows: [
           {
             hotel_id: hotelId || '<hotel_uuid>',
@@ -105,6 +141,9 @@ export function buildVerifiedSourceFeedPackDefinitions({
         sourceType: 'ota',
         adapterType: 'google_hotels_manifest',
         description: 'Google Hotels / Agoda / Booking.com / Expedia / MMT rate evidence with proof URL.',
+        requiredFields: ['hotel_id', 'city', 'checkin_date', 'source_type', 'source_name', 'signal_type', 'rate', 'proof_url', 'observed_at'],
+        startDate,
+        horizonDays,
         templateRows: [
           {
             hotel_id: hotelId || '<hotel_uuid>',
@@ -142,6 +181,9 @@ export function buildVerifiedSourceFeedPackDefinitions({
         sourceType: 'competitor',
         adapterType: 'json_manifest',
         description: 'Comparable competitor rates for the same stay date, length of stay, occupancy, and room basis.',
+        requiredFields: ['hotel_id', 'city', 'checkin_date', 'source_type', 'source_name', 'signal_type', 'rate', 'proof_url', 'observed_at'],
+        startDate,
+        horizonDays,
         templateRows: [
           {
             hotel_id: hotelId || '<hotel_uuid>',
@@ -179,6 +221,9 @@ export function buildVerifiedSourceFeedPackDefinitions({
         sourceType: 'event',
         adapterType: 'json_manifest',
         description: 'Holiday, event, MICE, wedding, travel/search, airfare, and local pressure observations.',
+        requiredFields: ['hotel_id', 'city', 'checkin_date', 'source_type', 'source_name', 'signal_type', 'value_text', 'observed_at'],
+        startDate,
+        horizonDays,
         templateRows: [
           {
             hotel_id: hotelId || '<hotel_uuid>',
@@ -228,6 +273,9 @@ export function buildVerifiedSourceFeedPackDefinitions({
         sourceType: 'pms',
         adapterType: 'pms_manifest',
         description: 'Internal hotel pickup, occupancy, cancellation, booking pace, and lead-time signal.',
+        requiredFields: ['hotel_id', 'city', 'checkin_date', 'source_type', 'source_name', 'signal_type', 'value_numeric', 'value_text', 'observed_at'],
+        startDate,
+        horizonDays,
         templateRows: [
           {
             hotel_id: hotelId || '<hotel_uuid>',
@@ -265,7 +313,24 @@ async function writeManifestIfNeeded(filePath, manifest, { overwrite = false, de
     await deps.mkdir(path.dirname(filePath), { recursive: true });
     if (!overwrite) {
       await deps.access(filePath);
-      return { filePath, created: false, overwritten: false };
+      const existingRaw = await deps.readFile(filePath, 'utf8');
+      const existing = JSON.parse(existingRaw);
+      const merged = {
+        ...manifest,
+        ...existing,
+        schema_version: manifest.schema_version,
+        source_type: manifest.source_type,
+        adapter_type: manifest.adapter_type,
+        description: existing.description || manifest.description,
+        horizon_days: manifest.horizon_days,
+        capture_plan: manifest.capture_plan,
+        required_fields: manifest.required_fields,
+        rows: Array.isArray(existing.rows) ? existing.rows : [],
+        template_rows: manifest.template_rows,
+        notes: manifest.notes,
+      };
+      await deps.writeFile(filePath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
+      return { filePath, created: false, overwritten: false, refreshed: true };
     }
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
@@ -312,6 +377,7 @@ const defaultDeps = {
   query: (...args) => pool.query(...args),
   mkdir: (...args) => fs.mkdir(...args),
   access: (...args) => fs.access(...args),
+  readFile: (...args) => fs.readFile(...args),
   writeFile: (...args) => fs.writeFile(...args),
   upsertVerifiedLiveDataSource,
 };

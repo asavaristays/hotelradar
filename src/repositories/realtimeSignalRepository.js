@@ -145,10 +145,14 @@ export async function listLatestRateEvidence({ hotelId = null, limit = 200 } = {
   return rows;
 }
 
-export async function getRealtimeSignalSummary(hotelId, { checkinDate = null, limit = 12 } = {}) {
-  const values = [hotelId, Math.max(1, Math.min(50, Number(limit || 12)))];
-  const dateFilter = checkinDate ? 'AND checkin_date = $3::date' : '';
-  if (checkinDate) values.push(checkinDate);
+export async function getRealtimeSignalSummary(hotelId, { checkinDate = null, horizonDays = 15, limit = 120 } = {}) {
+  const values = [hotelId, Math.max(1, Math.min(200, Number(limit || 120)))];
+  const safeHorizonDays = Math.max(1, Math.min(31, Number(horizonDays || 15)));
+  const dateFilter = checkinDate
+    ? `AND checkin_date >= $3::date
+       AND checkin_date < $3::date + make_interval(days => $4::integer)`
+    : '';
+  if (checkinDate) values.push(checkinDate, safeHorizonDays);
 
   const { rows } = await pool.query(
     `SELECT DISTINCT ON (source_type, source_name, signal_type, checkin_date)

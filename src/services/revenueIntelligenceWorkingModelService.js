@@ -61,6 +61,43 @@ function rowCount(dashboard = {}, matcher) {
   return rows(dashboard).filter((row) => matcher(rowText(row), row)).length;
 }
 
+function average(values = []) {
+  const valid = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  if (!valid.length) return null;
+  return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
+}
+
+function rateRowsForDate(dashboard = {}, date) {
+  return rows(dashboard).filter((row) => (
+    row?.checkinDate === date &&
+    ['hotel_rate', 'ota_rate', 'competitor_rate'].includes(String(row?.signalType || '')) &&
+    positiveNumber(row?.valueNumeric)
+  ));
+}
+
+function tariffForDate(dashboard = {}, date, selectedDate) {
+  const dateRows = rateRowsForDate(dashboard, date);
+  const officialRows = dateRows.filter((row) => row.sourceType === 'official');
+  const otaRows = dateRows.filter((row) => row.sourceType === 'ota');
+  const competitorRows = dateRows.filter((row) => row.sourceType === 'competitor');
+  const selectedOwnRate = date === selectedDate ? numericOrNull(dashboard?.marketPosition?.hotelPrice) : null;
+  const selectedMarketRate = date === selectedDate ? numericOrNull(dashboard?.marketPosition?.marketAvg) : null;
+  const ownTariff = average(officialRows.map((row) => row.valueNumeric)) || (selectedOwnRate && selectedOwnRate > 0 ? Math.round(selectedOwnRate) : null);
+  const otaTariff = average(otaRows.map((row) => row.valueNumeric));
+  const competitorTariff = average(competitorRows.map((row) => row.valueNumeric));
+  const marketTariff = average([otaTariff, competitorTariff].filter(Boolean)) || (selectedMarketRate && selectedMarketRate > 0 ? Math.round(selectedMarketRate) : null);
+
+  return {
+    tariff: ownTariff,
+    tariffLabel: ownTariff ? formatCurrency(ownTariff) : 'Not captured',
+    marketTariff,
+    marketTariffLabel: marketTariff ? formatCurrency(marketTariff) : 'Not captured',
+    otaTariff,
+    competitorTariff,
+    tariffEvidenceRows: dateRows.length,
+  };
+}
+
 function freshRows(dashboard = {}) {
   const now = Date.now();
   return rows(dashboard).filter((row) => {
@@ -454,6 +491,7 @@ function buildEnterpriseBrief({ dashboard, evidence, score, action, trust, oppor
   const next15Days = Array.from({ length: ENTERPRISE_HORIZON_DAYS }, (_, index) => {
     const date = addDays(stayDate, index);
     const pressure = pressureForDate(date, importantDates);
+    const tariff = tariffForDate(dashboard, date, stayDate);
     return {
       date,
       displayDate: formatDisplayDate(date),
@@ -461,6 +499,7 @@ function buildEnterpriseBrief({ dashboard, evidence, score, action, trust, oppor
       tone: pressure.tone,
       primarySignal: pressure.signal,
       driver: pressure.driver,
+      ...tariff,
       evidenceStatus: requiredReady ? 'Ready for controlled review' : 'Rate proof pending',
       recommendedAction: actionForEnterpriseDate({ pressure, requiredReady, score }),
       owner: pressure.tone === 'high' ? 'GM + Revenue' : pressure.tone === 'watch' ? 'Revenue + Sales' : 'Revenue analyst',

@@ -18,6 +18,7 @@ function buildDeps({ writes = [], sources = [] } = {}) {
     }),
     mkdir: fs.mkdir,
     access: fs.access,
+    readFile: fs.readFile,
     writeFile: async (...args) => {
       writes.push(args[0]);
       return fs.writeFile(...args);
@@ -76,6 +77,13 @@ describe('verifiedSourceFeedPackService', () => {
       await fs.readFile(path.join(baseDir, 'the-ten', 'official-rates.json'), 'utf8'),
     );
     expect(officialManifest.rows).toEqual([]);
+    expect(officialManifest.capture_plan).toHaveLength(15);
+    expect(officialManifest.capture_plan[0]).toEqual(
+      expect.objectContaining({
+        status: 'awaiting_capture',
+        required_fields: expect.arrayContaining(['rate', 'proof_url']),
+      }),
+    );
     expect(officialManifest.template_rows[0].rate).toBe('<positive_rate_only>');
     expect(officialManifest.notes.join(' ')).toMatch(/Never enter zero/i);
   });
@@ -104,6 +112,8 @@ describe('verifiedSourceFeedPackService', () => {
 
     const preserved = JSON.parse(await fs.readFile(officialPath, 'utf8'));
     expect(preserved.rows[0]).toEqual({ rate: 35400, checkin_date: '2026-08-16' });
-    expect(writes).not.toContain(officialPath);
+    expect(preserved.capture_plan).toHaveLength(15);
+    expect(preserved.template_rows[0].rate).toBe('<positive_rate_only>');
+    expect(writes).toContain(officialPath);
   });
 });

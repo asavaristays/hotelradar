@@ -9509,8 +9509,8 @@ textarea::placeholder {
 
 .riDateBar {
   display: grid;
-  grid-template-rows: 1fr auto auto;
-  gap: 7px;
+  grid-template-rows: 1fr auto auto auto;
+  gap: 5px;
   min-width: 0;
   text-align: center;
 }
@@ -9549,6 +9549,16 @@ textarea::placeholder {
   white-space: nowrap;
   text-overflow: ellipsis;
   font-weight: 400;
+}
+
+.riDateBar strong {
+  overflow: hidden;
+  color: #30343a;
+  font-size: 0.64rem;
+  line-height: 1.15;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .riDateBar small {

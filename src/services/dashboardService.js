@@ -301,7 +301,7 @@ function normalizeRealtimeSignals(raw = null) {
       fresh: Number(raw?.counts?.fresh || 0),
       total: Number(raw?.counts?.total || rows.length),
     },
-    rows: rows.slice(0, 50).map((row) => ({
+    rows: rows.slice(0, 150).map((row) => ({
       sourceType: row?.sourceType || '',
       sourceName: row?.sourceName || '',
       signalType: row?.signalType || '',
@@ -1295,7 +1295,7 @@ async function buildDashboardResponse(hotel, record, deps, preloaded = {}, conte
         : Promise.resolve(null)),
     deps.getCanaryOverride ? deps.getCanaryOverride(hotel.id) : Promise.resolve(null),
     deps.getRealtimeSignalSummary
-      ? deps.getRealtimeSignalSummary(hotel.id, { checkinDate: requestedCheckinDate, limit: 50 })
+      ? deps.getRealtimeSignalSummary(hotel.id, { checkinDate: requestedCheckinDate, horizonDays: 15, limit: 150 })
       : Promise.resolve(null),
   ]);
 

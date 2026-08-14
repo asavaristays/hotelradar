@@ -30,6 +30,24 @@ describe('revenueIntelligenceWorkingModelService', () => {
           total: 10,
         },
         rows: [
+          {
+            sourceType: 'official',
+            signalType: 'hotel_rate',
+            checkinDate: '2026-08-16',
+            valueNumeric: 37200,
+          },
+          {
+            sourceType: 'ota',
+            signalType: 'ota_rate',
+            checkinDate: '2026-08-16',
+            valueNumeric: 35400,
+          },
+          {
+            sourceType: 'competitor',
+            signalType: 'competitor_rate',
+            checkinDate: '2026-08-16',
+            valueNumeric: 33100,
+          },
           { sourceType: 'event', signalType: 'holiday', valueText: 'Independence Day long weekend' },
           { sourceType: 'mice', signalType: 'corporate_offsite', valueText: 'Corporate offsite watch' },
           { sourceType: 'wedding', signalType: 'destination_wedding', valueText: 'Wedding group watch' },
@@ -65,6 +83,21 @@ describe('revenueIntelligenceWorkingModelService', () => {
       }),
     );
     expect(model.enterpriseBrief.next15Days).toHaveLength(15);
+    expect(model.enterpriseBrief.next15Days[0]).toEqual(
+      expect.objectContaining({
+        tariff: 35400,
+        tariffLabel: '₹35,400',
+        marketTariff: 31400,
+      }),
+    );
+    expect(model.enterpriseBrief.next15Days[1]).toEqual(
+      expect.objectContaining({
+        tariff: 37200,
+        tariffLabel: '₹37,200',
+        marketTariff: 34250,
+        tariffEvidenceRows: 3,
+      }),
+    );
     expect(model.enterpriseBrief.priorityDates[0]).toEqual(
       expect.objectContaining({
         date: '2026-08-15',

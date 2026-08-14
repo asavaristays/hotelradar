@@ -159,6 +159,29 @@ function buildFreshStartDates(dashboard = {}) {
   return horizonDates.map((date) => dateMap.get(date));
 }
 
+function buildRevenueDates(dashboard = {}, model = null) {
+  const enterpriseDates = Array.isArray(model?.enterpriseBrief?.next15Days)
+    ? model.enterpriseBrief.next15Days
+    : [];
+  if (enterpriseDates.length) {
+    return enterpriseDates.map((date) => ({
+      date: date.date,
+      endDate: date.date,
+      label: date.primarySignal || date.pressure || 'Stay date',
+      pressure: date.pressure || 'Proof pending',
+      driver: date.driver || date.recommendedAction || 'Revenue Intelligence',
+      tone: date.tone || 'missing',
+      tariff: numericOrNull(date.tariff),
+      tariffLabel: date.tariffLabel || formatCurrency(date.tariff),
+      marketTariff: numericOrNull(date.marketTariff),
+      marketTariffLabel: date.marketTariffLabel || formatCurrency(date.marketTariff),
+      tariffEvidenceRows: numericOrNull(date.tariffEvidenceRows) || 0,
+      recommendedAction: date.recommendedAction || '',
+    }));
+  }
+  return buildFreshStartDates(dashboard);
+}
+
 function signalStatus({ ready, supporting }) {
   if (ready) return 'ready';
   if (supporting) return 'supporting';
@@ -791,6 +814,7 @@ function DatePressurePanel({ dates }) {
               <i style={{ height: `${heightFor(date)}%` }} />
             </div>
             <span>{formatDate(date.date, { weekday: undefined }).replace(',', '')}</span>
+            <strong>{date.tariffLabel || 'Not captured'}</strong>
             <small>{date.pressure}</small>
           </article>
         ))}
@@ -1043,8 +1067,8 @@ function RevenueSignalTable({ signals }) {
 
 export default function Dashboard({ dashboard, loading, error }) {
   const signals = useMemo(() => buildSignals(dashboard || {}), [dashboard]);
-  const dates = useMemo(() => buildFreshStartDates(dashboard || {}), [dashboard]);
   const model = dashboard?.revenueIntelligenceModel || null;
+  const dates = useMemo(() => buildRevenueDates(dashboard || {}, model), [dashboard, model]);
   const executiveCall = useMemo(() => {
     if (model?.executiveSummary) {
       return {
