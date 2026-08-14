@@ -1,3 +1,5 @@
+const REVENUE_HORIZON_DAYS = 15;
+
 function numericOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -65,10 +67,12 @@ function buildImportantDates(dashboard = {}) {
   const backendDates = Array.isArray(dashboard?.marketContext?.importantDates)
     ? dashboard.marketContext.importantDates
     : [];
+  const horizonDates = Array.from({ length: REVENUE_HORIZON_DAYS }, (_, index) => addDays(selectedDate, index));
 
   const fixedDates = [
     {
       date: '2026-08-08',
+      endDate: '2026-08-10',
       label: 'Weekend leisure window',
       driver: 'North Goa weekend leisure pickup',
       type: 'Weekend',
@@ -77,6 +81,7 @@ function buildImportantDates(dashboard = {}) {
     },
     {
       date: '2026-08-15',
+      endDate: '2026-08-17',
       label: 'Independence Day long weekend',
       driver: 'National holiday compression risk',
       type: 'Holiday',
@@ -85,6 +90,7 @@ function buildImportantDates(dashboard = {}) {
     },
     {
       date: '2026-08-28',
+      endDate: '2026-08-30',
       label: 'Rakhi family travel window',
       driver: 'Family travel and weekend overlap',
       type: 'Holiday',
@@ -95,6 +101,7 @@ function buildImportantDates(dashboard = {}) {
 
   const mappedBackend = backendDates.map((entry) => ({
     date: String(entry.date || '').slice(0, 10),
+    endDate: String(entry.endDate || entry.date || '').slice(0, 10),
     label: entry.label || entry.name || 'Market date',
     driver: entry.type || entry.source || 'Revenue pressure signal',
     type: entry.type || 'Event',
@@ -103,22 +110,36 @@ function buildImportantDates(dashboard = {}) {
   })).filter((entry) => entry.date);
 
   const combined = [...mappedBackend, ...fixedDates];
-  const unique = new Map();
-  combined.forEach((entry) => {
-    const key = `${entry.date}-${entry.label}`;
-    if (!unique.has(key)) unique.set(key, entry);
-  });
-  if (![...unique.values()].some((entry) => entry.date === selectedDate)) {
-    unique.set(`selected-${selectedDate}`, {
-      date: selectedDate,
-      label: 'Selected stay date',
-      driver: 'Current dashboard date',
+  const unique = new Map(horizonDates.map((date, index) => [
+    date,
+    {
+      date,
+      endDate: date,
+      label: index === 0 ? 'Selected stay date' : 'Stay-date evidence pending',
+      driver: 'Awaiting verified rate and market evidence',
       type: 'Revenue review',
-      action: 'Complete OTA and competitor evidence before committing pricing action.',
-      priority: 'Watch',
+      action: 'Capture official, OTA and competitor rate proof before issuing a pricing recommendation.',
+      priority: 'Data required',
+    },
+  ]));
+  combined.forEach((entry) => {
+    horizonDates.forEach((date) => {
+      if (date < entry.date || date > (entry.endDate || entry.date)) return;
+      const existing = unique.get(date);
+      const shouldReplace =
+        !existing ||
+        existing.priority === 'Data required' ||
+        entry.priority === 'High' ||
+        (entry.priority === 'Watch' && existing.priority !== 'High');
+      if (!shouldReplace) return;
+      unique.set(date, {
+        ...entry,
+        date,
+        endDate: entry.endDate || entry.date,
+      });
     });
-  }
-  return [...unique.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8);
+  });
+  return horizonDates.map((date) => unique.get(date));
 }
 
 function buildOpportunityRows(dashboard = {}) {

@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 
+const REVENUE_HORIZON_DAYS = 15;
+
 function LoadingSkeleton() {
   return (
     <section className="gmDashboard" aria-label="Loading dashboard">
@@ -85,6 +87,7 @@ function buildFreshStartDates(dashboard = {}) {
   const importantDates = Array.isArray(dashboard?.marketContext?.importantDates)
     ? dashboard.marketContext.importantDates
     : [];
+  const horizonDates = Array.from({ length: REVENUE_HORIZON_DAYS }, (_, index) => addDays(selectedDate, index));
 
   const knownAugustDates = [
     {
@@ -123,24 +126,37 @@ function buildFreshStartDates(dashboard = {}) {
   })).filter((entry) => entry.date);
 
   const combined = [...fromBackend, ...knownAugustDates];
-  const unique = new Map();
+  const dateMap = new Map(horizonDates.map((date, index) => [
+    date,
+    {
+      date,
+      endDate: date,
+      label: index === 0 ? 'Selected stay date' : 'Stay date proof pending',
+      pressure: 'Proof pending',
+      driver: 'Awaiting official, OTA and competitor rate evidence',
+      tone: 'missing',
+    },
+  ]));
+
   combined.forEach((entry) => {
-    const key = `${entry.date}-${entry.label}`;
-    if (!unique.has(key)) unique.set(key, entry);
+    horizonDates.forEach((date) => {
+      if (!isBetween(date, entry.date, entry.endDate || entry.date)) return;
+      const existing = dateMap.get(date);
+      const shouldReplace =
+        !existing ||
+        existing.tone === 'missing' ||
+        entry.tone === 'high' ||
+        (entry.tone === 'watch' && existing.tone !== 'high');
+      if (!shouldReplace) return;
+      dateMap.set(date, {
+        ...entry,
+        date,
+        endDate: entry.endDate || entry.date,
+      });
+    });
   });
 
-  if (![...unique.values()].some((entry) => isBetween(selectedDate, entry.date, entry.endDate || entry.date))) {
-    unique.set(`selected-${selectedDate}`, {
-      date: selectedDate,
-      endDate: selectedDate,
-      label: 'Selected stay date',
-      pressure: 'Needs evidence',
-      driver: 'Awaiting live rate and competitor feeds',
-      tone: 'missing',
-    });
-  }
-
-  return [...unique.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8);
+  return horizonDates.map((date) => dateMap.get(date));
 }
 
 function signalStatus({ ready, supporting }) {
@@ -564,7 +580,7 @@ function buildGmCommand({ dashboard = {}, model = null, signals = [], dates = []
   const confidenceScore = numericOrNull(summary.confidenceScore) ?? evidencePct(signals);
   const missingRequired = evidence.filter((item) => item.requiredForStrongAction && item.status !== 'ready');
   const activeSignals = evidence.filter((item) => item.status === 'ready' || item.status === 'supporting');
-  const watchDates = dates.filter((date) => date.tone === 'high' || date.tone === 'watch').slice(0, 3);
+  const watchDates = dates.filter((date) => date.tone === 'high' || date.tone === 'watch').slice(0, 5);
   const official = evidence.find((item) => item.key === 'official_rate') || signalByKey(signals, 'own-rate');
   const ota = evidence.find((item) => item.key === 'ota_rate') || signalByKey(signals, 'ota');
   const competitor = evidence.find((item) => item.key === 'competitor_rate') || signalByKey(signals, 'competitors');
@@ -754,8 +770,8 @@ function RateEvidencePanel({ dashboard, otaRows, competitorRows }) {
 }
 
 function DatePressurePanel({ dates }) {
-  const visibleDates = dates.slice(0, 7);
-  const headlineDates = visibleDates.filter((date) => date.tone !== 'missing').slice(0, 4);
+  const visibleDates = dates.slice(0, REVENUE_HORIZON_DAYS);
+  const headlineDates = visibleDates.filter((date) => date.tone !== 'missing').slice(0, 5);
   const heightFor = (date) => {
     if (date.tone === 'high') return 88;
     if (date.tone === 'watch') return 58;
@@ -765,8 +781,8 @@ function DatePressurePanel({ dates }) {
   return (
     <section className="riPanel riDatePanel" aria-label="Revenue date pressure">
       <div className="riPanelHeader">
-        <span>Revenue dates</span>
-        <p>Month pressure map for upcoming stay dates</p>
+        <span>15-day revenue dates</span>
+        <p>Stay-date pressure map from the selected date</p>
       </div>
       <div className="riDateBars">
         {visibleDates.map((date) => (

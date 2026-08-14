@@ -9494,11 +9494,12 @@ textarea::placeholder {
 
 .riDateBars {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(15, minmax(42px, 1fr));
+  gap: 8px;
   align-items: end;
+  overflow-x: auto;
   min-height: 240px;
-  padding: 6px 2px 0;
+  padding: 6px 2px 8px;
   border-top: 1px solid #e3e6e9;
   background:
     linear-gradient(to bottom, transparent 0, transparent 24%, rgba(226, 232, 240, 0.8) 25%, transparent 26%),
@@ -9544,7 +9545,7 @@ textarea::placeholder {
 .riDateBar span {
   overflow: hidden;
   color: #6d737a;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-weight: 400;
@@ -9552,7 +9553,7 @@ textarea::placeholder {
 
 .riDateBar small {
   color: #8a9097;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 400;
 }
 
@@ -10131,7 +10132,7 @@ textarea::placeholder {
 
   .riDateBars {
     overflow-x: auto;
-    grid-template-columns: repeat(7, minmax(72px, 1fr));
+    grid-template-columns: repeat(15, minmax(54px, 1fr));
   }
 }
 
