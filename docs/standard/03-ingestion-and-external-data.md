@@ -125,6 +125,113 @@ API:
 POST /hotel/:id/signals
 ```
 
+## Public market capture before PMS access
+
+For beta hotels, do not require PMS, channel-manager, or booking-engine credentials on day one. Use the public market capture command to feed proof-backed outside-market evidence first:
+
+```bash
+npm run ingestion:public-market-capture -- \
+  --hotel-name "The Ten Resort Siolim Goa" \
+  --city Goa \
+  --slug the-ten \
+  --base-dir /opt/radar_light/shared/live_sources \
+  --start-date 2026-08-15 \
+  --horizon-days 15 \
+  --tariff-snapshot-file /opt/radar_light/shared/live_sources/the-ten/tariff-snapshot.json \
+  --demand-snapshot-file /opt/radar_light/shared/live_sources/the-ten/demand-snapshot.json
+```
+
+The command can populate:
+
+- public holiday / long-weekend pressure from Nager.Date;
+- 15-day weather support signals from Open-Meteo;
+- verified official, OTA, and competitor tariff rows from a tariff snapshot file.
+- approved travel/event demand rows such as airline pressure, search pressure, MICE, wedding, and local event signals from a demand snapshot file.
+
+It does not fabricate tariff. A tariff row must have a positive rate and proof URL unless the operator explicitly uses `--allow-unproofed-tariff`, in which case the downstream connector still caps confidence as proof-needed.
+
+Tariff snapshot example:
+
+```json
+{
+  "rows": [
+    {
+      "source_type": "official",
+      "source_name": "The Ten official booking engine",
+      "checkin_date": "2026-08-16",
+      "rate": 35400,
+      "currency": "INR",
+      "proof_url": "https://letsbook.me/booking/994038?checkin=2026-08-16&checkout=2026-08-17&adults=2",
+      "observed_at": "2026-08-15T06:30:00.000Z"
+    },
+    {
+      "source_type": "ota",
+      "source_name": "Agoda",
+      "checkin_date": "2026-08-16",
+      "rate": 36750,
+      "currency": "INR",
+      "proof_url": "https://www.google.com/travel/hotels/...",
+      "observed_at": "2026-08-15T06:35:00.000Z"
+    },
+    {
+      "source_type": "competitor",
+      "source_name": "Comparable North Goa Resort",
+      "checkin_date": "2026-08-16",
+      "rate": 28800,
+      "currency": "INR",
+      "proof_url": "https://www.google.com/travel/hotels/...",
+      "observed_at": "2026-08-15T06:40:00.000Z",
+      "metadata": {
+        "room_basis": "base comparable room",
+        "occupancy": 2
+      }
+    }
+  ]
+}
+```
+
+Demand / travel snapshot example:
+
+```json
+{
+  "rows": [
+    {
+      "source_type": "airfare",
+      "source_name": "Airport arrivals / flight pressure provider",
+      "signal_type": "airfare_trend",
+      "checkin_date": "2026-08-16",
+      "value_numeric": 74,
+      "value_text": "Inbound travel pressure is elevated for Goa weekend arrivals.",
+      "proof_url": "https://provider.example/flights/goi/2026-08-16",
+      "observed_at": "2026-08-15T06:45:00.000Z",
+      "metadata": {
+        "airport_code": "GOI",
+        "category": "airline_pressure"
+      }
+    },
+    {
+      "source_type": "event",
+      "source_name": "Venue / wedding market watch",
+      "signal_type": "event_signal",
+      "checkin_date": "2026-08-16",
+      "value_numeric": 78,
+      "value_text": "Wedding and private event enquiry pressure reported for North Goa.",
+      "proof_url": "https://source.example/goa-events",
+      "observed_at": "2026-08-15T06:50:00.000Z",
+      "metadata": {
+        "category": "wedding"
+      }
+    }
+  ]
+}
+```
+
+After public capture, import the rows into realtime observations:
+
+```bash
+npm run ingestion:realtime-signals
+```
+
 ## Live source adapter rule
 
 When adding a live adapter:

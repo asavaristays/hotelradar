@@ -591,7 +591,10 @@ export async function runRealtimeSignalCaptureCycle(options = {}, deps = default
     summary.missingSnapshot = !snapshot.rows.length;
 
     const affected = [];
-    const configuredSources = await deps.listEnabledVerifiedLiveDataSources?.({ hotelId: options.hotelId || null }) || [];
+    const configuredSources = await deps.listEnabledVerifiedLiveDataSources?.({
+      hotelId: options.hotelId || null,
+      force: Boolean(options.forceConfiguredSources),
+    }) || [];
     const configuredRows = await deps.collectVerifiedLiveDataSourceRows?.({
       sources: configuredSources,
       nowIso,

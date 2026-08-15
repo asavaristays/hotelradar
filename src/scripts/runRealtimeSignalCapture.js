@@ -12,6 +12,7 @@ async function main() {
       collectorCommand: process.env.REALTIME_SIGNAL_COLLECT_COMMAND || '',
       source: 'realtime-capture-cli',
       cadence: 'manual',
+      forceConfiguredSources: process.argv.includes('--force-sources') || process.env.REALTIME_CAPTURE_FORCE_SOURCES === 'true',
     });
     logger.info('realtime_signal_capture_script_completed', summary);
     return;

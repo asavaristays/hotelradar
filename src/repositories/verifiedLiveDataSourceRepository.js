@@ -83,10 +83,11 @@ export async function upsertVerifiedLiveDataSource({
   return rows[0] || null;
 }
 
-export async function listEnabledVerifiedLiveDataSources({ hotelId = null } = {}) {
-  const values = [];
+export async function listEnabledVerifiedLiveDataSources({ hotelId = null, force = false } = {}) {
+  const values = [Boolean(force)];
   const hotelFilter = hotelId ? 'AND (s.hotel_id = $1 OR s.hotel_id IS NULL)' : '';
-  if (hotelId) values.push(hotelId);
+  if (hotelId) values.unshift(hotelId);
+  const forceParam = hotelId ? '$2' : '$1';
 
   const { rows } = await pool.query(
     `SELECT
@@ -112,7 +113,8 @@ export async function listEnabledVerifiedLiveDataSources({ hotelId = null } = {}
      WHERE s.enabled = TRUE
        ${hotelFilter}
        AND (
-         s.last_checked_at IS NULL
+         ${forceParam}::boolean = TRUE
+         OR s.last_checked_at IS NULL
          OR s.last_checked_at <= NOW() - make_interval(mins => s.cadence_minutes)
        )
      ORDER BY s.source_type, s.source_name`,
