@@ -140,6 +140,10 @@ const env = {
   realtimeSignalEventHorizonDays: parseNumber(process.env.REALTIME_SIGNAL_EVENT_HORIZON_DAYS, 45),
   liveDataSourceFetchTimeoutMs: parseNumber(process.env.LIVE_DATA_SOURCE_FETCH_TIMEOUT_MS, 15000),
   allowPrivateLiveDataSourceUrls: parseBoolean(process.env.ALLOW_PRIVATE_LIVE_DATA_SOURCE_URLS, false),
+  publicMarketLiveSourcesDir: readOptionalString(
+    'PUBLIC_MARKET_LIVE_SOURCES_DIR',
+    isProduction ? '/opt/radar_light/shared/live_sources' : 'shared/live_sources',
+  ),
   centralIntelligenceMinCompetitors: parseNumber(process.env.CI_MIN_COMPETITORS, 3),
   centralIntelligenceMinOtaSources: parseNumber(process.env.CI_MIN_OTA_SOURCES, 2),
   centralIntelligenceStrongActionConfidence: parseNumber(process.env.CI_STRONG_ACTION_CONFIDENCE, 75),

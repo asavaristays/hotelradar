@@ -20,9 +20,11 @@ import { listAuditLogs } from '../repositories/auditRepository.js';
 import { getCalibrationRows, upsertCalibrationSetting } from '../repositories/calibrationRepository.js';
 import { listUpcomingEventsByCity, upsertCityEvent } from '../repositories/eventRepository.js';
 import { assertCityInScope } from '../config/productScope.js';
+import { env } from '../config/env.js';
 import { getBlockedEventReason, validateEvent } from '../utils/eventValidation.js';
 import { hashPassword } from '../services/authService.js';
 import { recalculateDashboard } from '../services/dashboardService.js';
+import { provisionVerifiedSourceFeedPack } from '../services/verifiedSourceFeedPackService.js';
 import {
   getCalibrationRunHistory,
   getCanaryList,
@@ -87,6 +89,15 @@ function normalizeHotelCreateError(error) {
   return error;
 }
 
+function slugifyHotelName(value = '') {
+  const slug = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'hotel';
+}
+
 export async function postState(req, res, next) {
   try {
     const row = await createState(req.body || {});
@@ -144,10 +155,32 @@ export async function postHotel(req, res, next) {
       });
     }
 
+    let sourceFeedPack = null;
+    try {
+      sourceFeedPack = await provisionVerifiedSourceFeedPack({
+        hotelId: row.id,
+        city: row.city,
+        slug: slugifyHotelName(row.hotel_name),
+        baseDir: env.publicMarketLiveSourcesDir,
+      });
+      sourceFeedPack = {
+        status: 'ready',
+        baseDir: sourceFeedPack.baseDir,
+        sources: sourceFeedPack.sources.length,
+        files: sourceFeedPack.files.length,
+      };
+    } catch (feedError) {
+      sourceFeedPack = {
+        status: 'failed',
+        error: feedError?.message || String(feedError),
+      };
+    }
+
     return res.status(201).json({
       hotel: row,
       user,
       dashboard,
+      sourceFeedPack,
     });
   } catch (error) {
     return next(normalizeHotelCreateError(error));

@@ -134,6 +134,16 @@ async function readJsonFile(filePath, fallback = null, deps) {
   }
 }
 
+async function fileExists(filePath, deps) {
+  try {
+    if (typeof deps.access === 'function') await deps.access(filePath);
+    else await deps.readFile(filePath, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function writeJsonFile(filePath, payload, deps) {
   await deps.mkdir(path.dirname(filePath), { recursive: true });
   await deps.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
@@ -495,6 +505,7 @@ const defaultDeps = {
   readFile: (...args) => fs.readFile(...args),
   writeFile: (...args) => fs.writeFile(...args),
   mkdir: (...args) => fs.mkdir(...args),
+  access: (...args) => fs.access(...args),
   fetchImpl: globalThis.fetch,
 };
 
@@ -520,7 +531,7 @@ export async function runPublicMarketCapture(options = {}, deps = defaultDeps) {
   const rejectedRows = [];
   const sourceResults = [];
 
-  if (options.tariffSnapshotFile) {
+  if (options.tariffSnapshotFile && await fileExists(path.resolve(options.tariffSnapshotFile), deps)) {
     const payload = await readJsonFile(path.resolve(options.tariffSnapshotFile), null, deps);
     const tariff = normalizeTariffSnapshotRows(payload, {
       ...context,
@@ -537,7 +548,7 @@ export async function runPublicMarketCapture(options = {}, deps = defaultDeps) {
     });
   }
 
-  if (options.demandSnapshotFile) {
+  if (options.demandSnapshotFile && await fileExists(path.resolve(options.demandSnapshotFile), deps)) {
     const payload = await readJsonFile(path.resolve(options.demandSnapshotFile), null, deps);
     const demand = normalizeDemandSnapshotRows(payload, {
       ...context,

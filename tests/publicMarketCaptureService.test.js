@@ -77,6 +77,7 @@ describe('publicMarketCaptureService', () => {
         readFile: fs.readFile,
         writeFile: fs.writeFile,
         mkdir: fs.mkdir,
+        access: fs.access,
         fetchImpl: mockFetch(),
       },
     );
@@ -157,6 +158,7 @@ describe('publicMarketCaptureService', () => {
         readFile: fs.readFile,
         writeFile: fs.writeFile,
         mkdir: fs.mkdir,
+        access: fs.access,
         fetchImpl: mockFetch(),
       },
     );
@@ -229,6 +231,7 @@ describe('publicMarketCaptureService', () => {
         readFile: fs.readFile,
         writeFile: fs.writeFile,
         mkdir: fs.mkdir,
+        access: fs.access,
         fetchImpl: mockFetch(),
       },
     );
