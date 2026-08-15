@@ -1,5 +1,5 @@
 import { getDashboard } from './dashboardService.js';
-import { getHotelById, listHotels } from '../repositories/hotelRepository.js';
+import { getHotelById, getPrimaryHotelRecipientEmail, listHotels } from '../repositories/hotelRepository.js';
 import {
   addRevenueBriefFeedback,
   insertRevenueBriefDelivery,
@@ -379,20 +379,25 @@ export async function generateDailyRevenueIntelligenceBriefs({
   subject = '',
   generatedBy = null,
   userRole = null,
-  limit = 25,
+  limit = 500,
 } = {}) {
   const hotels = await listHotels();
-  const selectedHotels = hotels.slice(0, Math.max(1, Math.min(100, Number(limit || 25))));
+  const selectedHotels = hotels.slice(0, Math.max(1, Math.min(500, Number(limit || 500))));
   const results = [];
   const errors = [];
 
   for (const hotel of selectedHotels) {
     try {
+      const hotelRecipientEmail = recipientEmail || (
+        channel === 'email'
+          ? await getPrimaryHotelRecipientEmail(hotel.id)
+          : ''
+      );
       const result = await generateRevenueIntelligenceBrief({
         hotelId: hotel.id,
         stayDate,
         channel,
-        recipientEmail,
+        recipientEmail: hotelRecipientEmail,
         subject,
         generatedBy,
         userRole,

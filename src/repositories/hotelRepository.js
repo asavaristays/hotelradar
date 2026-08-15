@@ -97,6 +97,23 @@ export async function getHotelById(hotelId) {
   return hotel;
 }
 
+export async function getPrimaryHotelRecipientEmail(hotelId) {
+  const { rows } = await pool.query(
+    `SELECT u.email
+     FROM hotel_users hu
+     JOIN users u ON u.id = hu.user_id
+     WHERE hu.hotel_id = $1
+       AND u.active = TRUE
+       AND COALESCE(u.email, '') <> ''
+     ORDER BY
+       CASE WHEN u.role = 'hotel_user' THEN 0 ELSE 1 END,
+       hu.created_at ASC
+     LIMIT 1`,
+    [hotelId],
+  );
+  return String(rows[0]?.email || '').trim().toLowerCase();
+}
+
 export async function touchHotelCalculatedAt(hotelId) {
   await pool.query(
     `UPDATE hotels

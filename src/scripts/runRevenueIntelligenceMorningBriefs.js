@@ -12,7 +12,7 @@ function parseArgs(argv = []) {
     channel: 'manual',
     recipientEmail: '',
     subject: '',
-    limit: 25,
+    limit: 500,
   };
 
   for (let index = 0; index < argv.length; index += 1) {

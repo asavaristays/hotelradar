@@ -4,6 +4,8 @@ const getDashboard = jest.fn();
 const insertRevenueBriefDelivery = jest.fn();
 const updateRevenueBriefDeliveryStatus = jest.fn();
 const sendRevenueIntelligenceEmail = jest.fn();
+const listHotels = jest.fn(async () => []);
+const getPrimaryHotelRecipientEmail = jest.fn(async () => '');
 let smtpConfigured = true;
 
 jest.unstable_mockModule('../src/services/dashboardService.js', () => ({
@@ -16,7 +18,8 @@ jest.unstable_mockModule('../src/repositories/hotelRepository.js', () => ({
     hotel_name: 'The Ten Resort Siolim Goa',
     city: 'Goa',
   })),
-  listHotels: jest.fn(async () => []),
+  getPrimaryHotelRecipientEmail,
+  listHotels,
 }));
 
 jest.unstable_mockModule('../src/repositories/revenueIntelligenceDeliveryRepository.js', () => ({
@@ -33,7 +36,10 @@ jest.unstable_mockModule('../src/services/emailDeliveryService.js', () => ({
   sendRevenueIntelligenceEmail,
 }));
 
-const { generateRevenueIntelligenceBrief } = await import('../src/services/revenueIntelligenceDeliveryService.js');
+const {
+  generateDailyRevenueIntelligenceBriefs,
+  generateRevenueIntelligenceBrief,
+} = await import('../src/services/revenueIntelligenceDeliveryService.js');
 
 const dashboardPayload = {
   hotel: {
@@ -113,6 +119,8 @@ describe('revenueIntelligenceDeliveryService email channel', () => {
       rejected: [],
       response: '250 ok',
     });
+    listHotels.mockResolvedValue([]);
+    getPrimaryHotelRecipientEmail.mockResolvedValue('');
   });
 
   test('sends an email brief and marks the delivery as sent', async () => {
@@ -181,5 +189,53 @@ describe('revenueIntelligenceDeliveryService email channel', () => {
     );
     expect(result.delivery.status).toBe('failed');
     expect(result.emailError).toMatch(/SMTP is not configured/i);
+  });
+
+  test('daily email briefs use each hotel mapped recipient when no override is supplied', async () => {
+    listHotels.mockResolvedValue([
+      { id: 'hotel-1', hotel_name: 'The Ten Resort Siolim Goa', city: 'Goa' },
+      { id: 'hotel-2', hotel_name: 'Second Hotel', city: 'Jaipur' },
+    ]);
+    getPrimaryHotelRecipientEmail
+      .mockResolvedValueOnce('owner1@example.com')
+      .mockResolvedValueOnce('owner2@example.com');
+    insertRevenueBriefDelivery
+      .mockResolvedValueOnce(deliveryRow({ id: 'delivery-1', recipient_email: 'owner1@example.com' }))
+      .mockResolvedValueOnce(deliveryRow({ id: 'delivery-2', hotel_id: 'hotel-2', recipient_email: 'owner2@example.com' }));
+    updateRevenueBriefDeliveryStatus
+      .mockResolvedValueOnce(deliveryRow({
+        id: 'delivery-1',
+        status: 'sent',
+        recipient_email: 'owner1@example.com',
+        provider_message_id: 'message-1',
+      }))
+      .mockResolvedValueOnce(deliveryRow({
+        id: 'delivery-2',
+        hotel_id: 'hotel-2',
+        status: 'sent',
+        recipient_email: 'owner2@example.com',
+        provider_message_id: 'message-2',
+      }));
+    sendRevenueIntelligenceEmail
+      .mockResolvedValueOnce({ messageId: 'message-1', accepted: ['owner1@example.com'], rejected: [], response: '250 ok' })
+      .mockResolvedValueOnce({ messageId: 'message-2', accepted: ['owner2@example.com'], rejected: [], response: '250 ok' });
+
+    const result = await generateDailyRevenueIntelligenceBriefs({
+      stayDate: '2026-08-15',
+      channel: 'email',
+      limit: 500,
+    });
+
+    expect(result.generated).toBe(2);
+    expect(getPrimaryHotelRecipientEmail).toHaveBeenCalledWith('hotel-1');
+    expect(getPrimaryHotelRecipientEmail).toHaveBeenCalledWith('hotel-2');
+    expect(sendRevenueIntelligenceEmail).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ to: 'owner1@example.com' }),
+    );
+    expect(sendRevenueIntelligenceEmail).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ to: 'owner2@example.com' }),
+    );
   });
 });
