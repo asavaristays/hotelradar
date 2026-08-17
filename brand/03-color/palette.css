@@ -1,0 +1,36 @@
+:root {
+  /* Beacon amber — Primary. The pin, the wordmark accent, primary buttons. */
+  --hr-amber-50: #FDF3E2;
+  --hr-amber-200: #F3D9A6;
+  --hr-amber-400: #E8B04A;
+  --hr-amber-500: #E0912F;
+  --hr-amber-600: #C4791F;
+  /* Harbour teal — Secondary. The door, headings, navigation, links. */
+  --hr-teal-50: #E6F2F0;
+  --hr-teal-200: #A8CFC9;
+  --hr-teal-400: #3E8C82;
+  --hr-teal-600: #14655C;
+  --hr-teal-700: #0E4A44;
+  /* Sunset coral — Accent. Deals, badges, the sunny arc device. Use sparingly. */
+  --hr-coral-200: #F2C4B0;
+  --hr-coral-500: #D8663A;
+  /* Linen & sand — Surfaces, borders, body copy. Warm-tinted, never pure grey. */
+  --hr-neutral-cream: #FFF7ED;
+  --hr-neutral-sand-50: #FAF7F2;
+  --hr-neutral-sand-100: #F0EBE3;
+  --hr-neutral-sand-300: #D6CFC4;
+  --hr-neutral-slate-500: #6E7472;
+  --hr-neutral-ink-900: #16211F;
+  /* semantic */
+  --hr-success: #2E7D5B;
+  --hr-warning: #E0912F;
+  --hr-danger: #C2442E;
+  --hr-info: #2F6E9E;
+  /* roles */
+  --hr-bg: #FAF7F2;
+  --hr-surface: #FFF7ED;
+  --hr-border: #D6CFC4;
+  --hr-text: #16211F;
+  --hr-text-muted: #6E7472;
+  --hr-link: #14655C;
+}

@@ -1,0 +1,19 @@
+@font-face {
+  font-family: "Nunito Sans"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("./fonts/nunito-sans-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Nunito Sans"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("./fonts/nunito-sans-latin-700-normal.woff2") format("woff2");
+}
+:root {
+  --hr-font: "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --hr-h1: 700 34px/1.2 var(--hr-font);
+  --hr-h2: 700 26px/1.25 var(--hr-font);
+  --hr-h3: 700 20px/1.3 var(--hr-font);
+  --hr-body: 400 16px/1.6 var(--hr-font);
+  --hr-small: 400 14px/1.5 var(--hr-font);
+  --hr-label: 700 13px/1.4 var(--hr-font);
+}
+body { font: var(--hr-body); }
+h1 { font: var(--hr-h1); } h2 { font: var(--hr-h2); } h3 { font: var(--hr-h3); }

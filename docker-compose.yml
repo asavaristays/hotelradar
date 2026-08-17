@@ -1,0 +1,132 @@
+# Project: hotelradar-direct
+# Isolated from website.hotelradar.in and asavaristays.com stacks.
+# Sync with Asavari is HTTPS API only — never share volumes.
+# Use: docker-compose -p hotelradar-direct --env-file /etc/hotelradar-direct/env up -d --build
+
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hotelradar_direct}
+      POSTGRES_USER: ${POSTGRES_USER:-direct}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_direct_db}
+    volumes:
+      - direct_postgres:/var/lib/postgresql/data
+      - ./infra/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-direct} -d ${POSTGRES_DB:-hotelradar_direct}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+    networks:
+      - direct_internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - direct_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    networks:
+      - direct_internal
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-direct}:${POSTGRES_PASSWORD:-change_me_direct_db}@postgres:5432/${POSTGRES_DB:-hotelradar_direct}
+      REDIS_URL: redis://redis:6379
+      APP_URL: ${APP_URL:-https://hotelradar.in}
+      AUTH_SECRET: ${AUTH_SECRET:-replace-with-long-random-secret}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ASAVARI_BASE_URL: ${ASAVARI_BASE_URL:-https://asavaristays.com}
+      ASAVARI_INTEGRATION_AUTH: ${ASAVARI_INTEGRATION_AUTH:-}
+      ASAVARI_WEBHOOK_SECRET: ${ASAVARI_WEBHOOK_SECRET:-}
+      ASAVARI_SYNC_ENABLED: ${ASAVARI_SYNC_ENABLED:-false}
+      OTP_PROVIDER: ${OTP_PROVIDER:-dev}
+      OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-600}
+      OTP_RESEND_COOLDOWN_SECONDS: ${OTP_RESEND_COOLDOWN_SECONDS:-45}
+      OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+      OTP_REVEAL_DEV_CODE: ${OTP_REVEAL_DEV_CODE:-true}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-43200}
+      ADMIN_BOOTSTRAP_USER: ${ADMIN_BOOTSTRAP_USER:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+      ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+    ports:
+      - "127.0.0.1:${API_PORT:-4101}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 512m
+    networks:
+      - direct_internal
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-direct}:${POSTGRES_PASSWORD:-change_me_direct_db}@postgres:5432/${POSTGRES_DB:-hotelradar_direct}
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ASAVARI_BASE_URL: ${ASAVARI_BASE_URL:-https://asavaristays.com}
+      ASAVARI_INTEGRATION_AUTH: ${ASAVARI_INTEGRATION_AUTH:-}
+      ASAVARI_SYNC_ENABLED: ${ASAVARI_SYNC_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 256m
+    networks:
+      - direct_internal
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_PROXY_TARGET: http://api:3000
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      API_PROXY_TARGET: http://api:3000
+    ports:
+      - "127.0.0.1:${WEB_PORT:-4100}:3000"
+    depends_on:
+      - api
+    mem_limit: 512m
+    networks:
+      - direct_internal
+
+volumes:
+  direct_postgres:
+  direct_redis:
+
+networks:
+  direct_internal:
+    driver: bridge

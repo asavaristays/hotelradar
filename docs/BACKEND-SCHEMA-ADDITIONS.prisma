@@ -1,0 +1,179 @@
+// ADDITIONS to prisma/schema.prisma
+// Merge these into the existing schema, then: npx prisma migrate dev --name integrations
+//
+// Everything here is additive. No existing column changes meaning, so the
+// manual-settlement pilot and the later escrow mode share one schema.
+
+/* ------------------------------------------------------------------ */
+/* 1. Settlement mode — manual now, escrow later                       */
+/* ------------------------------------------------------------------ */
+
+enum SettlementMode {
+  direct_to_hotel // pilot: guest pays hotel, you invoice commission weekly
+  escrow          // target: you collect, release on code redemption
+}
+
+enum AttestationSource {
+  guest_utr
+  hotel_confirm
+  ops_manual
+  webhook
+}
+
+// ADD to enum PaymentProvider:  manual
+// ADD to enum PaymentMethod:    upi_direct, cash_at_hotel
+
+// ADD to model Booking:
+//   settlementMode SettlementMode @default(direct_to_hotel)
+//
+// ADD to model Payment:
+//   utr                 String?    // guest-submitted bank reference
+//   guestAttestedAt     DateTime?
+//   hotelAttestedAt     DateTime?
+//   attestedByContactId String?
+//   @@index([utr])
+//
+// ADD to enum ExceptionType:
+//   attestation_mismatch
+//   attestation_incomplete
+//   payment_link_expired
+//   no_show
+
+/* ------------------------------------------------------------------ */
+/* 2. Media — real photos, never invented descriptions                 */
+/* ------------------------------------------------------------------ */
+
+enum MediaKind {
+  room
+  bathroom
+  pool
+  exterior
+  breakfast
+  beach_path
+  view
+}
+
+model HotelMedia {
+  id        String    @id @default(uuid())
+  hotelId   String
+  hotel     Hotel     @relation(fields: [hotelId], references: [id])
+  roomType  String? // null = property-wide
+  kind      MediaKind
+  url       String
+  thumbUrl  String?
+  caption   String?
+  width     Int?
+  height    Int?
+  sortOrder Int       @default(0)
+  // Supplied by the hotel, not scraped. If it is not here, the assistant
+  // says it does not know rather than describing from imagination.
+  suppliedByContactId String?
+  uploadedAt          DateTime @default(now())
+  archivedAt          DateTime?
+
+  @@index([hotelId, kind, sortOrder])
+  @@index([hotelId, roomType])
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Travel time — the hopper feature, cached hard                    */
+/* ------------------------------------------------------------------ */
+
+model TravelCache {
+  id         String   @id @default(uuid())
+  // Rounded to ~1km so nearby guests share a cache entry.
+  originKey  String // "15.63,73.73"
+  hotelId    String
+  hotel      Hotel    @relation(fields: [hotelId], references: [id])
+  seconds    Int
+  meters     Int
+  taxiEstimatePaise BigInt?
+  provider   String   @default("google")
+  fetchedAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@unique([originKey, hotelId])
+  @@index([expiresAt])
+}
+
+/* ------------------------------------------------------------------ */
+/* 4. Local knowledge — your actual moat, hand-written                 */
+/* ------------------------------------------------------------------ */
+
+enum NoteKind {
+  noise
+  access
+  monsoon
+  crowd
+  food
+  safety
+  seasonal
+}
+
+model BeltNote {
+  id        String   @id @default(uuid())
+  belt      Belt
+  kind      NoteKind
+  // One honest line the assistant can quote. "Ashwem is a 20-minute drive
+  // from Anjuna, not walkable." Written by you, not generated.
+  note      String
+  monthsApplicable Int[] // 1-12, empty = all year
+  active    Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@index([belt, kind, active])
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. Assistant transcript — grounding and dispute evidence            */
+/* ------------------------------------------------------------------ */
+
+enum ChatRole {
+  user
+  assistant
+  tool
+}
+
+model ChatMessage {
+  id            String  @id @default(uuid())
+  opportunityId String?
+  guestId       String?
+  role          ChatRole
+  content       String
+  // Which tools produced the facts in this turn. Empty array on an assistant
+  // message that made a factual claim is a grounding bug — alert on it.
+  toolCalls     Json    @default("[]")
+  tokensIn      Int?
+  tokensOut     Int?
+  createdAt     DateTime @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. WhatsApp templates — approval takes days, track them             */
+/* ------------------------------------------------------------------ */
+
+enum TemplateStatus {
+  draft
+  submitted
+  approved
+  rejected
+  paused
+}
+
+model WhatsAppTemplate {
+  key        String         @id // offer_ready, day1_checkin
+  name       String // as registered with Meta
+  language   String         @default("en")
+  status     TemplateStatus @default(draft)
+  bodyText   String
+  variables  String[] // ordered placeholder names
+  category   String         @default("UTILITY")
+  approvedAt DateTime?
+  updatedAt  DateTime       @updatedAt
+}
+
+// ADD to model Hotel:
+//   media        HotelMedia[]
+//   travelCache  TravelCache[]

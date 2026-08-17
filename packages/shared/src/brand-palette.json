@@ -1,0 +1,60 @@
+{
+  "brand": {
+    "amber": {
+      "name": "Beacon amber",
+      "note": "Primary. The pin, the wordmark accent, primary buttons.",
+      "stops": {
+        "50": "#FDF3E2",
+        "200": "#F3D9A6",
+        "400": "#E8B04A",
+        "500": "#E0912F",
+        "600": "#C4791F"
+      }
+    },
+    "teal": {
+      "name": "Harbour teal",
+      "note": "Secondary. The door, headings, navigation, links.",
+      "stops": {
+        "50": "#E6F2F0",
+        "200": "#A8CFC9",
+        "400": "#3E8C82",
+        "600": "#14655C",
+        "700": "#0E4A44"
+      }
+    },
+    "coral": {
+      "name": "Sunset coral",
+      "note": "Accent. Deals, badges, the sunny arc device. Use sparingly.",
+      "stops": {
+        "200": "#F2C4B0",
+        "500": "#D8663A"
+      }
+    },
+    "neutral": {
+      "name": "Linen & sand",
+      "note": "Surfaces, borders, body copy. Warm-tinted, never pure grey.",
+      "stops": {
+        "cream": "#FFF7ED",
+        "sand-50": "#FAF7F2",
+        "sand-100": "#F0EBE3",
+        "sand-300": "#D6CFC4",
+        "slate-500": "#6E7472",
+        "ink-900": "#16211F"
+      }
+    }
+  },
+  "semantic": {
+    "success": "#2E7D5B",
+    "warning": "#E0912F",
+    "danger": "#C2442E",
+    "info": "#2F6E9E"
+  },
+  "contrast": {
+    "ink-900 on amber-500": 6.5,
+    "white on amber-500": 2.54,
+    "white on teal-600": 6.89,
+    "ink-900 on cream": 15.56,
+    "teal-600 on cream": 6.49,
+    "slate-500 on cream": 4.49
+  }
+}

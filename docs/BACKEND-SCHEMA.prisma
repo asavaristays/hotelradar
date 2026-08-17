@@ -1,0 +1,886 @@
+// HotelRADAR Direct — Prisma schema
+// 48-hour booking window, escrow released on check-in code redemption.
+//
+// Conventions:
+//   - All money is BigInt paise. Never Float, never Decimal-as-rupees.
+//   - All timestamps are UTC. Display in IST at the edge.
+//   - Supply is soft-deleted (archivedAt). Transactions are immutable.
+//   - Financial values are SNAPSHOT onto Booking at confirmation, never
+//     recomputed from live rates.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ------------------------------------------------------------------ */
+/* Enums                                                               */
+/* ------------------------------------------------------------------ */
+
+enum HotelStatus {
+  onboarding
+  live
+  paused
+  churned
+}
+
+enum Belt {
+  morjim
+  anjuna
+  arambol
+  candolim
+  other
+}
+
+enum GatewayBorneBy {
+  hotel
+  platform
+  split
+}
+
+enum ContactRole {
+  owner
+  manager
+  front_desk
+  night_desk
+  accounts
+}
+
+enum RateSheetStatus {
+  draft
+  active
+  superseded
+}
+
+enum Season {
+  monsoon
+  shoulder
+  peak
+  xmas_ny
+}
+
+enum AvailabilitySource {
+  hotel_declared
+  allotment
+  inferred
+}
+
+enum PayoutProvider {
+  razorpay_route
+  cashfree_split
+  manual_neft
+}
+
+enum KycStatus {
+  pending
+  submitted
+  active
+  rejected
+}
+
+enum OtpPurpose {
+  guest_verify
+  hotel_contact_verify
+}
+
+enum OppStatus {
+  created
+  verifying
+  verified
+  routed
+  offers_live
+  converted
+  no_offers
+  abandoned
+  expired
+}
+
+enum OppChannel {
+  web
+  whatsapp
+  hotel_overflow
+  hop_loop
+  referral
+  ops_manual
+}
+
+enum Segment {
+  mumbai_weekend
+  in_goa_hopper
+  local
+  unknown
+}
+
+enum Priority {
+  price
+  cancellation
+  location
+  rating
+}
+
+enum QuoteRoute {
+  instant_sheet
+  manual_quote
+}
+
+enum OppHotelOutcome {
+  offer_made
+  declined_no_rooms
+  declined_other
+  no_response
+}
+
+enum OfferSource {
+  rate_sheet
+  hotel_manual
+}
+
+enum OfferStatus {
+  live
+  accepted
+  declined
+  expired
+  withdrawn
+}
+
+enum BookingStatus {
+  offer_accepted
+  payment_pending
+  payment_received
+  confirmed
+  checked_in
+  completed
+  payment_expired
+  cancelled_guest
+  cancelled_hotel
+  no_show
+}
+
+enum RedemptionChannel {
+  whatsapp
+  portal
+  ops_manual
+}
+
+enum PaymentProvider {
+  razorpay
+  cashfree
+}
+
+enum PaymentMethod {
+  upi
+  card
+  netbanking
+  wallet
+  other
+}
+
+enum PaymentStatus {
+  created
+  authorized
+  captured
+  failed
+  refunded
+  partly_refunded
+}
+
+enum PayoutTrigger {
+  code_redeemed
+  ops_override
+  auto_release
+}
+
+enum PayoutStatus {
+  pending
+  queued
+  processing
+  settled
+  failed
+  reversed
+}
+
+enum CommissionEntryType {
+  commission
+  commission_reversal
+  adjustment
+  write_off
+}
+
+enum CommissionStatus {
+  accrued
+  invoiced
+  paid
+  disputed
+  written_off
+}
+
+enum InvoiceType {
+  commission_invoice
+  credit_note
+}
+
+enum InvoiceStatus {
+  draft
+  issued
+  paid
+  partly_paid
+  disputed
+  cancelled
+}
+
+enum ExceptionType {
+  paid_not_confirmed
+  payout_failed
+  hotel_oversold
+  code_redemption_failed
+  no_offers_received
+  rate_sheet_expired
+  sla_breach_response
+  gstin_missing
+  availability_stale
+  commission_overdue
+  refund_after_payout
+}
+
+enum Severity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ExceptionStatus {
+  open
+  acknowledged
+  resolved
+  wont_fix
+}
+
+enum ActorType {
+  guest
+  hotel_contact
+  staff
+  system
+  webhook
+}
+
+enum NotificationChannel {
+  whatsapp
+  sms
+  email
+  push
+}
+
+enum NotificationStatus {
+  queued
+  sent
+  delivered
+  read
+  failed
+}
+
+enum StaffRole {
+  super_admin
+  ops
+  finance
+  read_only
+}
+
+/* ------------------------------------------------------------------ */
+/* Supply                                                              */
+/* ------------------------------------------------------------------ */
+
+model Hotel {
+  id          String      @id @default(uuid())
+  code        String      @unique // MRJ-CASAVERDE
+  legalName   String // must match GST certificate — used on invoices
+  displayName String
+  status      HotelStatus @default(onboarding)
+  belt        Belt        @default(other)
+
+  lat     Decimal? @db.Decimal(9, 6)
+  lng     Decimal? @db.Decimal(9, 6)
+  address String?
+  city    String?
+  state   String   @default("Goa")
+  pincode String?
+
+  // GST — per hotel. NEVER hardcode 18%: tariff bands differ per property.
+  gstin        String?
+  gstRateBps   Int     @default(1800) // 500 | 1200 | 1800
+  gstItcOpted  Boolean @default(true)
+  pan          String?
+  sacCode      String  @default("998551")
+
+  commissionBps  Int            @default(1200) // on tariff EXCLUDING GST
+  gatewayBorneBy GatewayBorneBy @default(hotel)
+
+  responseSlaSeconds  Int     @default(600)
+  instantQuoteEnabled Boolean @default(false)
+  allotmentRooms      Int     @default(0)
+  stopSell            Boolean @default(false)
+
+  onboardedAt DateTime  @default(now())
+  wentLiveAt  DateTime?
+  archivedAt  DateTime?
+
+  contacts       HotelContact[]
+  rateSheets     RateSheet[]
+  availability   AvailabilityBlock[]
+  payoutAccounts HotelPayoutAccount[]
+  oppHotels      OpportunityHotel[]
+  bookings       Booking[]
+  commissions    CommissionEntry[]
+  invoices       Invoice[]
+  exceptions     Exception[]
+
+  @@index([status, belt])
+  @@index([stopSell])
+}
+
+model HotelContact {
+  id      String      @id @default(uuid())
+  hotelId String
+  hotel   Hotel       @relation(fields: [hotelId], references: [id])
+  role    ContactRole
+  name    String
+
+  phoneE164      String // +919812345678 — always E.164
+  whatsappOptIn  Boolean @default(true)
+  activeFromHour Int     @default(0) // IST, for night routing
+  activeToHour   Int     @default(24)
+  isPrimary      Boolean @default(false)
+
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+
+  approvedSheets   RateSheet[]
+  redeemedCodes    BookingCode[]
+
+  @@index([hotelId, role])
+  @@index([phoneE164])
+}
+
+model RateSheet {
+  id      String          @id @default(uuid())
+  hotelId String
+  hotel   Hotel           @relation(fields: [hotelId], references: [id])
+  version Int
+  status  RateSheetStatus @default(draft)
+
+  effectiveFrom DateTime @db.Date
+  effectiveTo   DateTime @db.Date
+  // MANDATORY. Without it, an August rate quotes in December.
+  expiresAt     DateTime
+
+  approvedByContactId String?
+  approvedBy          HotelContact? @relation(fields: [approvedByContactId], references: [id])
+  approvedAt          DateTime?
+
+  maxDiscountBps      Int @default(3000)
+  occupancyCeilingPct Int @default(100)
+
+  createdAt DateTime @default(now())
+
+  rows   RateSheetRow[]
+  offers Offer[]
+
+  @@unique([hotelId, version])
+  @@index([hotelId, status])
+}
+
+model RateSheetRow {
+  id          String    @id @default(uuid())
+  rateSheetId String
+  rateSheet   RateSheet @relation(fields: [rateSheetId], references: [id])
+
+  roomType String
+  season   Season
+  dowMask  Int    @default(127) // bitmask Mon=1 … Sun=64
+
+  floorTariffPaise BigInt // excluding GST
+  minNights        Int    @default(1)
+  maxNights        Int    @default(30)
+  maxOccupancy     Int    @default(2)
+  advanceHoursMin  Int    @default(0) // 0 = same-day allowed
+
+  inclusions    Json     @default("[]")
+  blackoutDates DateTime[] @db.Date
+
+  offers Offer[]
+
+  @@index([rateSheetId, season, roomType])
+}
+
+model AvailabilityBlock {
+  id       String   @id @default(uuid())
+  hotelId  String
+  hotel    Hotel    @relation(fields: [hotelId], references: [id])
+  roomType String
+  date     DateTime @db.Date
+
+  roomsAvailable Int? // null = unknown, quote as pending
+  source         AvailabilitySource @default(hotel_declared)
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([hotelId, roomType, date])
+  @@index([hotelId, date])
+}
+
+model HotelPayoutAccount {
+  id      String @id @default(uuid())
+  hotelId String
+  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+
+  provider        PayoutProvider
+  linkedAccountId String? // provider's ID — never store raw bank details once linked
+  accountHolder   String // must match legalName or transfers fail
+  ifscLast4       String?
+  accountLast4    String?
+
+  kycStatus   KycStatus @default(pending)
+  activatedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  payouts Payout[]
+
+  @@index([hotelId, kycStatus])
+}
+
+/* ------------------------------------------------------------------ */
+/* Demand                                                              */
+/* ------------------------------------------------------------------ */
+
+model Guest {
+  id              String    @id @default(uuid())
+  phoneE164       String    @unique
+  phoneVerifiedAt DateTime?
+  name            String?
+  email           String?
+  gstin           String? // capture at booking — corporate guests need it on the hotel invoice
+  homeCity        String? // mumbai | pune | in_goa
+  marketingOptIn  Boolean   @default(false)
+
+  firstSeenAt      DateTime  @default(now())
+  lastBookingAt    DateTime?
+  lifetimeBookings Int       @default(0)
+
+  opportunities Opportunity[]
+  bookings      Booking[]
+
+  @@index([homeCity])
+}
+
+model OtpVerification {
+  id        String     @id @default(uuid())
+  phoneE164 String
+  codeHash  String // HASH IT. Never store the OTP in plaintext.
+  purpose   OtpPurpose
+
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  provider   String    @default("dev")
+  createdAt  DateTime  @default(now())
+
+  @@index([phoneE164, purpose, expiresAt])
+}
+
+model Opportunity {
+  id      String     @id @default(uuid())
+  oppCode String     @unique // OPP-26H-4K7M2
+  guestId String
+  guest   Guest      @relation(fields: [guestId], references: [id])
+  status  OppStatus  @default(created)
+  channel OppChannel @default(web)
+  segment Segment    @default(unknown)
+
+  searchDestination String?
+  searchLat         Decimal? @db.Decimal(9, 6) // hoppers: where they are NOW
+  searchLng         Decimal? @db.Decimal(9, 6)
+
+  checkIn  DateTime @db.Date
+  checkOut DateTime @db.Date
+  nights   Int
+  adults   Int      @default(2)
+  children Int      @default(0)
+  rooms    Int      @default(1)
+
+  // Snapshot at creation. Segments the guest better than anything they say.
+  leadTimeHours   Int
+  maxNightlyPaise BigInt?
+  priority        Priority @default(price)
+
+  utmSource   String?
+  utmCampaign String?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  oppHotels OpportunityHotel[]
+
+  @@index([status, createdAt])
+  @@index([segment, createdAt])
+}
+
+model OpportunityHotel {
+  id            String      @id @default(uuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id])
+  hotelId       String
+  hotel         Hotel       @relation(fields: [hotelId], references: [id])
+
+  route         QuoteRoute
+  sentAt        DateTime   @default(now())
+  firstViewedAt DateTime? // did the desk even open it
+  respondedAt   DateTime?
+  // Your single most important supply metric.
+  responseSeconds Int?
+
+  outcome       OppHotelOutcome?
+  declineReason String?
+  escalatedAt   DateTime? // when ops phoned them
+
+  offers Offer[]
+
+  @@unique([opportunityId, hotelId])
+  @@index([hotelId, sentAt])
+  @@index([outcome])
+}
+
+model Offer {
+  id                 String           @id @default(uuid())
+  opportunityHotelId String
+  opportunityHotel   OpportunityHotel @relation(fields: [opportunityHotelId], references: [id])
+
+  source         OfferSource
+  rateSheetId    String? // audit trail — which sheet version produced this
+  rateSheet      RateSheet?    @relation(fields: [rateSheetId], references: [id])
+  rateSheetRowId String?
+  rateSheetRow   RateSheetRow? @relation(fields: [rateSheetRowId], references: [id])
+
+  roomType             String
+  tariffPerNightPaise  BigInt // excluding GST
+  nights               Int
+  grossTariffPaise     BigInt
+  inclusions           Json    @default("[]")
+  refundable           Boolean @default(true)
+  // Shown BEFORE accept, stored with the offer.
+  cancellationPolicy   String
+
+  comparisonOtaPaise    BigInt?
+  comparisonSource      String?
+  comparisonCapturedAt  DateTime?
+
+  // Absolute time, never a client countdown.
+  holdsUntil DateTime
+  status     OfferStatus @default(live)
+  acceptedAt DateTime?
+  declinedAt DateTime?
+  createdAt  DateTime    @default(now())
+
+  booking Booking?
+
+  @@index([status, holdsUntil])
+}
+
+/* ------------------------------------------------------------------ */
+/* Transaction                                                         */
+/* ------------------------------------------------------------------ */
+
+model Booking {
+  id         String        @id @default(uuid())
+  bookingRef String        @unique // HR-482910
+  offerId    String        @unique
+  offer      Offer         @relation(fields: [offerId], references: [id])
+  guestId    String
+  guest      Guest         @relation(fields: [guestId], references: [id])
+  hotelId    String
+  hotel      Hotel         @relation(fields: [hotelId], references: [id])
+  status     BookingStatus @default(offer_accepted)
+
+  checkIn  DateTime @db.Date
+  checkOut DateTime @db.Date
+  nights   Int
+  roomType String
+  rooms    Int      @default(1)
+  adults   Int      @default(2)
+  children Int      @default(0)
+
+  // ---- Money snapshot. Frozen at confirmation, never recomputed. ----
+  grossCollectedPaise BigInt // what the guest paid
+  baseTariffPaise     BigInt // excluding room GST
+  roomGstRateBps      Int
+  roomGstPaise        BigInt // hotel's liability, not yours
+  commissionRateBps   Int
+  commissionPaise     BigInt // on base tariff
+  commissionGstPaise  BigInt // your 18% liability
+  gatewayFeePaise     BigInt
+  gatewayBorneBy      GatewayBorneBy
+  tcsPaise            BigInt         @default(0) // if ECO provisions apply — confirm with CA
+  netPayoutPaise      BigInt
+
+  guestGstin String? // passed to hotel for their invoice
+
+  confirmedAt        DateTime?
+  checkedInAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  createdAt          DateTime  @default(now())
+
+  code        BookingCode?
+  payments    Payment[]
+  payouts     Payout[]
+  commissions CommissionEntry[]
+  exceptions  Exception[]
+
+  @@index([status, checkIn])
+  @@index([hotelId, checkIn])
+}
+
+model BookingCode {
+  id        String  @id @default(uuid())
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+
+  code      String   @unique // 4K7M2H-9 (Luhn mod N check char)
+  issuedAt  DateTime @default(now())
+  expiresAt DateTime // checkOut + 24h
+
+  redeemedAt          DateTime?
+  redeemedByContactId String?
+  redeemedBy          HotelContact?      @relation(fields: [redeemedByContactId], references: [id])
+  redemptionIp        String?
+  redemptionChannel   RedemptionChannel?
+  failedAttempts      Int                @default(0)
+
+  @@index([expiresAt, redeemedAt])
+}
+
+/* ------------------------------------------------------------------ */
+/* Money                                                               */
+/* ------------------------------------------------------------------ */
+
+model Payment {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id])
+
+  provider          PaymentProvider
+  providerOrderId   String?
+  providerPaymentId String?         @unique
+  amountPaise       BigInt
+  method            PaymentMethod?
+  status            PaymentStatus   @default(created)
+  capturedAt        DateTime?
+
+  // Store the raw webhook. Disputes get settled from it.
+  webhookPayload Json?
+  idempotencyKey String @unique
+  createdAt      DateTime @default(now())
+
+  @@index([bookingId, status])
+}
+
+model Payout {
+  id                   String             @id @default(uuid())
+  bookingId            String
+  booking              Booking            @relation(fields: [bookingId], references: [id])
+  hotelPayoutAccountId String
+  payoutAccount        HotelPayoutAccount @relation(fields: [hotelPayoutAccountId], references: [id])
+
+  trigger            PayoutTrigger
+  amountPaise        BigInt
+  providerTransferId String?       @unique
+  status             PayoutStatus  @default(pending)
+  heldUntil          DateTime? // deferred settlement window
+  settledAt          DateTime?
+  failureReason      String?
+  transferFeePaise   BigInt        @default(0) // flat fee, NOT 2% again
+  createdAt          DateTime      @default(now())
+
+  @@index([status, heldUntil])
+}
+
+model CommissionEntry {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id])
+  hotelId   String
+  hotel     Hotel   @relation(fields: [hotelId], references: [id])
+
+  entryType         CommissionEntryType @default(commission)
+  taxableValuePaise BigInt // your commission, pre-GST
+  cgstPaise         BigInt              @default(0)
+  sgstPaise         BigInt              @default(0)
+  igstPaise         BigInt              @default(0)
+  totalPaise        BigInt
+
+  status    CommissionStatus @default(accrued)
+  invoiceId String?
+  invoice   Invoice?         @relation(fields: [invoiceId], references: [id])
+  // Accrue on CHECK-IN, not booking. A stay that never happened earned nothing.
+  accruedAt DateTime         @default(now())
+
+  invoiceLine InvoiceLine?
+
+  @@index([hotelId, status])
+}
+
+/* ------------------------------------------------------------------ */
+/* Invoicing                                                           */
+/* ------------------------------------------------------------------ */
+
+model Invoice {
+  id            String      @id @default(uuid())
+  invoiceNumber String      @unique // HR/26-27/000418 — gapless
+  series        String      @default("HR")
+  fy            String // 26-27
+  type          InvoiceType @default(commission_invoice)
+
+  hotelId String
+  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  issueDate   DateTime @db.Date
+  dueDate     DateTime @db.Date
+
+  // Party details FROZEN at issue. A GSTIN change in Feb must not rewrite Jan.
+  supplierGstin      String
+  supplierLegalName  String
+  supplierAddress    String
+  recipientGstin     String?
+  recipientLegalName String
+  recipientAddress   String
+  placeOfSupply      String  @default("30") // Goa
+
+  taxableValuePaise BigInt
+  cgstPaise         BigInt        @default(0)
+  sgstPaise         BigInt        @default(0)
+  igstPaise         BigInt        @default(0)
+  totalPaise        BigInt
+  status            InvoiceStatus @default(draft)
+
+  pdfUrl     String?
+  pdfHash    String? // proves the PDF wasn't altered
+  irn        String?
+  qrPayload  String?
+  createdAt  DateTime @default(now())
+
+  lines       InvoiceLine[]
+  commissions CommissionEntry[]
+
+  @@index([hotelId, status])
+  @@index([fy, series])
+}
+
+model InvoiceLine {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  commissionEntryId String          @unique
+  commissionEntry   CommissionEntry @relation(fields: [commissionEntryId], references: [id])
+
+  description       String // "Booking HR-482910 · 12–14 Dec · Casa Verde"
+  sacCode           String @default("998551")
+  taxableValuePaise BigInt
+  cgstRateBps       Int    @default(900)
+  sgstRateBps       Int    @default(900)
+  cgstPaise         BigInt
+  sgstPaise         BigInt
+  lineTotalPaise    BigInt
+
+  @@index([invoiceId])
+}
+
+// Gapless numbering. Incremented under row lock INSIDE the invoice transaction.
+model InvoiceSequence {
+  series     String
+  fy         String
+  lastNumber BigInt @default(0)
+
+  @@id([series, fy])
+}
+
+/* ------------------------------------------------------------------ */
+/* Operations                                                          */
+/* ------------------------------------------------------------------ */
+
+model Exception {
+  id       String        @id @default(uuid())
+  type     ExceptionType
+  severity Severity      @default(medium)
+
+  entityType String
+  entityId   String
+  hotelId    String?
+  hotel      Hotel?   @relation(fields: [hotelId], references: [id])
+  bookingId  String?
+  booking    Booking? @relation(fields: [bookingId], references: [id])
+
+  title  String
+  detail String?
+
+  status           ExceptionStatus @default(open)
+  assignedToUserId String?
+  assignedTo       StaffUser?      @relation(fields: [assignedToUserId], references: [id])
+  slaDueAt         DateTime?
+  resolvedAt       DateTime?
+  resolutionNote   String?
+  createdAt        DateTime        @default(now())
+
+  @@index([status, severity, slaDueAt])
+  @@index([entityType, entityId])
+}
+
+model Event {
+  id         BigInt    @id @default(autoincrement())
+  occurredAt DateTime  @default(now())
+  actorType  ActorType
+  actorId    String?
+  entityType String
+  entityId   String
+  eventType  String // booking.confirmed | code.redeemed
+  payload    Json     @default("{}")
+  requestId  String?
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([eventType, occurredAt])
+}
+
+model Notification {
+  id            String              @id @default(uuid())
+  channel       NotificationChannel
+  templateKey   String // WhatsApp templates need pre-approval — track them
+  recipientType String
+  recipientId   String
+  status        NotificationStatus  @default(queued)
+  providerMsgId String?
+  payload       Json                @default("{}")
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  createdAt     DateTime            @default(now())
+
+  @@index([recipientType, recipientId])
+  @@index([status, createdAt])
+}
+
+model StaffUser {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  name           String
+  role           StaffRole @default(ops)
+  shiftStartHour Int       @default(9)
+  shiftEndHour   Int       @default(21)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  exceptions Exception[]
+}

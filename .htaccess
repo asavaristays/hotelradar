@@ -1,0 +1,3 @@
+# Serve the HotelRADAR Direct landing page directly.
+# No external redirect rules are intentionally configured here.
+DirectoryIndex index.html

@@ -1,0 +1,107 @@
+// HotelRADAR Direct — Prisma runtime (maps to existing SQL migrations).
+// Schema is the ORM view of infra/sql/* — do NOT prisma migrate against prod.
+// Migrations stay SQL files; this client reads/writes the same tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// commercial_mode / settlement_mode are TEXT + CHECK in SQL — keep as String here.
+model Hotel {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                 String   @unique
+  code                 String   @unique
+  destination          String
+  status               String
+  displayName          String   @map("display_name")
+  legalName            String   @map("legal_name")
+  location             String   @default("")
+  belt                 String   @default("other")
+  lat                  Float?
+  lng                  Float?
+  gstin                String?
+  pan                  String?
+  gstRateBps           Int      @default(1800) @map("gst_rate_bps")
+  commissionPctBps     Int      @default(1200) @map("commission_pct_bps")
+  gatewayBorneBy       String   @default("hotel") @map("gateway_borne_by")
+  tcsBps               Int      @default(0) @map("tcs_bps")
+  commercialMode       String   @default("agent") @map("commercial_mode")
+  instantQuoteEnabled  Boolean  @default(false) @map("instant_quote_enabled")
+  stopSell             Boolean  @default(false) @map("stop_sell")
+  notes                String?
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  invoices Invoice[]
+
+  @@map("hotels")
+}
+
+model Opportunity {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalOpportunityId  String   @unique @map("external_opportunity_id")
+  publicToken            String   @unique @map("public_token")
+  status                 String
+  bookingStatus          String?  @map("booking_status")
+  domainOppStatus        String?  @map("domain_opp_status")
+  settlementMode         String   @default("direct_to_hotel") @map("settlement_mode")
+  commercialMode         String?  @map("commercial_mode")
+  tcsRateBps             Int?     @map("tcs_rate_bps")
+  hotelId                String?  @map("hotel_id") @db.Uuid
+  grossCollectedPaise    BigInt?  @map("gross_collected_paise")
+  platformTurnoverPaise  BigInt?  @map("platform_turnover_paise")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("opportunities")
+}
+
+model InvoiceSequence {
+  series     String
+  fy         String
+  lastNumber BigInt @map("last_number")
+
+  @@id([series, fy])
+  @@map("invoice_sequences")
+}
+
+model Invoice {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hotelId            String   @map("hotel_id") @db.Uuid
+  hotel              Hotel    @relation(fields: [hotelId], references: [id])
+  invoiceNumber      String   @unique @map("invoice_number")
+  series             String   @default("HR")
+  fy                 String
+  type               String   @default("commission_invoice")
+  status             String   @default("draft")
+  periodStart        DateTime @map("period_start") @db.Date
+  periodEnd          DateTime @map("period_end") @db.Date
+  issueDate          DateTime @map("issue_date") @db.Date
+  dueDate            DateTime @map("due_date") @db.Date
+  taxableValuePaise  BigInt   @map("taxable_value_paise")
+  cgstPaise          BigInt   @default(0) @map("cgst_paise")
+  sgstPaise          BigInt   @default(0) @map("sgst_paise")
+  igstPaise          BigInt   @default(0) @map("igst_paise")
+  totalPaise         BigInt   @map("total_paise")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("invoices")
+}
+
+model WhatsAppTemplate {
+  key        String    @id
+  name       String
+  language   String    @default("en")
+  status     String    @default("draft")
+  bodyText   String    @map("body_text")
+  category   String    @default("UTILITY")
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("whatsapp_templates")
+}

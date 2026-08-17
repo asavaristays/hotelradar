@@ -1,0 +1,27 @@
+{
+  "name": "HotelRADAR Direct",
+  "short_name": "HotelRADAR",
+  "description": "Direct offer by hotel and pay hotel directly.",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#E0912F",
+  "background_color": "#FFF7ED",
+  "display": "standalone",
+  "start_url": "/"
+}

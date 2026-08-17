@@ -1,0 +1,29 @@
+{
+  "name": "hotelradar-direct",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HotelRADAR Direct — isolated opportunity stack (not Asavari, not website.hotelradar)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @hotelradar/direct-shared",
+    "build:api": "npm run build -w @hotelradar/direct-api",
+    "build:web": "npm run build -w @hotelradar/direct-web",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
+    "dev:api": "npm run dev -w @hotelradar/direct-api",
+    "dev:worker": "npm run dev:worker -w @hotelradar/direct-api",
+    "dev:web": "npm run dev -w @hotelradar/direct-web",
+    "migrate": "npm run migrate -w @hotelradar/direct-api",
+    "typecheck": "npm run typecheck -w @hotelradar/direct-shared && npm run typecheck -w @hotelradar/direct-api && npm run typecheck -w @hotelradar/direct-web",
+    "compose:up": "docker-compose -p hotelradar-direct --env-file .env up -d --build",
+    "compose:down": "docker-compose -p hotelradar-direct down",
+    "compose:logs": "docker-compose -p hotelradar-direct logs -f",
+    "deploy:vps": "./scripts/vps-deploy.sh",
+    "smoke:vps": "ssh vps-webtechnosys 'curl -fsS http://127.0.0.1:4101/api/v1/system && echo'"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
