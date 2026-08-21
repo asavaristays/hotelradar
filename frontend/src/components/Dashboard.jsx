@@ -1018,6 +1018,16 @@ function statusWord(value = '') {
 function OtaWatchPanel({ model }) {
   const watch = model?.otaWatch;
   if (!watch) return null;
+  const gapReportable = watch.gapPct !== null && watch.gapPct !== undefined && watch.gapReportable !== false;
+  const gapBlockReason = !positiveNumber(watch.ownRate)
+    ? 'Own rate not captured'
+    : !positiveNumber(watch.lowestOtaRate)
+      ? 'OTA rate not captured'
+      : watch.ownProofReady === false
+        ? 'Own proof pending'
+        : watch.otaProofReady === false
+          ? 'OTA proof pending'
+          : statusWord(watch.leakageRisk);
   const tone =
     watch.status === 'healthy'
       ? 'ready'
@@ -1037,18 +1047,20 @@ function OtaWatchPanel({ model }) {
         </div>
         <article>
           <span>Public gap</span>
-          <strong>{formatGapPct(watch.gapPct)}</strong>
-          <small>{statusWord(watch.leakageRisk)}</small>
+          <strong>{gapReportable ? formatGapPct(watch.gapPct) : positiveNumber(watch.ownRate) && positiveNumber(watch.lowestOtaRate) ? 'Proof pending' : 'Not captured'}</strong>
+          <small>{gapBlockReason}</small>
         </article>
       </div>
       <div className="riOtaWatchGrid">
         <article>
           <span>Own public rate</span>
           <strong>{watch.ownRateLabel || 'Not captured'}</strong>
+          <small>{watch.ownProofReady ? 'Proof ready' : positiveNumber(watch.ownRate) ? 'Proof pending' : 'Capture needed'}</small>
         </article>
         <article>
           <span>Lowest OTA rate</span>
           <strong>{watch.lowestOtaRateLabel || 'Not captured'}</strong>
+          <small>{watch.otaProofReady ? 'Proof ready' : positiveNumber(watch.lowestOtaRate) ? 'Proof pending' : 'Capture needed'}</small>
         </article>
         <article>
           <span>Channels observed</span>

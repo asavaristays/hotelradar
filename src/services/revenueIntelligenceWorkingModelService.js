@@ -53,6 +53,62 @@ function rows(dashboard = {}) {
   return Array.isArray(dashboard?.realtimeSignals?.rows) ? dashboard.realtimeSignals.rows : [];
 }
 
+function sourceText(row = {}) {
+  return `${row.sourceType || ''} ${row.signalType || ''} ${row.sourceName || ''} ${row.valueText || ''}`.toLowerCase();
+}
+
+function rowProofUrl(row = {}) {
+  return String(row?.proofUrl || row?.sourceUrl || row?.url || row?.metadata?.proofUrl || '').trim();
+}
+
+function rowObservedAt(row = {}) {
+  return row?.observedAt || row?.capturedAt || row?.updatedAt || row?.createdAt || '';
+}
+
+function rowTrustScore(row = {}) {
+  return numericOrNull(row?.confidenceScore)
+    ?? numericOrNull(row?.metadata?.sourceTrustScore)
+    ?? numericOrNull(row?.metadata?.confidenceScore)
+    ?? 0;
+}
+
+function rowIsVerified(row = {}) {
+  const status = String(row?.metadata?.verificationStatus || '').toLowerCase();
+  return Boolean(
+    row?.verified ||
+    row?.clientReady ||
+    row?.metadata?.verified ||
+    row?.metadata?.clientReady ||
+    status === 'verified' ||
+    rowProofUrl(row),
+  );
+}
+
+function bestRateEvidenceRow(rowsToRank = [], { preferLowestRate = false } = {}) {
+  return rowsToRank
+    .map((row) => ({
+      row,
+      rate: numericOrNull(row?.valueNumeric ?? row?.rate ?? row?.price),
+      hasProof: Boolean(rowProofUrl(row)),
+      verified: rowIsVerified(row),
+      trustScore: rowTrustScore(row),
+      observedTs: rowObservedAt(row) ? new Date(rowObservedAt(row)).getTime() : 0,
+    }))
+    .filter((entry) => entry.rate !== null && entry.rate > 0)
+    .sort((left, right) =>
+      Number(right.hasProof) - Number(left.hasProof) ||
+      Number(right.verified) - Number(left.verified) ||
+      right.trustScore - left.trustScore ||
+      (preferLowestRate ? left.rate - right.rate : right.rate - left.rate) ||
+      right.observedTs - left.observedTs)[0] || null;
+}
+
+function isLikelyHotelName(value = '') {
+  const text = String(value || '').toLowerCase();
+  if (/hotels\.com|google hotels/.test(text)) return false;
+  return /hotel|haveli|palace|resort|villa|inn|suites|heritage|homestay|retreat|cottage/.test(text);
+}
+
 function rowText(row = {}) {
   return `${row.sourceType || ''} ${row.signalType || ''} ${row.sourceName || ''} ${row.valueText || ''} ${row?.metadata?.eventType || ''} ${row?.metadata?.category || ''}`.toLowerCase();
 }
@@ -394,6 +450,223 @@ function buildOpportunityRows(dashboard = {}, evidence = [], action = 'Hold / Wa
   return opportunities.slice(0, 5);
 }
 
+function buildOtaWatch(dashboard = {}) {
+  const stayDate = selectedStayDate(dashboard);
+  const otaParity = dashboard?.otaParity || {};
+  const parityRows = (Array.isArray(otaParity?.rows) ? otaParity.rows : []).filter((row) => {
+    const rowDate = String(row?.checkinDate || row?.stayDate || row?.date || '').slice(0, 10);
+    return !stayDate || !rowDate || rowDate === stayDate;
+  });
+  const otaPattern = /google hotels|booking|agoda|makemytrip|mmt|goibibo|expedia|hotels\.com|trivago|tripadvisor/;
+  const selectedRows = rows(dashboard).filter((row) => {
+    const rowDate = String(row?.checkinDate || row?.stayDate || row?.date || '').slice(0, 10);
+    return !stayDate || !rowDate || rowDate === stayDate;
+  });
+  const officialRows = selectedRows.filter((row) => (
+    row?.sourceType === 'official' ||
+    row?.signalType === 'hotel_rate' ||
+    /official|own rate|direct rate|booking engine/.test(sourceText(row))
+  ));
+  const officialEvidence = bestRateEvidenceRow(officialRows);
+  const ownRate = officialEvidence?.rate ?? numericOrNull(dashboard?.marketPosition?.hotelPrice);
+  const ownProofReady = Boolean(ownRate && officialEvidence && rowProofUrl(officialEvidence.row));
+  const observationRows = selectedRows.filter((row) => (
+    String(row?.signalType || '') !== 'competitor_rate' &&
+    !isLikelyHotelName(row?.sourceName) &&
+    (
+      row?.sourceType === 'ota' ||
+      row?.signalType === 'ota_rate' ||
+      otaPattern.test(sourceText(row))
+    )
+  ));
+  const lowestOtaEvidence = bestRateEvidenceRow(observationRows, { preferLowestRate: true });
+  const observedRates = observationRows
+    .map((row) => numericOrNull(row.valueNumeric))
+    .filter((value) => value !== null && value > 0);
+  const parityRates = parityRows
+    .map((row) => numericOrNull(row.otaPrice))
+    .filter((value) => value !== null && value > 0);
+  const allOtaRates = [...observedRates, ...parityRates];
+  const lowestOtaRate = allOtaRates.length ? Math.min(...allOtaRates) : null;
+  const otaProofReady = Boolean(
+    lowestOtaRate &&
+    lowestOtaEvidence &&
+    rowProofUrl(lowestOtaEvidence.row) &&
+    Math.round(lowestOtaEvidence.rate) === Math.round(lowestOtaRate),
+  );
+  const gapReportable = Boolean(ownProofReady && otaProofReady);
+  const channels = Array.from(new Set([
+    ...observationRows.map((row) => String(row.sourceName || '').trim()).filter(Boolean),
+    ...parityRows.map((row) => String(row.channel || '').trim()).filter(Boolean),
+  ])).slice(0, 8);
+  const proofUrls = Array.from(new Set(
+    [
+      ...officialRows.map((row) => rowProofUrl(row)),
+      ...observationRows.map((row) => rowProofUrl(row)),
+    ].filter(Boolean),
+  )).slice(0, 5);
+  const gapPct = ownRate && lowestOtaRate ? Math.round(((ownRate - lowestOtaRate) / lowestOtaRate) * 1000) / 10 : null;
+  const paritySummary = otaParity?.summary || {};
+  const maxAbsGapPct = numericOrNull(paritySummary.maxAbsGapPct);
+  const leakageRisk =
+    !ownRate || !lowestOtaRate
+      ? 'unverified'
+      : gapPct > 5
+        ? 'direct_rate_higher_than_public_ota'
+        : gapPct < -5
+          ? 'public_ota_higher_than_direct_rate'
+          : 'aligned';
+  const status =
+    ownRate && lowestOtaRate && observationRows.length
+      ? gapReportable && (Math.abs(gapPct || 0) > 5 || Number(maxAbsGapPct || 0) > 5)
+        ? 'attention'
+        : gapReportable
+          ? 'healthy'
+          : 'partial'
+      : observationRows.length
+        ? 'partial'
+        : 'missing';
+  const headline =
+    status === 'healthy'
+      ? 'OTA pricing appears aligned for the selected stay date.'
+      : status === 'attention'
+        ? 'OTA watch needs revenue attention before the morning brief.'
+        : status === 'partial'
+          ? 'OTA visibility exists, but direct-rate parity is not fully verified.'
+          : 'OTA watch is not captured yet for this stay date.';
+  const action =
+    leakageRisk === 'direct_rate_higher_than_public_ota'
+      ? 'Check direct booking price, OTA promotions, tax/fee display, and parity before approving rate changes.'
+      : leakageRisk === 'public_ota_higher_than_direct_rate'
+        ? 'Protect direct-channel conversion and verify whether OTAs are showing stale or higher public rates.'
+        : status === 'missing'
+          ? 'Capture Google Hotels/metasearch and at least two OTA rows with proof URL and timestamp.'
+          : 'Keep OTA capture fresh and review public parity before the 10:00 AM client report.';
+
+  return {
+    version: 'ota-watch-v1',
+    status,
+    leakageRisk,
+    headline,
+    action,
+    ownRate,
+    ownRateLabel: formatCurrency(ownRate),
+    ownProofReady,
+    ownProofUrl: officialEvidence ? rowProofUrl(officialEvidence.row) : '',
+    ownSourceName: officialEvidence?.row?.sourceName || '',
+    lowestOtaRate,
+    lowestOtaRateLabel: formatCurrency(lowestOtaRate),
+    otaProofReady,
+    otaProofUrl: lowestOtaEvidence ? rowProofUrl(lowestOtaEvidence.row) : '',
+    gapReportable,
+    gapPct,
+    maxAbsGapPct,
+    channelsObserved: channels.length,
+    channels,
+    proofUrls,
+    observedRows: observationRows.length,
+    sourceStatus: otaParity?.sourceStatus && otaParity.sourceStatus !== 'missing'
+      ? otaParity.sourceStatus
+      : observationRows.length
+        ? 'captured'
+        : 'missing',
+  };
+}
+
+function buildResourceTransformation({ evidence = [], otaWatch = {}, opportunities = [] } = {}) {
+  const evidenceByKey = new Map(evidence.map((item) => [item.key, item]));
+  const statusFor = (key) => evidenceByKey.get(key)?.status || 'missing';
+  const resources = [
+    {
+      key: 'rate_shop_process',
+      label: 'Daily rate-shop discipline',
+      owner: 'Revenue',
+      status: ['ready', 'supporting'].includes(statusFor('ota_rate')) && ['ready', 'supporting'].includes(statusFor('competitor_rate')) ? 'ready' : 'needs_work',
+      leakageArea: 'OTA and competitor rate leakage',
+      action: 'Capture public OTA, metasearch, own-rate, and true comp-set evidence before daily price calls.',
+    },
+    {
+      key: 'direct_booking_leakage',
+      label: 'Direct booking conversion',
+      owner: 'Marketing + Reservations',
+      status: otaWatch.status === 'attention' ? 'needs_work' : otaWatch.status === 'healthy' ? 'ready' : 'watch',
+      leakageArea: 'Direct-channel leakage',
+      action: otaWatch.action || 'Review direct booking path, offer parity, Google Business Profile, and call-to-book handling.',
+    },
+    {
+      key: 'sales_opportunity_desk',
+      label: 'Sales opportunity desk',
+      owner: 'Sales',
+      status: opportunities.some((item) => item.type === 'sales') ? 'watch' : 'needs_work',
+      leakageArea: 'MICE, wedding, and group opportunity leakage',
+      action: 'Turn MICE/wedding/event pressure into named outreach tasks, not just dashboard signals.',
+    },
+    {
+      key: 'data_response_cadence',
+      label: 'Morning action cadence',
+      owner: 'GM + HODs',
+      status: statusFor('freshness') === 'ready' ? 'ready' : 'watch',
+      leakageArea: 'Slow reaction to market movement',
+      action: 'Use the 10:00 AM Revenue Intelligence brief to assign revenue, sales, reservation, and marketing actions.',
+    },
+  ];
+  const needsWork = resources.filter((item) => item.status === 'needs_work').length;
+  const watch = resources.filter((item) => item.status === 'watch').length;
+
+  return {
+    version: 'hotel-resource-transformation-v1',
+    headline: needsWork
+      ? `${needsWork} hotel operating resource${needsWork === 1 ? ' needs' : 's need'} transformation to reduce revenue leakage.`
+      : watch
+        ? 'Hotel resources are usable, but need daily operating discipline.'
+        : 'Core hotel resources are aligned for Revenue Intelligence action.',
+    leakageRecoveryHypothesis:
+      'HotelRADAR does not guarantee uplift; it identifies OTA, direct-booking, rate-positioning, and sales-opportunity leakage that can commonly unlock 8-12% revenue improvement when the hotel executes consistently.',
+    resources,
+  };
+}
+
+function buildLeakageWatch({ evidence = [], otaWatch = {}, resourceTransformation = {}, opportunities = [] } = {}) {
+  const missingCritical = evidence.filter((item) => item.requiredForStrongAction && item.status !== 'ready');
+  const salesRows = opportunities.filter((item) => item.type === 'sales');
+  const leakageAreas = [
+    {
+      key: 'price_visibility',
+      label: 'Price visibility leakage',
+      status: missingCritical.length ? 'watch' : 'controlled',
+      detail: missingCritical.length
+        ? `Strong rate advice is blocked by ${missingCritical.map((item) => item.label.toLowerCase()).join(', ')}.`
+        : 'Required rate evidence is visible for controlled action.',
+    },
+    {
+      key: 'ota_public_market',
+      label: 'OTA / public market leakage',
+      status: otaWatch.status === 'attention' ? 'risk' : otaWatch.status === 'healthy' ? 'controlled' : 'watch',
+      detail: otaWatch.headline,
+    },
+    {
+      key: 'sales_opportunity',
+      label: 'Sales opportunity leakage',
+      status: salesRows.length ? 'opportunity' : 'watch',
+      detail: salesRows[0]?.opportunity || 'MICE, wedding, and group opportunity signals need stronger source capture.',
+    },
+    {
+      key: 'operating_cadence',
+      label: 'Operating cadence leakage',
+      status: resourceTransformation.resources?.some((item) => item.status === 'needs_work') ? 'watch' : 'controlled',
+      detail: resourceTransformation.headline,
+    },
+  ];
+
+  return {
+    version: 'revenue-leakage-watch-v1',
+    headline: 'Revenue leakage watch',
+    summary:
+      'The system is designed to find where revenue is slipping: public pricing gaps, missing proof, weak sales follow-up, and slow daily response.',
+    leakageAreas,
+  };
+}
+
 function buildMissingDataActions(evidence = []) {
   return evidence
     .filter((item) => item.status === 'missing' || item.status === 'stale')
@@ -405,7 +678,7 @@ function buildMissingDataActions(evidence = []) {
     }));
 }
 
-function buildMorningBrief({ dashboard, evidence, score, action, opportunities }) {
+function buildMorningBrief({ dashboard, evidence, score, action, opportunities, otaWatch = null, leakageWatch = null }) {
   const date = selectedStayDate(dashboard) || 'selected stay date';
   const missing = missingRequired(evidence);
   const headline = `${date}: ${action}`;
@@ -418,14 +691,17 @@ function buildMorningBrief({ dashboard, evidence, score, action, opportunities }
       `Revenue readiness: ${score}%.`,
       `Official rate: ${formatCurrency(dashboard?.marketPosition?.hotelPrice)}.`,
       `Market average: ${formatCurrency(dashboard?.marketPosition?.marketAvg)}.`,
+      otaWatch?.headline ? `OTA watch: ${otaWatch.headline}` : '',
+      leakageWatch?.summary ? `Leakage watch: ${leakageWatch.summary}` : '',
       proofLine,
       opportunities[0]?.opportunity || 'No sales opportunity detected yet.',
-    ],
+    ].filter(Boolean),
     whatsappDraft: [
       `HotelRADAR Morning Revenue Intelligence`,
       headline,
       `Readiness: ${score}%`,
       `Rate: ${formatCurrency(dashboard?.marketPosition?.hotelPrice)} | Market: ${formatCurrency(dashboard?.marketPosition?.marketAvg)}`,
+      otaWatch?.headline ? `OTA Watch: ${otaWatch.headline}` : '',
       proofLine,
       opportunities[0] ? `Opportunity: ${opportunities[0].opportunity}` : '',
       opportunities[0] ? `Action: ${opportunities[0].action}` : '',
@@ -445,14 +721,63 @@ function normalizeImportantDate(entry = {}) {
   };
 }
 
+function dateInRange(date, start, end = start) {
+  return date >= start && date <= end;
+}
+
+function dayOfWeek(date) {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.getUTCDay();
+}
+
+function baselinePressureForDate(date) {
+  if (dateInRange(date, '2026-08-15', '2026-08-17')) {
+    return {
+      level: 'High watch',
+      tone: 'high',
+      signal: 'Independence Day long-weekend carryover',
+      driver: 'Public holiday and leisure compression baseline',
+      basis: 'calendar_baseline',
+    };
+  }
+
+  if (dateInRange(date, '2026-08-28', '2026-08-30')) {
+    return {
+      level: 'Watch',
+      tone: 'watch',
+      signal: 'Rakhi family travel window',
+      driver: 'Family travel and weekend overlap baseline',
+      basis: 'calendar_baseline',
+    };
+  }
+
+  const dow = dayOfWeek(date);
+  if (dow === 0 || dow === 6) {
+    return {
+      level: 'Watch',
+      tone: 'watch',
+      signal: 'Weekend demand baseline',
+      driver: 'Leisure booking pattern watch',
+      basis: 'calendar_baseline',
+    };
+  }
+
+  return null;
+}
+
 function pressureForDate(date, importantDates = []) {
   const match = importantDates.find((entry) => date >= entry.date && date <= (entry.endDate || entry.date));
   if (!match) {
+    const baseline = baselinePressureForDate(date);
+    if (baseline) return baseline;
+
     return {
       level: 'Proof pending',
       tone: 'missing',
       signal: 'No verified pressure signal captured for this stay date yet.',
       driver: 'Awaiting live rate, OTA, competitor, and demand observations.',
+      basis: 'missing',
     };
   }
   const high = match.confidence.includes('high') || /independence|long weekend|compression|festival/i.test(match.label);
@@ -461,6 +786,7 @@ function pressureForDate(date, importantDates = []) {
     tone: high ? 'high' : 'watch',
     signal: match.label,
     driver: match.driver,
+    basis: 'verified_signal',
   };
 }
 
@@ -499,6 +825,7 @@ function buildEnterpriseBrief({ dashboard, evidence, score, action, trust, oppor
       tone: pressure.tone,
       primarySignal: pressure.signal,
       driver: pressure.driver,
+      basis: pressure.basis,
       ...tariff,
       evidenceStatus: requiredReady ? 'Ready for controlled review' : 'Rate proof pending',
       recommendedAction: actionForEnterpriseDate({ pressure, requiredReady, score }),
@@ -628,6 +955,18 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
   const opportunities = buildOpportunityRows(dashboard, evidence, pricingAction);
   const missingDataActions = buildMissingDataActions(evidence);
   const trust = trustStatus(pricingAction, score, evidence);
+  const otaWatch = buildOtaWatch(dashboard);
+  const resourceTransformation = buildResourceTransformation({
+    evidence,
+    otaWatch,
+    opportunities,
+  });
+  const leakageWatch = buildLeakageWatch({
+    evidence,
+    otaWatch,
+    resourceTransformation,
+    opportunities,
+  });
   const enterpriseBrief = buildEnterpriseBrief({
     dashboard,
     evidence,
@@ -663,6 +1002,9 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
     evidence,
     enterpriseBrief,
     betaReadiness,
+    otaWatch,
+    leakageWatch,
+    resourceTransformation,
     opportunityRows: opportunities,
     missingDataActions,
     morningBrief: buildMorningBrief({
@@ -671,6 +1013,8 @@ export function buildRevenueIntelligenceWorkingModel(dashboard = {}) {
       score,
       action: pricingAction,
       opportunities,
+      otaWatch,
+      leakageWatch,
     }),
     activationPhases: [
       { phase: 1, label: 'Structured pilot data', status: 'implemented' },

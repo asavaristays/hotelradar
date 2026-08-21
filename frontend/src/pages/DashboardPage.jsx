@@ -31,6 +31,7 @@ const ADMIN_INSIGHT_OPTIONS = [
 ];
 const HOTELRADAR_FOCUS_KEY = 'hotelradar_focus_insight';
 const DASHBOARD_WORKSPACE_KEY = 'dashboard_workspace_target';
+const ACTIVE_WORKSPACE_KEY = 'hotelradar_active_workspace';
 const DEFAULT_PROPERTY_ID = '10101010-1010-4010-8010-101010101010';
 
 function currentIndiaStayDate() {
@@ -76,6 +77,20 @@ const NAV_ICON_PATHS = {
   health: 'M4 13h4l2-6 4 12 2-6h4',
   logout: 'M10 17l5-5-5-5M15 12H3m9 7h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-6',
 };
+
+function isSupportedWorkspace(value = '') {
+  return WORKSPACE_SECTIONS.some((item) => item.value === value);
+}
+
+function initialWorkspaceSection() {
+  if (typeof window === 'undefined') return 'hotelradar';
+  try {
+    const saved = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+    return isSupportedWorkspace(saved) ? saved : 'hotelradar';
+  } catch {
+    return 'hotelradar';
+  }
+}
 
 function NavIcon({ type }) {
   return (
@@ -190,6 +205,25 @@ function rowObservedAt(row = {}) {
   return row?.observedAt || row?.capturedAt || row?.updatedAt || row?.createdAt || '';
 }
 
+function rowTrustScore(row = {}) {
+  return workspaceNumericOrNull(row?.confidenceScore)
+    ?? workspaceNumericOrNull(row?.metadata?.sourceTrustScore)
+    ?? workspaceNumericOrNull(row?.metadata?.confidenceScore)
+    ?? 0;
+}
+
+function rowIsVerified(row = {}) {
+  const status = String(row?.metadata?.verificationStatus || '').toLowerCase();
+  return Boolean(
+    row?.verified ||
+    row?.clientReady ||
+    row?.metadata?.verified ||
+    row?.metadata?.clientReady ||
+    status === 'verified' ||
+    rowProofUrl(row),
+  );
+}
+
 function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
   const safeDashboard = dashboard || {};
   const stayDate = String(selectedDate || safeDashboard?.marketContext?.checkinDate || '').slice(0, 10);
@@ -202,9 +236,21 @@ function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
   const otaRows = rowsForDate.filter((row) => isWorkspaceSource(row, 'ota'));
   const competitorRows = rowsForDate.filter((row) => isWorkspaceSource(row, 'competitor'));
   const officialRow = officialRows
-    .map((row) => ({ row, rate: rowRateValue(row) }))
+    .map((row) => ({
+      row,
+      rate: rowRateValue(row),
+      hasProof: Boolean(rowProofUrl(row)),
+      verified: rowIsVerified(row),
+      trustScore: rowTrustScore(row),
+      observedTs: rowObservedAt(row) ? new Date(rowObservedAt(row)).getTime() : 0,
+    }))
     .filter((entry) => entry.rate !== null && entry.rate > 0)
-    .sort((left, right) => right.rate - left.rate)[0]?.row || officialRows[0] || null;
+    .sort((left, right) =>
+      Number(right.hasProof) - Number(left.hasProof) ||
+      Number(right.verified) - Number(left.verified) ||
+      right.trustScore - left.trustScore ||
+      right.observedTs - left.observedTs ||
+      right.rate - left.rate)[0]?.row || officialRows[0] || null;
   const otaRateRows = otaRows
     .map((row) => ({ row, rate: rowRateValue(row) }))
     .filter((entry) => entry.rate !== null && entry.rate > 0)
@@ -611,7 +657,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const [pendingHotelId, setPendingHotelId] = useState('');
   const [selectedInsight, setSelectedInsight] = useState(ADMIN_INSIGHT_OPTIONS[0].value);
   const [showFocusedInsight, setShowFocusedInsight] = useState(false);
-  const [activeWorkspaceSection, setActiveWorkspaceSection] = useState('hotelradar');
+  const [activeWorkspaceSection, setActiveWorkspaceSection] = useState(initialWorkspaceSection);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarPinnedOpen, setSidebarPinnedOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => {
@@ -633,9 +679,12 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
 
     try {
       const nextWorkspace = localStorage.getItem(DASHBOARD_WORKSPACE_KEY);
+      const savedWorkspace = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
       const nextFocus = localStorage.getItem(HOTELRADAR_FOCUS_KEY);
-      if (nextWorkspace === 'admin-control' || nextWorkspace === 'listed-hotels' || nextWorkspace === 'system-updates' || nextWorkspace === 'hotelradar' || nextWorkspace === 'ota-watch' || nextWorkspace === 'opportunity' || nextWorkspace === 'revenue-report' || nextWorkspace === 'signal-input') {
+      if (isSupportedWorkspace(nextWorkspace)) {
         setActiveWorkspaceSection(nextWorkspace);
+      } else if (isSupportedWorkspace(savedWorkspace)) {
+        setActiveWorkspaceSection(savedWorkspace);
       }
       if (nextFocus) {
         const isSupportedInsight = ADMIN_INSIGHT_OPTIONS.some((option) => option.value === nextFocus);
@@ -654,6 +703,12 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, activeWorkspaceSection);
+    } catch {
+      // ignore storage failures
+    }
   }, [activeWorkspaceSection]);
 
   useEffect(() => {
@@ -911,6 +966,20 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     }
   }
 
+  function handleHotelSelectionChange(nextHotelId = '') {
+    const hotelId = String(nextHotelId || '').trim();
+    setSelectedHotelId(hotelId);
+    setDashboard(null);
+    setError('');
+    setRecalcJob(null);
+
+    if (!hotelId) return;
+
+    const activeDate = normalizeDateInput(selectedCheckinDate || defaultPilotStayDate());
+    setSelectedCheckinDate(activeDate);
+    loadDashboard(hotelId, activeDate);
+  }
+
   useEffect(() => {
     const role = session?.user?.role;
     const assignedHotels = Array.isArray(session?.user?.hotels) ? session.user.hotels : [];
@@ -1041,6 +1110,19 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
   const recalcInProgress = recalcStatus === 'queued' || recalcStatus === 'processing';
   const intelligenceHotelId = String(selectedHotelId || dashboard?.hotelId || '').trim();
   const visibleWorkspaceSections = WORKSPACE_SECTIONS.filter((item) => !item.adminOnly || showAdminPanel);
+
+  function activateWorkspaceSection(nextWorkspace) {
+    if (!isSupportedWorkspace(nextWorkspace)) return;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(ACTIVE_WORKSPACE_KEY, nextWorkspace);
+      } catch {
+        // ignore storage failures
+      }
+    }
+    setActiveWorkspaceSection(nextWorkspace);
+  }
+
   function renderSidebarFooter(className = '') {
     return (
       <footer className={className}>
@@ -1214,7 +1296,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         <HotelSelector
           token={session.token}
           selectedHotelId={selectedHotelId}
-          onSelect={setSelectedHotelId}
+          onSelect={handleHotelSelectionChange}
           onLoadDashboard={loadDashboard}
           loading={loading}
           reloadKey={hotelListVersion}
@@ -1292,7 +1374,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
                 key={item.value}
                 type="button"
                 className={`premiumNavItem ${activeWorkspaceSection === item.value ? 'active' : ''}`}
-                onClick={() => setActiveWorkspaceSection(item.value)}
+                onClick={() => activateWorkspaceSection(item.value)}
                 title={item.label}
               >
                 <NavIcon type={item.icon} />
@@ -1343,7 +1425,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
           <HotelSelector
             token={session.token}
             selectedHotelId={selectedHotelId}
-            onSelect={setSelectedHotelId}
+            onSelect={handleHotelSelectionChange}
             onLoadDashboard={loadDashboard}
             loading={loading}
             reloadKey={hotelListVersion}
@@ -1393,7 +1475,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
                   key={item.value}
                   type="button"
                   className={`premiumNavItem ${activeWorkspaceSection === item.value ? 'active' : ''}`}
-                  onClick={() => setActiveWorkspaceSection(item.value)}
+                  onClick={() => activateWorkspaceSection(item.value)}
                 >
                   <NavIcon type={item.icon} />
                   <span className="premiumNavLabel">{item.label}</span>
