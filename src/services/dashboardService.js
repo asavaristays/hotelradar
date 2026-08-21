@@ -138,7 +138,13 @@ function competitorRowName(row = {}) {
 
 function isApprovedCompetitorRate(row = {}, approvedKeys = new Set()) {
   if (!approvedKeys.size) return false;
-  return approvedKeys.has(normalizeComparableName(competitorRowName(row)));
+  const rowKey = normalizeComparableName(competitorRowName(row));
+  if (!rowKey) return false;
+  if (approvedKeys.has(rowKey)) return true;
+  return Array.from(approvedKeys).some((approvedKey) => (
+    approvedKey.length >= 6 &&
+    (rowKey.includes(approvedKey) || approvedKey.includes(rowKey))
+  ));
 }
 
 function isCompetitorSignalRow(row = {}) {
@@ -147,6 +153,25 @@ function isCompetitorSignalRow(row = {}) {
     row?.signalType === 'competitor_rate' ||
     /competitor/.test(`${row?.sourceType || ''} ${row?.signalType || ''}`.toLowerCase())
   );
+}
+
+function dedupeCompetitorRatesByApprovedName(rows = []) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = normalizeComparableName(competitorRowName(row));
+    if (!key) continue;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, row);
+      continue;
+    }
+    const existingTime = new Date(existing?.scraped_at || existing?.capturedAt || existing?.observedAt || 0).getTime();
+    const rowTime = new Date(row?.scraped_at || row?.capturedAt || row?.observedAt || 0).getTime();
+    if (Number.isFinite(rowTime) && rowTime > (Number.isFinite(existingTime) ? existingTime : 0)) {
+      grouped.set(key, row);
+    }
+  }
+  return Array.from(grouped.values());
 }
 
 function normalizeMarketPosition(raw) {
@@ -1187,8 +1212,10 @@ async function loadMarketScope(hotel, deps = defaultDeps, options = {}) {
 
   const segmented = splitRateRows(allRates);
   const approvedKeys = approvedCompSetKeys(hotel);
-  const approvedHotelCompetitorRates = segmented.hotelCompetitorRates.filter((row) =>
-    isApprovedCompetitorRate(row, approvedKeys),
+  const approvedHotelCompetitorRates = dedupeCompetitorRatesByApprovedName(
+    segmented.hotelCompetitorRates.filter((row) =>
+      isApprovedCompetitorRate(row, approvedKeys),
+    ),
   );
   const observedAt = latestMarketCheckin?.observed_at || lastScrapedAt || null;
   const hotelRows = requestedCheckinDate

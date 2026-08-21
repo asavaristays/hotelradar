@@ -79,6 +79,16 @@ function approvedCompSet(dashboard = {}) {
   return Array.isArray(raw) ? raw.map((entry) => String(entry || '').trim()).filter(Boolean) : [];
 }
 
+function matchesApprovedCompSetName(name = '', approvedKeys = new Set()) {
+  const rowKey = normalizeComparableName(name);
+  if (!rowKey) return false;
+  if (approvedKeys.has(rowKey)) return true;
+  return Array.from(approvedKeys).some((approvedKey) => (
+    approvedKey.length >= 6 &&
+    (rowKey.includes(approvedKey) || approvedKey.includes(rowKey))
+  ));
+}
+
 function currentIndiaDate() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -257,7 +267,7 @@ function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
       row?.signalType === 'competitor_rate' ||
       /competitor/.test(`${row?.sourceType || ''} ${row?.signalType || ''}`.toLowerCase()))
     .filter((row) => !/official panel|official rate|own rate|direct rate/i.test(`${row?.sourceName || ''} ${row?.valueText || ''}`))
-    .filter((row) => approvedKeys.has(normalizeComparableName(row?.sourceName || row?.metadata?.competitorName || '')))
+    .filter((row) => matchesApprovedCompSetName(row?.sourceName || row?.metadata?.competitorName || '', approvedKeys))
     .map((row, index) => {
       const rate = numericOrNull(row?.valueNumeric);
       if (rate === null || rate <= 0) return null;
