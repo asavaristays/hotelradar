@@ -212,6 +212,11 @@ function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
   const lowestOta = otaRateRows[0] || null;
   const ownRate = rowRateValue(officialRow || {}) ?? workspaceNumericOrNull(safeDashboard?.marketPosition?.hotelPrice);
   const lowestOtaRate = lowestOta?.rate ?? workspaceNumericOrNull(modelWatch?.lowestOtaRate);
+  const ownProofUrl = rowProofUrl(officialRow || {});
+  const otaProofUrl = lowestOta ? rowProofUrl(lowestOta.row) : '';
+  const ownProofReady = Boolean(ownRate && ownProofUrl);
+  const otaProofReady = Boolean(lowestOtaRate && otaProofUrl);
+  const gapReportable = Boolean(ownProofReady && otaProofReady);
   const gapPct = workspaceNumericOrNull(modelWatch?.gapPct) ?? (
     ownRate !== null && lowestOtaRate !== null && lowestOtaRate > 0
       ? ((ownRate - lowestOtaRate) / lowestOtaRate) * 100
@@ -239,19 +244,23 @@ function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
     };
   });
   const proofReadyCount = [
-    ownRate && rowProofUrl(officialRow || {}),
-    lowestOtaRate && lowestOta && rowProofUrl(lowestOta.row),
+    ownProofReady,
+    otaProofReady,
     approvedCompetitors.filter((row) => row.rate && row.proofUrl).length >= 3,
   ].filter(Boolean).length;
   const directHigher = gapPct !== null && gapPct > 8;
-  const headline = directHigher
+  const headline = !gapReportable && gapPct !== null
+    ? 'Possible OTA leakage detected, but proof is not complete.'
+    : directHigher
     ? 'Direct public rate appears higher than the lowest visible OTA rate.'
     : gapPct !== null && gapPct < -8
       ? 'Direct public rate appears lower than OTA; protect rate before discounting.'
       : gapPct !== null
         ? 'OTA parity looks controlled, but proof and basis still need review.'
         : 'Capture official and OTA rates to calculate leakage.';
-  const action = directHigher
+  const action = !gapReportable && gapPct !== null
+    ? 'Add missing proof URL and timestamp before this gap is used in the morning report.'
+    : directHigher
     ? 'Check direct booking price, OTA promotions, tax/fee display and parity before the morning report.'
     : 'Keep OTA proof fresh with source URL, timestamp, room basis, meal plan and cancellation basis.';
 
@@ -261,8 +270,8 @@ function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
       type: 'Own public rate',
       source: officialRow?.sourceName || 'Official booking engine',
       rate: ownRate,
-      status: ownRate ? (rowProofUrl(officialRow || {}) ? 'Captured' : 'Proof pending') : 'Missing',
-      proofUrl: rowProofUrl(officialRow || {}),
+      status: ownRate ? (ownProofReady ? 'Captured' : 'Proof required') : 'Missing',
+      proofUrl: ownProofUrl,
       observedAt: rowObservedAt(officialRow || {}),
       note: ownRate ? 'Confirm tax, meal plan, occupancy and cancellation basis.' : 'Capture own booking-engine/direct rate first.',
     },
@@ -290,12 +299,18 @@ function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
   ];
 
   return {
-    hotelName: safeDashboard?.hotelName || safeDashboard?.name || 'Selected hotel',
+    hotelName: safeDashboard?.hotel?.name || safeDashboard?.hotelName || safeDashboard?.name || safeDashboard?.marketContext?.hotelName || 'Selected hotel',
     market: safeDashboard?.marketContext?.city || safeDashboard?.city || 'Market',
     stayDate,
     ownRate,
     lowestOtaRate,
     gapPct,
+    gapReportable,
+    gapBlockReason: ownRate && !ownProofReady
+      ? 'Own-rate proof URL missing'
+      : lowestOtaRate && !otaProofReady
+        ? 'OTA proof URL missing'
+        : 'Proof required',
     channelNames,
     discountRows,
     approvedCompetitors,
@@ -317,7 +332,7 @@ function OtaWatchWorkspacePanel({
   onOpenSignalInput = () => {},
 }) {
   const watch = buildOtaWatchWorkspace(dashboard, selectedDate);
-  const gapTone = watch.gapPct === null ? 'missing' : watch.gapPct > 8 ? 'risk' : watch.gapPct < -8 ? 'opportunity' : 'controlled';
+  const gapTone = watch.gapPct === null ? 'missing' : !watch.gapReportable ? 'pending' : watch.gapPct > 8 ? 'risk' : watch.gapPct < -8 ? 'opportunity' : 'controlled';
 
   return (
     <section className="otaWatchWorkspace" aria-label="OTA Watch">
@@ -352,8 +367,8 @@ function OtaWatchWorkspacePanel({
         </article>
         <article className={`otaWatchGapCard otaWatchGap-${gapTone}`}>
           <span>Public gap</span>
-          <strong>{workspaceFormatPct(watch.gapPct)}</strong>
-          <small>{gapTone === 'risk' ? 'Direct higher than OTA' : gapTone === 'controlled' ? 'Parity watch' : gapTone === 'opportunity' ? 'Direct lower than OTA' : 'Not calculated'}</small>
+          <strong>{watch.gapReportable ? workspaceFormatPct(watch.gapPct) : watch.gapPct === null ? 'Not captured' : 'Proof pending'}</strong>
+          <small>{watch.gapReportable ? (gapTone === 'risk' ? 'Direct higher than OTA' : gapTone === 'controlled' ? 'Parity watch' : gapTone === 'opportunity' ? 'Direct lower than OTA' : 'Not calculated') : watch.gapBlockReason}</small>
         </article>
         <article>
           <span>Discount watch</span>

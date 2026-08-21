@@ -12326,6 +12326,15 @@ textarea::placeholder {
   color: #cc3d3d;
 }
 
+.otaWatchGap-pending {
+  border-color: rgba(238, 158, 42, 0.32) !important;
+  background: linear-gradient(135deg, rgba(238, 158, 42, 0.08), #fff) !important;
+}
+
+.otaWatchGap-pending strong {
+  color: #b66a00;
+}
+
 .otaWatchGap-controlled {
   border-color: rgba(115, 173, 100, 0.28) !important;
   background: linear-gradient(135deg, rgba(115, 173, 100, 0.09), #fff) !important;
@@ -12449,7 +12458,8 @@ textarea::placeholder {
 }
 
 .otaWatchStatus-missing em,
-.otaWatchStatus-proof-pending em {
+.otaWatchStatus-proof-pending em,
+.otaWatchStatus-proof-required em {
   background: rgba(239, 107, 107, 0.1);
   color: #c94a4a;
 }
