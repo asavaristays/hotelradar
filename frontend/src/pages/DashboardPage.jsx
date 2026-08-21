@@ -306,6 +306,8 @@ function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
     lowestOtaRate,
     gapPct,
     gapReportable,
+    ownProofReady,
+    otaProofReady,
     gapBlockReason: ownRate && !ownProofReady
       ? 'Own-rate proof URL missing'
       : lowestOtaRate && !otaProofReady
@@ -358,12 +360,12 @@ function OtaWatchWorkspacePanel({
         <article>
           <span>Own public rate</span>
           <strong>{workspaceFormatCurrency(watch.ownRate)}</strong>
-          <small>{watch.ownRate ? 'Captured / review basis' : 'Capture needed'}</small>
+          <small>{watch.ownProofReady ? 'Captured with proof' : watch.ownRate ? 'Rate captured · proof required' : 'Capture needed'}</small>
         </article>
         <article>
           <span>Lowest OTA visible</span>
           <strong>{workspaceFormatCurrency(watch.lowestOtaRate)}</strong>
-          <small>{watch.channelNames.length ? watch.channelNames.slice(0, 2).join(', ') : 'No channel row'}</small>
+          <small>{watch.otaProofReady ? watch.channelNames.slice(0, 2).join(', ') : watch.lowestOtaRate ? 'Rate captured · proof required' : 'No channel row'}</small>
         </article>
         <article className={`otaWatchGapCard otaWatchGap-${gapTone}`}>
           <span>Public gap</span>
