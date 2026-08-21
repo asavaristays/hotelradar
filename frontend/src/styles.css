@@ -12227,6 +12227,311 @@ textarea::placeholder {
   background: rgba(255, 247, 247, 0.86);
 }
 
+.otaWatchWorkspace {
+  display: grid;
+  gap: 18px;
+  padding: 26px 28px 34px;
+}
+
+.otaWatchHero,
+.otaWatchPanel,
+.otaWatchCommand {
+  border: 1px solid rgba(216, 226, 235, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.035);
+}
+
+.otaWatchHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border-radius: 20px;
+  padding: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(15, 157, 138, 0.11), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+}
+
+.otaWatchHero h1 {
+  max-width: 940px;
+  margin: 0;
+  color: #202a36;
+  font-size: 1.24rem;
+  line-height: 1.32;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.otaWatchHero p {
+  margin: 8px 0 0;
+  color: #5d6f84;
+  font-size: 0.84rem;
+}
+
+.otaWatchHeroActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.otaWatchKpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.otaWatchKpiGrid article {
+  min-height: 126px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  border: 1px solid #dde7f0;
+  border-radius: 18px;
+  padding: 16px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.025);
+}
+
+.otaWatchKpiGrid span,
+.otaWatchCommand span,
+.otaWatchSectionHeader span,
+.otaWatchTableHead,
+.otaWatchCompCard em {
+  color: #607085;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.otaWatchKpiGrid strong {
+  color: #263342;
+  font-size: 1.35rem;
+  line-height: 1.05;
+  font-weight: 500;
+}
+
+.otaWatchKpiGrid small {
+  color: #657386;
+  font-size: 0.76rem;
+}
+
+.otaWatchGap-risk {
+  border-color: rgba(239, 107, 107, 0.32) !important;
+  background: linear-gradient(135deg, rgba(239, 107, 107, 0.08), #fff) !important;
+}
+
+.otaWatchGap-risk strong {
+  color: #cc3d3d;
+}
+
+.otaWatchGap-controlled {
+  border-color: rgba(115, 173, 100, 0.28) !important;
+  background: linear-gradient(135deg, rgba(115, 173, 100, 0.09), #fff) !important;
+}
+
+.otaWatchGap-opportunity {
+  border-color: rgba(15, 157, 138, 0.28) !important;
+  background: linear-gradient(135deg, rgba(15, 157, 138, 0.08), #fff) !important;
+}
+
+.otaWatchCommand {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 16px;
+  align-items: stretch;
+  border-radius: 20px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(15, 157, 138, 0.065), rgba(255, 255, 255, 0.96));
+}
+
+.otaWatchCommand h2 {
+  margin: 8px 0 8px;
+  color: #202a36;
+  font-size: 1.08rem;
+  line-height: 1.35;
+  font-weight: 500;
+}
+
+.otaWatchCommand p,
+.otaWatchCommand small,
+.otaWatchSectionHeader p {
+  margin: 0;
+  color: #53667c;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.otaWatchCommand article {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  border: 1px solid rgba(15, 157, 138, 0.18);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.otaWatchCommand article strong {
+  color: #1f354c;
+  font-size: 2rem;
+  font-weight: 500;
+}
+
+.otaWatchPanel {
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.otaWatchSectionHeader {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.otaWatchTable {
+  display: grid;
+  gap: 8px;
+}
+
+.otaWatchTableHead,
+.otaWatchRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.05fr) minmax(120px, 0.5fr) minmax(120px, 0.48fr) minmax(110px, 0.42fr) minmax(280px, 1.2fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.otaWatchTableHead {
+  padding: 0 12px;
+}
+
+.otaWatchRow {
+  min-height: 68px;
+  border: 1px solid #e0e8ef;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.otaWatchRow strong,
+.otaWatchCompCard strong {
+  display: block;
+  color: #202a36;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.otaWatchRow small,
+.otaWatchCompCard small,
+.otaWatchRow > span:last-child {
+  color: #63758a;
+  font-size: 0.76rem;
+  line-height: 1.42;
+}
+
+.otaWatchRow > span:nth-child(2) {
+  color: #243243;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.otaWatchRow em {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(115, 173, 100, 0.12);
+  color: #4e8f43;
+  font-size: 0.7rem;
+  font-style: normal;
+}
+
+.otaWatchStatus-missing em,
+.otaWatchStatus-proof-pending em {
+  background: rgba(239, 107, 107, 0.1);
+  color: #c94a4a;
+}
+
+.otaWatchRow a,
+.otaWatchCompCard a {
+  color: #005eb8;
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.otaWatchRow a:hover,
+.otaWatchCompCard a:hover {
+  text-decoration: underline;
+}
+
+.otaWatchCompetitorGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.otaWatchCompCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 72px;
+  border: 1px solid #e0e8ef;
+  border-left: 4px solid #73ad64;
+  border-radius: 15px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.otaWatchCompCard.missing {
+  border-left-color: #d2dae3;
+  background: rgba(248, 251, 253, 0.95);
+}
+
+.otaWatchCompCard > span {
+  color: #243243;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.otaWatchWorkflow > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.otaWatchWorkflow article {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 82px;
+  border: 1px solid rgba(15, 157, 138, 0.14);
+  border-radius: 15px;
+  padding: 12px;
+  background: rgba(15, 157, 138, 0.045);
+}
+
+.otaWatchWorkflow article strong {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #0f9d8a;
+  color: #fff;
+  font-weight: 500;
+}
+
+.otaWatchWorkflow article span {
+  color: #53667c;
+  font-size: 0.78rem;
+  line-height: 1.42;
+}
+
 .revenueReportShell {
   display: grid;
   gap: 18px;
@@ -12453,7 +12758,12 @@ textarea::placeholder {
   .riOtaWatchHero,
   .riOtaWatchGrid,
   .riLeakageGrid,
-  .riResourceStrip > div {
+  .riResourceStrip > div,
+  .otaWatchHero,
+  .otaWatchKpiGrid,
+  .otaWatchCommand,
+  .otaWatchCompetitorGrid,
+  .otaWatchWorkflow > div:last-child {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -12466,7 +12776,9 @@ textarea::placeholder {
   .revenueReportTableHead,
   .revenueReportTable article,
   .revenueReportLeakageTable .revenueReportTableHead,
-  .revenueReportLeakageTable article {
+  .revenueReportLeakageTable article,
+  .otaWatchTableHead,
+  .otaWatchRow {
     grid-template-columns: 1fr;
   }
 }
@@ -12475,7 +12787,13 @@ textarea::placeholder {
   .riOtaWatchHero,
   .riOtaWatchGrid,
   .riLeakageGrid,
-  .riResourceStrip > div {
+  .riResourceStrip > div,
+  .otaWatchHero,
+  .otaWatchKpiGrid,
+  .otaWatchCommand,
+  .otaWatchCompetitorGrid,
+  .otaWatchWorkflow > div:last-child,
+  .otaWatchCompCard {
     grid-template-columns: 1fr;
   }
 }

@@ -56,17 +56,23 @@ function defaultPilotStayDate() {
 
 const WORKSPACE_SECTIONS = [
   { value: 'hotelradar', label: 'Revenue Intelligence', icon: 'chart' },
+  { value: 'ota-watch', label: 'OTA Watch', icon: 'ota' },
   { value: 'opportunity', label: 'Opportunity', icon: 'opportunity' },
+  { value: 'revenue-report', label: 'Revenue Report', icon: 'report' },
   { value: 'signal-input', label: 'Signal Input', icon: 'signal', adminOnly: true },
   { value: 'admin-control', label: 'Add Property', icon: 'property', adminOnly: true },
+  { value: 'listed-hotels', label: 'Listed Hotels', icon: 'list', adminOnly: true },
   { value: 'system-updates', label: 'System Health', icon: 'health', adminOnly: true },
 ];
 
 const NAV_ICON_PATHS = {
   chart: 'M4 19h16M7 16V9m5 7V5m5 11v-6',
+  ota: 'M4 7h16M6 7v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7M8 11h8M8 15h5',
   opportunity: 'M12 3v4m0 10v4M5 12H3m18 0h-2M6.3 6.3l2.8 2.8m5.8 5.8 2.8 2.8m0-11.4-2.8 2.8m-5.8 5.8-2.8 2.8',
+  report: 'M6 3h9l3 3v15H6V3m8 0v4h4M9 10h6M9 14h6M9 18h4',
   signal: 'M4 18h4l3-12 4 12 2-7h3M4 6h3m10 0h3',
   property: 'M4 20V9l8-5 8 5v11M9 20v-6h6v6',
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   health: 'M4 13h4l2-6 4 12 2-6h4',
   logout: 'M10 17l5-5-5-5M15 12H3m9 7h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-6',
 };
@@ -78,6 +84,497 @@ function NavIcon({ type }) {
         <path d={NAV_ICON_PATHS[type] || NAV_ICON_PATHS.chart} />
       </svg>
     </span>
+  );
+}
+
+function workspaceNumericOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function workspaceFormatCurrency(value) {
+  const amount = workspaceNumericOrNull(value);
+  if (amount === null || amount <= 0) return 'Not captured';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function workspaceFormatDate(value) {
+  if (!value) return 'Not selected';
+  const raw = String(value).slice(0, 10);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function workspaceFormatTimestamp(value) {
+  if (!value) return 'Not captured';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Not captured';
+  return parsed.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function workspaceFormatPct(value) {
+  const parsed = workspaceNumericOrNull(value);
+  if (parsed === null) return 'Not captured';
+  return `${parsed > 0 ? '+' : ''}${parsed.toFixed(1)}%`;
+}
+
+function workspaceNormalizeName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function workspaceApprovedCompSet(dashboard = {}) {
+  const raw =
+    dashboard?.approvedCompSet ||
+    dashboard?.hotel?.approvedCompSet ||
+    dashboard?.marketContext?.approvedCompSet ||
+    [];
+  return Array.isArray(raw) ? raw.map((entry) => String(entry || '').trim()).filter(Boolean) : [];
+}
+
+function workspaceMatchesName(name = '', approvedName = '') {
+  const rowKey = workspaceNormalizeName(name);
+  const approvedKey = workspaceNormalizeName(approvedName);
+  if (!rowKey || !approvedKey) return false;
+  return rowKey === approvedKey || rowKey.includes(approvedKey) || approvedKey.includes(rowKey);
+}
+
+function workspaceRealtimeRows(dashboard = {}) {
+  return Array.isArray(dashboard?.realtimeSignals?.rows) ? dashboard.realtimeSignals.rows : [];
+}
+
+function isWorkspaceSource(row = {}, type = '') {
+  const haystack = `${row?.sourceType || ''} ${row?.signalType || ''} ${row?.sourceName || ''}`.toLowerCase();
+  if (type === 'official') {
+    return row?.sourceType === 'official' || /official|own rate|direct rate|booking engine/.test(haystack);
+  }
+  if (type === 'ota') {
+    return row?.sourceType === 'ota' || /ota|agoda|booking|expedia|mmt|makemytrip|google hotels|hotels\.com|trivago/.test(haystack);
+  }
+  if (type === 'competitor') {
+    return row?.sourceType === 'competitor' || row?.signalType === 'competitor_rate' || /competitor/.test(haystack);
+  }
+  return false;
+}
+
+function rowRateValue(row = {}) {
+  return workspaceNumericOrNull(row?.valueNumeric ?? row?.rate ?? row?.price);
+}
+
+function rowProofUrl(row = {}) {
+  return String(row?.proofUrl || row?.sourceUrl || row?.url || row?.metadata?.proofUrl || '').trim();
+}
+
+function rowObservedAt(row = {}) {
+  return row?.observedAt || row?.capturedAt || row?.updatedAt || row?.createdAt || '';
+}
+
+function buildOtaWatchWorkspace(dashboard = null, selectedDate = '') {
+  const safeDashboard = dashboard || {};
+  const stayDate = String(selectedDate || safeDashboard?.marketContext?.checkinDate || '').slice(0, 10);
+  const modelWatch = safeDashboard?.revenueIntelligenceModel?.otaWatch || {};
+  const rowsForDate = workspaceRealtimeRows(safeDashboard).filter((row) => {
+    const rowDate = String(row?.checkinDate || row?.stayDate || row?.date || '').slice(0, 10);
+    return !stayDate || !rowDate || rowDate === stayDate;
+  });
+  const officialRows = rowsForDate.filter((row) => isWorkspaceSource(row, 'official'));
+  const otaRows = rowsForDate.filter((row) => isWorkspaceSource(row, 'ota'));
+  const competitorRows = rowsForDate.filter((row) => isWorkspaceSource(row, 'competitor'));
+  const officialRow = officialRows
+    .map((row) => ({ row, rate: rowRateValue(row) }))
+    .filter((entry) => entry.rate !== null && entry.rate > 0)
+    .sort((left, right) => right.rate - left.rate)[0]?.row || officialRows[0] || null;
+  const otaRateRows = otaRows
+    .map((row) => ({ row, rate: rowRateValue(row) }))
+    .filter((entry) => entry.rate !== null && entry.rate > 0)
+    .sort((left, right) => left.rate - right.rate);
+  const lowestOta = otaRateRows[0] || null;
+  const ownRate = rowRateValue(officialRow || {}) ?? workspaceNumericOrNull(safeDashboard?.marketPosition?.hotelPrice);
+  const lowestOtaRate = lowestOta?.rate ?? workspaceNumericOrNull(modelWatch?.lowestOtaRate);
+  const gapPct = workspaceNumericOrNull(modelWatch?.gapPct) ?? (
+    ownRate !== null && lowestOtaRate !== null && lowestOtaRate > 0
+      ? ((ownRate - lowestOtaRate) / lowestOtaRate) * 100
+      : null
+  );
+  const channelNames = Array.from(new Set([
+    ...(Array.isArray(modelWatch?.channels) ? modelWatch.channels : []),
+    ...otaRows.map((row) => String(row?.sourceName || '').trim()).filter(Boolean),
+  ]));
+  const discountRows = otaRows.filter((row) =>
+    /discount|promo|coupon|deal|member|genius|mobile|breakfast|free cancellation|flash/i.test(`${row?.valueText || ''} ${row?.sourceName || ''} ${JSON.stringify(row?.metadata || {})}`));
+  const approved = workspaceApprovedCompSet(safeDashboard);
+  const approvedCompetitors = (approved.length ? approved : competitorRows.map((row) => row?.sourceName).filter(Boolean)).map((name) => {
+    const captured = competitorRows
+      .filter((row) => workspaceMatchesName(row?.sourceName || row?.metadata?.competitorName || '', name))
+      .map((row) => ({ row, rate: rowRateValue(row) }))
+      .filter((entry) => entry.rate !== null && entry.rate > 0)
+      .sort((left, right) => left.rate - right.rate)[0];
+    return {
+      name,
+      rate: captured?.rate ?? null,
+      proofUrl: captured ? rowProofUrl(captured.row) : '',
+      observedAt: captured ? rowObservedAt(captured.row) : '',
+      status: captured ? (rowProofUrl(captured.row) ? 'Captured' : 'Proof pending') : 'Capture needed',
+    };
+  });
+  const proofReadyCount = [
+    ownRate && rowProofUrl(officialRow || {}),
+    lowestOtaRate && lowestOta && rowProofUrl(lowestOta.row),
+    approvedCompetitors.filter((row) => row.rate && row.proofUrl).length >= 3,
+  ].filter(Boolean).length;
+  const directHigher = gapPct !== null && gapPct > 8;
+  const headline = directHigher
+    ? 'Direct public rate appears higher than the lowest visible OTA rate.'
+    : gapPct !== null && gapPct < -8
+      ? 'Direct public rate appears lower than OTA; protect rate before discounting.'
+      : gapPct !== null
+        ? 'OTA parity looks controlled, but proof and basis still need review.'
+        : 'Capture official and OTA rates to calculate leakage.';
+  const action = directHigher
+    ? 'Check direct booking price, OTA promotions, tax/fee display and parity before the morning report.'
+    : 'Keep OTA proof fresh with source URL, timestamp, room basis, meal plan and cancellation basis.';
+
+  const operationsRows = [
+    {
+      key: 'official-rate',
+      type: 'Own public rate',
+      source: officialRow?.sourceName || 'Official booking engine',
+      rate: ownRate,
+      status: ownRate ? (rowProofUrl(officialRow || {}) ? 'Captured' : 'Proof pending') : 'Missing',
+      proofUrl: rowProofUrl(officialRow || {}),
+      observedAt: rowObservedAt(officialRow || {}),
+      note: ownRate ? 'Confirm tax, meal plan, occupancy and cancellation basis.' : 'Capture own booking-engine/direct rate first.',
+    },
+    ...(otaRateRows.length ? otaRateRows.slice(0, 6).map(({ row, rate }, index) => ({
+      key: `ota-${row?.sourceName || index}-${rate}`,
+      type: index === 0 ? 'Lowest OTA rate' : 'OTA rate',
+      source: row?.sourceName || 'OTA source',
+      rate,
+      status: rowProofUrl(row) ? 'Captured' : 'Proof pending',
+      proofUrl: rowProofUrl(row),
+      observedAt: rowObservedAt(row),
+      note: /discount|promo|coupon|deal|member|genius|mobile/i.test(`${row?.valueText || ''} ${JSON.stringify(row?.metadata || {})}`)
+        ? 'Discount / promotion visible; verify if hotel authorized it.'
+        : (row?.valueText || 'Check parity, inclusion and cancellation basis.'),
+    })) : [{
+      key: 'ota-missing',
+      type: 'Lowest OTA rate',
+      source: 'Google Hotels / Agoda / Booking / MMT',
+      rate: null,
+      status: 'Missing',
+      proofUrl: '',
+      observedAt: '',
+      note: 'Capture at least one public OTA rate for the selected stay date.',
+    }]),
+  ];
+
+  return {
+    hotelName: safeDashboard?.hotelName || safeDashboard?.name || 'Selected hotel',
+    market: safeDashboard?.marketContext?.city || safeDashboard?.city || 'Market',
+    stayDate,
+    ownRate,
+    lowestOtaRate,
+    gapPct,
+    channelNames,
+    discountRows,
+    approvedCompetitors,
+    operationsRows,
+    proofReadyCount,
+    headline,
+    action,
+    autoRefreshCopy: 'Dashboard reloads every 5 minutes while open. Use Refresh OTA Watch before approving the 10:00 AM report.',
+  };
+}
+
+function OtaWatchWorkspacePanel({
+  dashboard = null,
+  selectedDate = '',
+  loading = false,
+  error = '',
+  recalcInProgress = false,
+  onRefresh = () => {},
+  onOpenSignalInput = () => {},
+}) {
+  const watch = buildOtaWatchWorkspace(dashboard, selectedDate);
+  const gapTone = watch.gapPct === null ? 'missing' : watch.gapPct > 8 ? 'risk' : watch.gapPct < -8 ? 'opportunity' : 'controlled';
+
+  return (
+    <section className="otaWatchWorkspace" aria-label="OTA Watch">
+      <div className="otaWatchHero">
+        <div>
+          <span className="workspaceEyebrow">OTA Watch</span>
+          <h1>Public-rate leakage desk for OTA parity, discount watch and competitor capture.</h1>
+          <p>{watch.hotelName} · {watch.market}{watch.stayDate ? ` · ${workspaceFormatDate(watch.stayDate)}` : ''}</p>
+        </div>
+        <div className="otaWatchHeroActions">
+          <button type="button" className="secondaryButton" onClick={onRefresh} disabled={loading || recalcInProgress || !dashboard}>
+            {recalcInProgress ? 'Refreshing…' : 'Refresh OTA Watch'}
+          </button>
+          <button type="button" className="secondaryButton" onClick={onOpenSignalInput}>
+            Add manual capture
+          </button>
+        </div>
+      </div>
+
+      {error ? <p className="errorText">{error}</p> : null}
+
+      <div className="otaWatchKpiGrid">
+        <article>
+          <span>Own public rate</span>
+          <strong>{workspaceFormatCurrency(watch.ownRate)}</strong>
+          <small>{watch.ownRate ? 'Captured / review basis' : 'Capture needed'}</small>
+        </article>
+        <article>
+          <span>Lowest OTA visible</span>
+          <strong>{workspaceFormatCurrency(watch.lowestOtaRate)}</strong>
+          <small>{watch.channelNames.length ? watch.channelNames.slice(0, 2).join(', ') : 'No channel row'}</small>
+        </article>
+        <article className={`otaWatchGapCard otaWatchGap-${gapTone}`}>
+          <span>Public gap</span>
+          <strong>{workspaceFormatPct(watch.gapPct)}</strong>
+          <small>{gapTone === 'risk' ? 'Direct higher than OTA' : gapTone === 'controlled' ? 'Parity watch' : gapTone === 'opportunity' ? 'Direct lower than OTA' : 'Not calculated'}</small>
+        </article>
+        <article>
+          <span>Discount watch</span>
+          <strong>{watch.discountRows.length}</strong>
+          <small>{watch.discountRows.length ? 'promo notes visible' : 'No promo note captured'}</small>
+        </article>
+      </div>
+
+      <section className="otaWatchCommand">
+        <div>
+          <span>Current hotel status</span>
+          <h2>{watch.headline}</h2>
+          <p>{watch.action}</p>
+          <small>{watch.autoRefreshCopy}</small>
+        </div>
+        <article>
+          <span>Proof readiness</span>
+          <strong>{watch.proofReadyCount}/3</strong>
+          <small>own · OTA · comp-set</small>
+        </article>
+      </section>
+
+      <section className="otaWatchPanel">
+        <div className="otaWatchSectionHeader">
+          <span>Capture queue</span>
+          <p>Manual or automated rows must carry rate, source URL and capture timestamp before they are trusted.</p>
+        </div>
+        <div className="otaWatchTable" role="table" aria-label="OTA capture queue">
+          <div className="otaWatchTableHead" role="row">
+            <span>Evidence</span>
+            <span>Rate</span>
+            <span>Status</span>
+            <span>Proof</span>
+            <span>Operator note</span>
+          </div>
+          {watch.operationsRows.map((row) => (
+            <article key={row.key} role="row" className={`otaWatchRow otaWatchStatus-${String(row.status).toLowerCase().replace(/[^a-z]+/g, '-')}`}>
+              <span>
+                <strong>{row.type}</strong>
+                <small>{row.source} · {workspaceFormatTimestamp(row.observedAt)}</small>
+              </span>
+              <span>{workspaceFormatCurrency(row.rate)}</span>
+              <em>{row.status}</em>
+              <span>
+                {row.proofUrl ? (
+                  <a href={row.proofUrl} target="_blank" rel="noreferrer">View source</a>
+                ) : (
+                  <small>Pending</small>
+                )}
+              </span>
+              <span>{row.note}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="otaWatchPanel">
+        <div className="otaWatchSectionHeader">
+          <span>Approved competitor capture</span>
+          <p>Only approved comp-set competitors are used for market position. Others remain public references.</p>
+        </div>
+        <div className="otaWatchCompetitorGrid">
+          {watch.approvedCompetitors.length ? watch.approvedCompetitors.map((row) => (
+            <article key={row.name} className={`otaWatchCompCard ${row.rate ? 'captured' : 'missing'}`}>
+              <div>
+                <strong>{row.name}</strong>
+                <small>{row.status} · {workspaceFormatTimestamp(row.observedAt)}</small>
+              </div>
+              <span>{workspaceFormatCurrency(row.rate)}</span>
+              {row.proofUrl ? <a href={row.proofUrl} target="_blank" rel="noreferrer">View source</a> : <em>Add source</em>}
+            </article>
+          )) : (
+            <article className="otaWatchCompCard missing">
+              <div>
+                <strong>No approved competitors configured</strong>
+                <small>Add approved comp-set during onboarding before competitor analysis is trusted.</small>
+              </div>
+              <span>Not captured</span>
+              <em>Pending</em>
+            </article>
+          )}
+        </div>
+      </section>
+
+      <section className="otaWatchPanel otaWatchWorkflow">
+        <div className="otaWatchSectionHeader">
+          <span>Morning operating flow</span>
+          <p>Use this page before the daily PDF/email goes out.</p>
+        </div>
+        <div>
+          <article><strong>1</strong><span>Capture own official rate for the selected stay date.</span></article>
+          <article><strong>2</strong><span>Capture lowest OTA rate, offer notes, proof URL and timestamp.</span></article>
+          <article><strong>3</strong><span>Capture approved comp-set rates only; reject outliers and unmatched basis.</span></article>
+          <article><strong>4</strong><span>Refresh OTA Watch, then approve Revenue Intelligence report/email.</span></article>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function RevenueReportPanel({ dashboard = null, selectedDate = '' }) {
+  const hotelName = dashboard?.hotelName || dashboard?.name || 'Selected hotel';
+  const city = dashboard?.marketContext?.city || dashboard?.city || 'Market';
+  const stayDate = selectedDate || dashboard?.marketContext?.checkinDate || '';
+  const baselineRows = [
+    ['Rooms sold', 'Hotel-provided daily actuals', 'Required'],
+    ['Room revenue', 'Hotel-provided daily actuals', 'Required'],
+    ['OTA revenue', 'Hotel / accounts / OTA statement', 'Required'],
+    ['Direct revenue', 'Website, phone, WhatsApp, walk-in', 'Required'],
+    ['OTA commission paid', 'OTA statement or commission assumption', 'Recommended'],
+    ['Cancellations / no-shows', 'By channel if available', 'Recommended'],
+  ];
+  const leakageRows = [
+    ['OTA commission exposure', 'OTA revenue × effective commission %', 'Shows profit leakage through OTA dependence'],
+    ['Direct booking shift', 'Current direct revenue vs baseline', 'Shows whether direct channel is improving'],
+    ['OTA dependency', 'OTA revenue ÷ total room revenue', 'Shows if OTA is channel or oxygen'],
+    ['Net OTA revenue', 'OTA revenue minus commission and promotion cost', 'Shows true retained value'],
+    ['Revenue action proof', 'Recommendation → execution → result', 'Protects HotelRADAR value attribution'],
+    ['Direct booking leakage', 'Brand search, website, booking-engine and parity gaps', 'Explains why direct booking is not converting'],
+  ];
+
+  return (
+    <section className="revenueReportShell" aria-label="Revenue Report">
+      <div className="revenueReportHero">
+        <div>
+          <span className="workspaceEyebrow">Revenue Report</span>
+          <h1>Fortnight actuals will prove leakage reduction, not just show market analytics.</h1>
+          <p>
+            HotelRADAR can start without PMS or channel-manager credentials. The hotel shares a simple fortnight Excel sheet,
+            and we compare actual performance against market intelligence, OTA exposure and direct-booking leakage.
+          </p>
+          <small>{hotelName} · {city}{stayDate ? ` · selected stay date ${stayDate}` : ''}</small>
+        </div>
+        <article>
+          <span>Cadence</span>
+          <strong>15 days</strong>
+          <small>baseline → actuals → leakage review</small>
+        </article>
+      </div>
+
+      <div className="revenueReportGrid">
+        <article className="revenueReportCard">
+          <span>Why this protects HotelRADAR</span>
+          <h2>Day-0 baseline becomes the proof anchor.</h2>
+          <p>
+            If business improves later, we can compare against the hotel-provided baseline instead of debating whether the uplift came from season,
+            OTA, team effort or HotelRADAR recommendations.
+          </p>
+        </article>
+        <article className="revenueReportCard">
+          <span>No password required</span>
+          <h2>Excel first, connector later.</h2>
+          <p>
+            PMS/channel-manager access remains optional. Once the hotel trusts the reporting, the same fields can be automated through connectors.
+          </p>
+        </article>
+        <article className="revenueReportCard">
+          <span>Client claim guardrail</span>
+          <h2>No baseline, no confirmed uplift claim.</h2>
+          <p>
+            Without hotel actuals we only report observable public-market leakage. With actuals, we can report verified reduction in OTA dependency,
+            commission exposure and direct-booking shift.
+          </p>
+        </article>
+      </div>
+
+      <section className="revenueReportPanel">
+        <div className="revenueReportSectionHeader">
+          <span>Minimum baseline data</span>
+          <p>Ask the hotel to fill these fields for the last 3 months, then every fortnight.</p>
+        </div>
+        <div className="revenueReportTable" role="table" aria-label="Revenue report baseline data">
+          <div className="revenueReportTableHead" role="row">
+            <span>Metric</span>
+            <span>Source</span>
+            <span>Status</span>
+          </div>
+          {baselineRows.map((row) => (
+            <article key={row[0]} role="row">
+              <span>{row[0]}</span>
+              <span>{row[1]}</span>
+              <em>{row[2]}</em>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="revenueReportPanel">
+        <div className="revenueReportSectionHeader">
+          <span>Leakage matrix</span>
+          <p>These are the metrics the Revenue Report will calculate from the hotel Excel.</p>
+        </div>
+        <div className="revenueReportTable revenueReportLeakageTable" role="table" aria-label="Revenue leakage matrix">
+          <div className="revenueReportTableHead" role="row">
+            <span>Metric</span>
+            <span>Formula / logic</span>
+            <span>Business meaning</span>
+          </div>
+          {leakageRows.map((row) => (
+            <article key={row[0]} role="row">
+              <span>{row[0]}</span>
+              <span>{row[1]}</span>
+              <span>{row[2]}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="revenueReportPanel revenueReportWorkflow">
+        <div className="revenueReportSectionHeader">
+          <span>Fortnight workflow</span>
+          <p>How this becomes a repeatable operating rhythm.</p>
+        </div>
+        <div>
+          <article><strong>1</strong><span>Hotel sends Excel baseline / actuals.</span></article>
+          <article><strong>2</strong><span>HotelRADAR imports and validates data completeness.</span></article>
+          <article><strong>3</strong><span>System compares actuals with market pressure and prior recommendations.</span></article>
+          <article><strong>4</strong><span>Revenue Report shows OTA leakage, direct-booking shift and next action.</span></article>
+        </div>
+      </section>
+    </section>
   );
 }
 
@@ -120,7 +617,7 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
     try {
       const nextWorkspace = localStorage.getItem(DASHBOARD_WORKSPACE_KEY);
       const nextFocus = localStorage.getItem(HOTELRADAR_FOCUS_KEY);
-      if (nextWorkspace === 'admin-control' || nextWorkspace === 'system-updates' || nextWorkspace === 'hotelradar' || nextWorkspace === 'opportunity' || nextWorkspace === 'signal-input') {
+      if (nextWorkspace === 'admin-control' || nextWorkspace === 'listed-hotels' || nextWorkspace === 'system-updates' || nextWorkspace === 'hotelradar' || nextWorkspace === 'ota-watch' || nextWorkspace === 'opportunity' || nextWorkspace === 'revenue-report' || nextWorkspace === 'signal-input') {
         setActiveWorkspaceSection(nextWorkspace);
       }
       if (nextFocus) {
@@ -582,6 +1079,17 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
         return showAdminPanel ? (
           <PropertyOnboardingPanel
             token={session.token}
+            role={adminRole}
+            mode="full"
+            onPropertyReady={handleHotelCreated}
+          />
+        ) : null;
+      case 'listed-hotels':
+        return showAdminPanel ? (
+          <PropertyOnboardingPanel
+            token={session.token}
+            role={adminRole}
+            mode="list"
             onPropertyReady={handleHotelCreated}
           />
         ) : null;
@@ -610,6 +1118,25 @@ export default function DashboardPage({ session, onLogout, onNavigate }) {
             dashboard={dashboard}
             loading={loading}
             error={error}
+          />
+        );
+      case 'ota-watch':
+        return (
+          <OtaWatchWorkspacePanel
+            dashboard={dashboard}
+            selectedDate={selectedCheckinDate}
+            loading={loading}
+            error={error}
+            recalcInProgress={recalcInProgress}
+            onRefresh={() => handleRecalculate()}
+            onOpenSignalInput={() => setActiveWorkspaceSection('signal-input')}
+          />
+        );
+      case 'revenue-report':
+        return (
+          <RevenueReportPanel
+            dashboard={dashboard}
+            selectedDate={selectedCheckinDate}
           />
         );
       case 'hotelradar':
