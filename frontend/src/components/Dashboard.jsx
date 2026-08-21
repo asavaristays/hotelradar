@@ -325,10 +325,25 @@ function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
     headline = `${deduped.length} approved comp-set rate${deduped.length === 1 ? '' : 's'} captured; market average is locked.`;
     guidance = 'Capture at least three approved comp-set rates with source and timestamp before showing market-average or vs-market claims.';
   }
+  const trackerRows = (approved.length ? approved : deduped.map((row) => row.name)).map((name) => {
+    const captured = deduped.find((row) => matchesApprovedCompSetName(row.name, new Set([normalizeComparableName(name)])));
+    return captured || {
+      key: `missing-${normalizeComparableName(name) || name}`,
+      name,
+      rate: null,
+      currency: 'INR',
+      proofUrl: '',
+      observedAt: '',
+      basis: 'Approved comp-set',
+      verified: false,
+      missing: true,
+    };
+  });
 
   return {
     stayDate,
     rows: deduped,
+    trackerRows,
     ownRate,
     marketAvg,
     lowestRate,
@@ -1295,7 +1310,7 @@ function RevenueSignalTable({ signals }) {
 
 function CompetitorAnalysisPanel({ dashboard, selectedDate }) {
   const analysis = buildCompetitorAnalysis(dashboard, selectedDate);
-  const visibleRows = analysis.rows.slice(0, 8);
+  const visibleRows = analysis.trackerRows.slice(0, 8);
 
   return (
     <section className="riPanel riCompetitorPanel" aria-label="Competitor rate position">
@@ -1329,30 +1344,30 @@ function CompetitorAnalysisPanel({ dashboard, selectedDate }) {
       </div>
 
       {visibleRows.length ? (
-        <div className="riCompetitorTable" role="table" aria-label="Competitor rates">
+        <div className="riCompetitorTable" role="table" aria-label="Approved competitor capture tracker">
           <div className="riCompetitorHead" role="row">
-            <span>Competitor</span>
+            <span>Approved competitor</span>
             <span>Rate</span>
             <span>Vs own</span>
-            <span>Proof</span>
+            <span>Source</span>
           </div>
           {visibleRows.map((row) => {
-            const vsOwn = analysis.ownRate !== null ? ((row.rate - analysis.ownRate) / analysis.ownRate) * 100 : null;
+            const vsOwn = !row.missing && analysis.ownRate !== null ? ((row.rate - analysis.ownRate) / analysis.ownRate) * 100 : null;
             return (
-              <article key={row.key} className="riCompetitorRow" role="row">
+              <article key={row.key} className={`riCompetitorRow ${row.missing ? 'riCompetitorMissing' : ''}`} role="row">
                 <span>
                   <strong>{row.name}</strong>
-                  <small>{row.basis} · {formatTimestamp(row.observedAt)}</small>
+                  <small>{row.missing ? 'Approved comp-set · capture needed' : `${row.basis} · ${formatTimestamp(row.observedAt)}`}</small>
                 </span>
-                <span>{formatCurrency(row.rate)}</span>
+                <span>{row.missing ? 'Capture needed' : formatCurrency(row.rate)}</span>
                 <span className={vsOwn === null ? 'riCompNeutral' : vsOwn < -8 ? 'riCompLower' : vsOwn > 8 ? 'riCompHigher' : 'riCompNeutral'}>
-                  {vsOwn === null ? 'Unavailable' : formatGapPct(vsOwn)}
+                  {vsOwn === null ? 'Locked' : formatGapPct(vsOwn)}
                 </span>
                 <span>
                   {row.proofUrl ? (
                     <a href={row.proofUrl} target="_blank" rel="noreferrer">View source</a>
                   ) : (
-                    <em>Pending</em>
+                    <em>{row.missing ? 'Add source' : 'Pending'}</em>
                   )}
                 </span>
               </article>
@@ -1361,8 +1376,8 @@ function CompetitorAnalysisPanel({ dashboard, selectedDate }) {
         </div>
       ) : (
         <div className="riCompetitorEmpty">
-          <strong>No competitor rows for this selected date.</strong>
-          <p>Capture at least three comparable public competitor rates to unlock market-position analysis.</p>
+          <strong>No approved comp-set configured.</strong>
+          <p>Approve the competitor set before using market-position analysis.</p>
         </div>
       )}
     </section>
