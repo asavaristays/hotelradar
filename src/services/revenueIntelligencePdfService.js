@@ -87,6 +87,24 @@ function median(values = []) {
   return list.length % 2 ? list[mid] : (list[mid - 1] + list[mid]) / 2;
 }
 
+function normalizeComparableName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function approvedCompSet(dashboard = {}) {
+  const raw =
+    dashboard?.approvedCompSet ||
+    dashboard?.hotel?.approvedCompSet ||
+    dashboard?.marketContext?.approvedCompSet ||
+    [];
+  return Array.isArray(raw) ? raw.map((entry) => String(entry || '').trim()).filter(Boolean) : [];
+}
+
 function shortCurrency(value) {
   const amount = numericOrNull(value);
   if (amount === null) return 'Not captured';
@@ -250,6 +268,8 @@ function realtimeRows(dashboard = {}) {
 
 function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
   const stayDate = String(selectedDate || dashboard?.marketContext?.checkinDate || '').slice(0, 10);
+  const approved = approvedCompSet(dashboard);
+  const approvedKeys = new Set(approved.map(normalizeComparableName).filter(Boolean));
   const rows = realtimeRows(dashboard)
     .filter((row) => String(row?.checkinDate || '').slice(0, 10) === stayDate)
     .filter((row) =>
@@ -257,6 +277,7 @@ function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
       row?.signalType === 'competitor_rate' ||
       /competitor/.test(`${row?.sourceType || ''} ${row?.signalType || ''}`.toLowerCase()))
     .filter((row) => !/official panel|official rate|own rate|direct rate/i.test(`${row?.sourceName || ''} ${row?.valueText || ''}`))
+    .filter((row) => approvedKeys.has(normalizeComparableName(row?.sourceName || row?.metadata?.competitorName || '')))
     .map((row, index) => {
       const rate = numericOrNull(row?.valueNumeric);
       if (rate === null || rate <= 0) return null;
@@ -266,7 +287,7 @@ function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
         rate,
         proofUrl: clean(row?.proofUrl || ''),
         observedAt: row?.observedAt || row?.capturedAt || '',
-        basis: clean(row?.metadata?.basis || row?.metadata?.rate_basis || 'Public trend'),
+        basis: clean(row?.metadata?.basis || row?.metadata?.rate_basis || 'Approved comp-set'),
         verified: Boolean(
           row?.verified ||
           row?.clientReady ||
@@ -287,15 +308,19 @@ function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
 
   const ownRate = numericOrNull(dashboard?.marketPosition?.hotelPrice);
   const visibleRates = deduped.map((row) => row.rate);
-  const marketAvg = numericOrNull(dashboard?.marketPosition?.marketAvg) || median(visibleRates);
+  const marketAvg = deduped.length >= 3
+    ? (numericOrNull(dashboard?.marketPosition?.marketAvg) || median(visibleRates))
+    : null;
   const lowestRate = visibleRates.length ? Math.min(...visibleRates) : null;
   const ownVsMarketPct = ownRate !== null && marketAvg ? ((ownRate - marketAvg) / marketAvg) * 100 : null;
   const lowerThanOwn = ownRate !== null ? visibleRates.filter((rate) => rate < ownRate).length : null;
   const clientReadyRows = deduped.filter((row) => row.verified).length;
   const isClientReady = deduped.length >= 3 && clientReadyRows === deduped.length;
 
-  let headline = 'Competitor list not captured for this stay date.';
-  let guidance = 'Run competitor capture for the selected stay date before using market-position guidance.';
+  let headline = 'Approved comp-set rates are not captured for this stay date.';
+  let guidance = approved.length
+    ? `Capture approved comp-set only: ${approved.slice(0, 4).join(', ')}${approved.length > 4 ? '...' : ''}.`
+    : 'Approve the comp-set before using competitor analysis.';
   if (deduped.length && ownRate !== null && marketAvg) {
     if (isClientReady) {
       const direction = ownVsMarketPct > 8 ? 'above' : ownVsMarketPct < -8 ? 'below' : 'close to';
@@ -306,12 +331,12 @@ function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
           ? 'Rate is below verified comp-set pressure; review if demand dates can support stronger pricing.'
           : 'Rate is aligned with the verified comp-set; focus on conversion and channel parity.';
     } else {
-      headline = 'Own public rate appears above visible competitor listings.';
-      guidance = 'Treat this as a public trend, not a pricing claim, until room category, inclusion, tax and cancellation basis are matched.';
+      headline = 'Approved comp-set evidence is present but basis-match is pending.';
+      guidance = 'Treat this as approved comp-set evidence, not a final pricing claim, until room category, inclusion, tax and cancellation basis are matched.';
     }
   } else if (deduped.length) {
-    headline = `${deduped.length} public competitor rates are visible for this stay date.`;
-    guidance = 'Add own public rate to convert competitor evidence into a pricing position.';
+    headline = `${deduped.length} approved comp-set rate${deduped.length === 1 ? '' : 's'} captured; market average is locked.`;
+    guidance = 'Capture at least three approved comp-set rates with source and timestamp before showing market-average or vs-market claims.';
   }
 
   return {
@@ -342,7 +367,7 @@ function drawCompetitorRatePosition(doc, y, dashboard = {}, selectedDate = '') {
     .fontSize(7.2)
     .fillColor(BRAND.muted)
     .text(
-      `Selected stay date: ${displayDate(analysis.stayDate)} · ${analysis.isClientReady ? 'verified comp-set evidence' : 'public trend evidence, basis-match pending'}`,
+      `Selected stay date: ${displayDate(analysis.stayDate)} · ${analysis.isClientReady ? 'verified comp-set evidence' : 'approved comp-set evidence, basis-match pending'}`,
       60,
       y + 69,
       { width: 310 },
@@ -351,9 +376,9 @@ function drawCompetitorRatePosition(doc, y, dashboard = {}, selectedDate = '') {
   const metricX = 392;
   doc.fontSize(7.2).fillColor(BRAND.muted).text('Own rate', metricX, y + 12, { width: 64 });
   doc.fontSize(9).fillColor(BRAND.ink).text(shortCurrency(analysis.ownRate), metricX, y + 24, { width: 64 });
-  doc.fontSize(7.2).fillColor(BRAND.muted).text(analysis.isClientReady ? 'Market avg' : 'Visible avg', metricX + 78, y + 12, { width: 62 });
+  doc.fontSize(7.2).fillColor(BRAND.muted).text(analysis.isClientReady ? 'Market avg' : 'Approved avg', metricX + 78, y + 12, { width: 62 });
   doc.fontSize(9).fillColor(BRAND.ink).text(shortCurrency(analysis.marketAvg), metricX + 78, y + 24, { width: 62 });
-  doc.fontSize(7.2).fillColor(BRAND.muted).text('Lowest', metricX, y + 51, { width: 64 });
+  doc.fontSize(7.2).fillColor(BRAND.muted).text('Lowest approved', metricX, y + 51, { width: 64 });
   doc.fontSize(9).fillColor(BRAND.ink).text(shortCurrency(analysis.lowestRate), metricX, y + 63, { width: 64 });
   doc.fontSize(7.2).fillColor(BRAND.muted).text('Below own', metricX + 78, y + 51, { width: 62 });
   doc.fontSize(9).fillColor(BRAND.ink).text(analysis.lowerThanOwn === null ? 'Unavailable' : `${analysis.lowerThanOwn}/${analysis.rows.length}`, metricX + 78, y + 63, { width: 62 });

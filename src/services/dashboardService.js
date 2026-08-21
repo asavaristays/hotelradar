@@ -108,6 +108,47 @@ function formatMovement(change) {
   return `${rounded > 0 ? '+' : ''}${rounded}%`;
 }
 
+function normalizeComparableName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeApprovedCompSet(hotel = {}) {
+  const raw = Array.isArray(hotel?.comp_set_json) ? hotel.comp_set_json : [];
+  return raw
+    .map((entry) => {
+      if (typeof entry === 'string') return entry;
+      return entry?.competitor_name || entry?.competitorName || entry?.hotel_name || entry?.name || '';
+    })
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+}
+
+function approvedCompSetKeys(hotel = {}) {
+  return new Set(normalizeApprovedCompSet(hotel).map(normalizeComparableName).filter(Boolean));
+}
+
+function competitorRowName(row = {}) {
+  return row?.competitor_name || row?.sourceName || row?.metadata?.competitorName || row?.name || '';
+}
+
+function isApprovedCompetitorRate(row = {}, approvedKeys = new Set()) {
+  if (!approvedKeys.size) return false;
+  return approvedKeys.has(normalizeComparableName(competitorRowName(row)));
+}
+
+function isCompetitorSignalRow(row = {}) {
+  return (
+    row?.sourceType === 'competitor' ||
+    row?.signalType === 'competitor_rate' ||
+    /competitor/.test(`${row?.sourceType || ''} ${row?.signalType || ''}`.toLowerCase())
+  );
+}
+
 function normalizeMarketPosition(raw) {
   const hotelPrice = toFiniteNumber(raw?.hotelPrice ?? raw?.hotel_price, 0);
   const marketAvg = toFiniteNumber(raw?.marketAvg ?? raw?.marketAvgPrice ?? raw?.market_avg, 0);
@@ -121,6 +162,8 @@ function normalizeMarketPosition(raw) {
     hotelPrice: hotelPrice > 0 ? round(hotelPrice, 0) : 0,
     marketAvg: marketAvg > 0 ? round(marketAvg, 0) : 0,
     positionPct: Number.isFinite(positionPct) ? round(positionPct, 2) : 0,
+    competitorSampleSize: Number(raw?.competitorSampleSize || raw?.competitor_sample_size || 0),
+    marketAvgStatus: raw?.marketAvgStatus || raw?.market_avg_status || '',
   };
 }
 
@@ -281,25 +324,30 @@ function normalizeMarketContext(raw = {}) {
     lastEventSync: raw?.lastEventSync || null,
     hotelRows: Number(raw?.hotelRows || 0),
     competitorRows: Number(raw?.competitorRows || 0),
+    publicMarketReferenceRows: Number(raw?.publicMarketReferenceRows || 0),
+    approvedCompSet: Array.isArray(raw?.approvedCompSet) ? raw.approvedCompSet : [],
     otaRows: Number(raw?.otaRows || 0),
     importantDates: Array.isArray(raw?.importantDates) ? raw.importantDates : [],
   };
 }
 
-function normalizeRealtimeSignals(raw = null) {
-  const rows = Array.isArray(raw?.rows) ? raw.rows : [];
+function normalizeRealtimeSignals(raw = null, approvedCompSet = []) {
+  const approvedKeys = new Set(approvedCompSet.map(normalizeComparableName).filter(Boolean));
+  const rows = (Array.isArray(raw?.rows) ? raw.rows : []).filter((row) => (
+    !isCompetitorSignalRow(row) || isApprovedCompetitorRate(row, approvedKeys)
+  ));
   return {
     status: raw?.status || 'missing',
     latestCapturedAt: raw?.latestCapturedAt || null,
     counts: {
       official: Number(raw?.counts?.official || 0),
       ota: Number(raw?.counts?.ota || 0),
-      competitor: Number(raw?.counts?.competitor || 0),
+      competitor: rows.filter(isCompetitorSignalRow).length,
       event: rows.filter((row) => row?.sourceType === 'event').length,
       mice: rows.filter((row) => String(row?.metadata?.eventType || row?.signalType || '').toLowerCase().includes('mice')).length,
       wedding: rows.filter((row) => String(row?.metadata?.eventType || row?.signalType || '').toLowerCase().includes('wedding')).length,
       fresh: Number(raw?.counts?.fresh || 0),
-      total: Number(raw?.counts?.total || rows.length),
+      total: rows.length,
     },
     rows: rows.slice(0, 150).map((row) => ({
       sourceType: row?.sourceType || '',
@@ -1023,6 +1071,13 @@ function toDashboardContract({
 
   const contract = {
     hotelId: hotel.id,
+    hotel: {
+      id: hotel.id,
+      name: hotel.hotel_name,
+      city: hotel.city,
+      approvedCompSet: normalizeApprovedCompSet(hotel),
+    },
+    approvedCompSet: normalizeApprovedCompSet(hotel),
     city: hotel.city,
     seasonProfile: hotel.season_profile_name || 'Default',
     demandScore: Number(record.demand_score),
@@ -1045,7 +1100,7 @@ function toDashboardContract({
     productLock,
     outputGuard,
     marketContext: normalizeMarketContext(marketContext),
-    realtimeSignals: normalizeRealtimeSignals(realtimeSignals),
+    realtimeSignals: normalizeRealtimeSignals(realtimeSignals, normalizeApprovedCompSet(hotel)),
     explanation,
     alerts: alertSummary.map(formatAlertSummary),
     alertGroups: alertSummary,
@@ -1131,6 +1186,10 @@ async function loadMarketScope(hotel, deps = defaultDeps, options = {}) {
   ]);
 
   const segmented = splitRateRows(allRates);
+  const approvedKeys = approvedCompSetKeys(hotel);
+  const approvedHotelCompetitorRates = segmented.hotelCompetitorRates.filter((row) =>
+    isApprovedCompetitorRate(row, approvedKeys),
+  );
   const observedAt = latestMarketCheckin?.observed_at || lastScrapedAt || null;
   const hotelRows = requestedCheckinDate
     ? (hotelPriceRaw && Number(hotelPriceRaw) > 0 ? 1 : 0)
@@ -1140,10 +1199,12 @@ async function loadMarketScope(hotel, deps = defaultDeps, options = {}) {
     checkinDate,
     observedAt: observedAt ? new Date(observedAt).toISOString() : null,
     hotelRows,
-    competitorRows: segmented.hotelCompetitorRates.length,
+    competitorRows: approvedHotelCompetitorRates.length,
+    publicMarketReferenceRows: segmented.hotelCompetitorRates.length - approvedHotelCompetitorRates.length,
+    approvedCompSet: normalizeApprovedCompSet(hotel),
     otaRows: segmented.otaParityRates.length,
     allRates,
-    hotelCompetitorRates: segmented.hotelCompetitorRates,
+    hotelCompetitorRates: approvedHotelCompetitorRates,
     otaParityRates: segmented.otaParityRates,
     hotelPriceRaw,
     lastScrapedAt,

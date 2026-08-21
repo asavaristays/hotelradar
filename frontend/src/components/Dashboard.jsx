@@ -61,6 +61,24 @@ function formatTimestamp(value) {
   });
 }
 
+function normalizeComparableName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function approvedCompSet(dashboard = {}) {
+  const raw =
+    dashboard?.approvedCompSet ||
+    dashboard?.hotel?.approvedCompSet ||
+    dashboard?.marketContext?.approvedCompSet ||
+    [];
+  return Array.isArray(raw) ? raw.map((entry) => String(entry || '').trim()).filter(Boolean) : [];
+}
+
 function currentIndiaDate() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -215,6 +233,105 @@ function importantDatesByType(dashboard = {}, typePattern) {
 function signalRowsByType(dashboard = {}, typePattern) {
   return realtimeRows(dashboard).filter((row) =>
     typePattern.test(`${row?.sourceType || ''} ${row?.signalType || ''} ${row?.sourceName || ''} ${row?.metadata?.eventType || ''} ${row?.metadata?.category || ''}`.toLowerCase()));
+}
+
+function median(values = []) {
+  const sorted = values
+    .map((value) => numericOrNull(value))
+    .filter((value) => value !== null && value > 0)
+    .sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2) return sorted[middle];
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function buildCompetitorAnalysis(dashboard = {}, selectedDate = '') {
+  const stayDate = String(selectedDate || dashboard?.marketContext?.checkinDate || '').slice(0, 10);
+  const approved = approvedCompSet(dashboard);
+  const approvedKeys = new Set(approved.map(normalizeComparableName).filter(Boolean));
+  const rows = realtimeRows(dashboard)
+    .filter((row) => String(row?.checkinDate || '').slice(0, 10) === stayDate)
+    .filter((row) =>
+      row?.sourceType === 'competitor' ||
+      row?.signalType === 'competitor_rate' ||
+      /competitor/.test(`${row?.sourceType || ''} ${row?.signalType || ''}`.toLowerCase()))
+    .filter((row) => !/official panel|official rate|own rate|direct rate/i.test(`${row?.sourceName || ''} ${row?.valueText || ''}`))
+    .filter((row) => approvedKeys.has(normalizeComparableName(row?.sourceName || row?.metadata?.competitorName || '')))
+    .map((row, index) => {
+      const rate = numericOrNull(row?.valueNumeric);
+      if (rate === null || rate <= 0) return null;
+      return {
+        key: `${row?.sourceName || 'competitor'}-${row?.checkinDate || stayDate}-${rate}-${index}`,
+        name: String(row?.sourceName || row?.metadata?.competitorName || 'Competitor').trim() || 'Competitor',
+        rate,
+        currency: row?.currency || 'INR',
+        proofUrl: row?.proofUrl || '',
+        confidenceScore: numericOrNull(row?.confidenceScore),
+        observedAt: row?.observedAt || row?.capturedAt || '',
+        basis: row?.metadata?.basis || row?.metadata?.rate_basis || 'Approved comp-set',
+        verified: Boolean(row?.verified || row?.clientReady || row?.metadata?.verified || row?.metadata?.clientReady || row?.metadata?.basisMatched),
+      };
+    })
+    .filter(Boolean);
+
+  const deduped = Array.from(rows.reduce((map, row) => {
+    const key = row.name.toLowerCase();
+    const existing = map.get(key);
+    if (!existing || row.rate < existing.rate) map.set(key, row);
+    return map;
+  }, new Map()).values()).sort((a, b) => a.rate - b.rate);
+
+  const ownRate = numericOrNull(dashboard?.marketPosition?.hotelPrice);
+  const visibleRates = deduped.map((row) => row.rate);
+  const computedMedian = deduped.length >= 3 ? median(visibleRates) : null;
+  const marketAvg = deduped.length >= 3 ? (numericOrNull(dashboard?.marketPosition?.marketAvg) || computedMedian) : null;
+  const lowestRate = visibleRates.length ? Math.min(...visibleRates) : null;
+  const highestRate = visibleRates.length ? Math.max(...visibleRates) : null;
+  const ownVsMarketPct = ownRate !== null && marketAvg ? ((ownRate - marketAvg) / marketAvg) * 100 : null;
+  const ownVsLowestPct = ownRate !== null && lowestRate ? ((ownRate - lowestRate) / lowestRate) * 100 : null;
+  const lowerThanOwn = ownRate !== null ? visibleRates.filter((rate) => rate < ownRate).length : null;
+  const clientReadyRows = deduped.filter((row) => row.verified).length;
+  const isClientReady = deduped.length >= 3 && clientReadyRows === deduped.length;
+
+  let headline = 'Approved comp-set rates are not captured for this stay date.';
+  let guidance = approved.length
+    ? `Capture approved comp-set only: ${approved.slice(0, 4).join(', ')}${approved.length > 4 ? '...' : ''}.`
+    : 'Approve the comp-set before using competitor analysis.';
+  if (deduped.length && ownRate !== null && marketAvg) {
+    if (isClientReady) {
+      const direction = ownVsMarketPct > 8 ? 'above' : ownVsMarketPct < -8 ? 'below' : 'close to';
+      headline = `Own public rate is ${formatGapPct(ownVsMarketPct)} ${direction} the verified comp-set average.`;
+      guidance = ownVsMarketPct > 8
+        ? 'Protect premium positioning only if direct conversion, room inclusion and pickup support the higher price.'
+        : ownVsMarketPct < -8
+          ? 'Rate is below verified comp-set pressure; review if demand dates can support stronger pricing.'
+          : 'Rate is aligned with the verified comp-set; focus on conversion and channel parity.';
+    } else {
+      headline = 'Approved comp-set evidence is present but basis-match is pending.';
+      guidance = 'Treat this as approved comp-set evidence, not a final pricing claim, until room category, inclusion, tax and cancellation basis are matched.';
+    }
+  } else if (deduped.length) {
+    headline = `${deduped.length} approved comp-set rate${deduped.length === 1 ? '' : 's'} captured; market average is locked.`;
+    guidance = 'Capture at least three approved comp-set rates with source and timestamp before showing market-average or vs-market claims.';
+  }
+
+  return {
+    stayDate,
+    rows: deduped,
+    ownRate,
+    marketAvg,
+    lowestRate,
+    highestRate,
+    ownVsMarketPct,
+    ownVsLowestPct,
+    lowerThanOwn,
+    clientReadyRows,
+    isClientReady,
+    approvedCompSet: approved,
+    headline,
+    guidance,
+  };
 }
 
 function buildSignals(dashboard = {}) {
@@ -862,6 +979,107 @@ function EvidenceMixPanel({ signals }) {
   );
 }
 
+function formatGapPct(value) {
+  const parsed = numericOrNull(value);
+  if (parsed === null) return 'Not captured';
+  return `${parsed > 0 ? '+' : ''}${parsed.toFixed(1)}%`;
+}
+
+function statusWord(value = '') {
+  const text = String(value || '').replace(/_/g, ' ');
+  return text || 'watch';
+}
+
+function OtaWatchPanel({ model }) {
+  const watch = model?.otaWatch;
+  if (!watch) return null;
+  const tone =
+    watch.status === 'healthy'
+      ? 'ready'
+      : watch.status === 'attention'
+        ? 'missing'
+        : watch.status === 'partial'
+          ? 'supporting'
+          : 'missing';
+
+  return (
+    <section className={`riPanel riOtaWatchPanel riTone-${tone}`} aria-label="OTA watch">
+      <div className="riOtaWatchHero">
+        <div>
+          <span>OTA Watch</span>
+          <h2>{watch.headline}</h2>
+          <p>{watch.action}</p>
+        </div>
+        <article>
+          <span>Public gap</span>
+          <strong>{formatGapPct(watch.gapPct)}</strong>
+          <small>{statusWord(watch.leakageRisk)}</small>
+        </article>
+      </div>
+      <div className="riOtaWatchGrid">
+        <article>
+          <span>Own public rate</span>
+          <strong>{watch.ownRateLabel || 'Not captured'}</strong>
+        </article>
+        <article>
+          <span>Lowest OTA rate</span>
+          <strong>{watch.lowestOtaRateLabel || 'Not captured'}</strong>
+        </article>
+        <article>
+          <span>Channels observed</span>
+          <strong>{Number(watch.channelsObserved || 0)}</strong>
+          <small>{Array.isArray(watch.channels) && watch.channels.length ? watch.channels.slice(0, 3).join(', ') : 'No public channel rows'}</small>
+        </article>
+        <article>
+          <span>Source status</span>
+          <strong>{statusWord(watch.sourceStatus)}</strong>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function LeakageWatchPanel({ model }) {
+  const leakage = model?.leakageWatch;
+  const resources = model?.resourceTransformation;
+  const areas = Array.isArray(leakage?.leakageAreas) ? leakage.leakageAreas : [];
+  const resourceRows = Array.isArray(resources?.resources) ? resources.resources : [];
+  if (!leakage && !resources) return null;
+
+  return (
+    <section className="riPanel riLeakagePanel" aria-label="Revenue leakage watch">
+      <div className="riPanelHeader">
+        <span>Revenue leakage watch</span>
+        <p>{leakage?.summary || resources?.headline}</p>
+      </div>
+      <div className="riLeakageGrid">
+        {areas.map((area) => (
+          <article key={area.key} className={`riLeakageCard riLeakage-${area.status}`}>
+            <span>{area.label}</span>
+            <strong>{statusWord(area.status)}</strong>
+            <p>{area.detail}</p>
+          </article>
+        ))}
+      </div>
+      {resources ? (
+        <div className="riResourceStrip">
+          <span>{resources.headline}</span>
+          <p>{resources.leakageRecoveryHypothesis}</p>
+          <div>
+            {resourceRows.map((item) => (
+              <article key={item.key} className={`riResourceItem riResource-${item.status}`}>
+                <strong>{item.label}</strong>
+                <em>{item.owner}</em>
+                <small>{item.action}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function EnterpriseBriefPanel({ model }) {
   const brief = model?.enterpriseBrief;
   if (!brief) return null;
@@ -1065,6 +1283,82 @@ function RevenueSignalTable({ signals }) {
   );
 }
 
+function CompetitorAnalysisPanel({ dashboard, selectedDate }) {
+  const analysis = buildCompetitorAnalysis(dashboard, selectedDate);
+  const visibleRows = analysis.rows.slice(0, 8);
+
+  return (
+    <section className="riPanel riCompetitorPanel" aria-label="Competitor rate position">
+      <div className="riCompetitorIntro">
+        <div>
+          <span>Competitor rate position</span>
+          <h2>{analysis.headline}</h2>
+          <p>{analysis.guidance}</p>
+          <small>
+            Selected stay date · {formatDate(analysis.stayDate, { year: 'numeric' })} · {analysis.isClientReady ? 'verified comp-set evidence' : 'approved comp-set evidence, basis-match pending'}
+          </small>
+        </div>
+        <div className="riCompetitorSummary">
+          <article>
+            <span>Own rate</span>
+            <strong>{formatCurrency(analysis.ownRate)}</strong>
+          </article>
+          <article>
+            <span>{analysis.isClientReady ? 'Market avg' : 'Approved avg'}</span>
+            <strong>{formatCurrency(analysis.marketAvg)}</strong>
+          </article>
+          <article>
+            <span>Lowest approved</span>
+            <strong>{formatCurrency(analysis.lowestRate)}</strong>
+          </article>
+          <article>
+            <span>Below own rate</span>
+            <strong>{analysis.lowerThanOwn === null ? 'Unavailable' : `${analysis.lowerThanOwn}/${analysis.rows.length}`}</strong>
+          </article>
+        </div>
+      </div>
+
+      {visibleRows.length ? (
+        <div className="riCompetitorTable" role="table" aria-label="Competitor rates">
+          <div className="riCompetitorHead" role="row">
+            <span>Competitor</span>
+            <span>Rate</span>
+            <span>Vs own</span>
+            <span>Proof</span>
+          </div>
+          {visibleRows.map((row) => {
+            const vsOwn = analysis.ownRate !== null ? ((row.rate - analysis.ownRate) / analysis.ownRate) * 100 : null;
+            return (
+              <article key={row.key} className="riCompetitorRow" role="row">
+                <span>
+                  <strong>{row.name}</strong>
+                  <small>{row.basis} · {formatTimestamp(row.observedAt)}</small>
+                </span>
+                <span>{formatCurrency(row.rate)}</span>
+                <span className={vsOwn === null ? 'riCompNeutral' : vsOwn < -8 ? 'riCompLower' : vsOwn > 8 ? 'riCompHigher' : 'riCompNeutral'}>
+                  {vsOwn === null ? 'Unavailable' : formatGapPct(vsOwn)}
+                </span>
+                <span>
+                  {row.proofUrl ? (
+                    <a href={row.proofUrl} target="_blank" rel="noreferrer">View source</a>
+                  ) : (
+                    <em>Pending</em>
+                  )}
+                </span>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="riCompetitorEmpty">
+          <strong>No competitor rows for this selected date.</strong>
+          <p>Capture at least three comparable public competitor rates to unlock market-position analysis.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Dashboard({ dashboard, loading, error }) {
   const signals = useMemo(() => buildSignals(dashboard || {}), [dashboard]);
   const model = dashboard?.revenueIntelligenceModel || null;
@@ -1155,6 +1449,12 @@ export default function Dashboard({ dashboard, loading, error }) {
           market={market}
           selectedDate={selectedDate}
         />
+
+        <OtaWatchPanel model={model} />
+
+        <CompetitorAnalysisPanel dashboard={dashboard} selectedDate={selectedDate} />
+
+        <LeakageWatchPanel model={model} />
 
         <EnterpriseBriefPanel model={model} />
 
